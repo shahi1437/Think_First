@@ -58,7 +58,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             request_id=request_id,
         )
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content=payload.model_dump(),
         )
 

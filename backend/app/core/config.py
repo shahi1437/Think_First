@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # Phase 2+ Supabase settings (validated when auth endpoints are enabled)
     supabase_url: str | None = None
     supabase_jwt_audience: str = "authenticated"
+    jwks_cache_ttl_seconds: int = 3600
+    jwks_fetch_timeout_seconds: float = 5.0
 
 
 @lru_cache

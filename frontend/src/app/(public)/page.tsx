@@ -1,4 +1,5 @@
 import { BookOpen, Bug, Cpu, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { SystemStatusCard } from "@/components/system-status-card";
 
 const workflowSteps = [
@@ -41,9 +42,20 @@ export default function LandingPage() {
               CodeMentor AI
             </span>
           </div>
-          <span className="rounded-full border border-teal-400/30 bg-teal-500/10 px-3 py-1 text-xs font-medium text-teal-200">
-            Phase 1 Foundation
-          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="rounded-lg px-3.5 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+            >
+              Get started
+            </Link>
+          </div>
         </div>
 
         <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">

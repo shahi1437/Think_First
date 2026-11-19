@@ -24,6 +24,7 @@ build/
 
 # Node / Next.js
 node_modules/
+*.tsbuildinfo
 frontend/.next/
 frontend/out/
 frontend/coverage/
