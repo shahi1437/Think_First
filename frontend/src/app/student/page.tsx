@@ -47,6 +47,14 @@ export default async function StudentDashboardPage() {
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
               {prefs.recommendation_rationale}
             </p>
+            <div className="mt-4">
+              <Link
+                href="/student/problems"
+                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
+              >
+                Open Problem Bank &amp; Coding Workspace
+              </Link>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

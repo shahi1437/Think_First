@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     jwks_cache_ttl_seconds: int = 3600
     jwks_fetch_timeout_seconds: float = 5.0
 
+    # Phase 3+ Judge0 CE isolated code execution settings
+    judge0_base_url: str = "http://127.0.0.1:2359"
+    judge0_auth_token: str | None = None
+    judge0_poll_interval_seconds: float = 0.4
+    judge0_poll_timeout_seconds: float = 20.0
+    judge0_max_retries: int = 2
+    max_source_code_bytes: int = 65536
+    execution_rate_limit_per_minute: int = 20
+    execution_daily_quota: int = 200
+
 
 @lru_cache
 def get_settings() -> Settings:

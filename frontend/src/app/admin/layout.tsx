@@ -20,6 +20,7 @@ export default async function AdminLayout({
       activeRole="admin"
       navLinks={[
         { href: "/admin", label: "Admin Dashboard" },
+        { href: "/admin/problems", label: "Problem Studio" },
         { href: "/student", label: "Student View" },
       ]}
     >

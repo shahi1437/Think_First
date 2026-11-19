@@ -84,3 +84,5 @@ npm run build
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
 - [ADR-002: Authoritative Supabase SQL Migrations](docs/architecture/ADR-002-database-migrations.md)
+- [ADR-003: Asymmetric JWKS Auth, DB-Backed RBAC & PostgreSQL RLS](docs/architecture/ADR-003-auth-jwks-and-rls.md)
+- [ADR-004: Isolated Judge0 CE Execution & Problem Content Governance](docs/architecture/ADR-004-judge0-and-problem-governance.md)

@@ -22,10 +22,10 @@ export function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
       <header className="bg-[#0b1221] text-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
             <Link href="/" className="flex items-center gap-2.5">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
                 CM
@@ -35,7 +35,10 @@ export function AppShell({
               </span>
             </Link>
 
-            <nav aria-label="Primary navigation" className="flex items-center gap-4">
+            <nav
+              aria-label="Primary navigation"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1.5"
+            >
               {navLinks.map((item) => (
                 <Link
                   key={item.href}
@@ -76,7 +79,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
     </div>
   );
 }

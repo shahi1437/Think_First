@@ -10,9 +10,13 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
 from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
+from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
+from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
+from app.services.execution.service import ExecutionService
 from app.services.identity.service import IdentityService
+from app.services.problems.service import ProblemService
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -45,6 +49,13 @@ def get_jwt_verifier(
     )
 
 
+def get_judge0_client(
+    settings: Settings = Depends(get_settings),
+) -> Judge0Client:
+    """Return Judge0 CE HTTP execution client."""
+    return HttpJudge0Client(settings)
+
+
 def get_identity_repository(
     session: AsyncSession = Depends(get_db_session),
 ) -> IdentityRepository:
@@ -55,6 +66,27 @@ def get_identity_service(
     repository: IdentityRepository = Depends(get_identity_repository),
 ) -> IdentityService:
     return IdentityService(repository)
+
+
+def get_problem_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> ProblemRepository:
+    return ProblemRepository(session)
+
+
+def get_problem_service(
+    repository: ProblemRepository = Depends(get_problem_repository),
+    judge0: Judge0Client = Depends(get_judge0_client),
+) -> ProblemService:
+    return ProblemService(repository=repository, judge0=judge0)
+
+
+def get_execution_service(
+    repository: ProblemRepository = Depends(get_problem_repository),
+    judge0: Judge0Client = Depends(get_judge0_client),
+    settings: Settings = Depends(get_settings),
+) -> ExecutionService:
+    return ExecutionService(repository=repository, judge0=judge0, settings=settings)
 
 
 async def get_current_principal(
