@@ -11,12 +11,18 @@ from app.core.database import get_db_session
 from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
+from app.integrations.llm.client import SocraticLLMClient
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
+from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
 from app.services.execution.service import ExecutionService
 from app.services.identity.service import IdentityService
+from app.services.mentor.ml_inference import MLErrorClassifierService
+from app.services.mentor.rag_service import RagKnowledgeService
+from app.services.mentor.socratic_agent import SocraticMentorService
 from app.services.problems.service import ProblemService
+from app.services.verification.service import VerificationService
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -87,6 +93,74 @@ def get_execution_service(
     settings: Settings = Depends(get_settings),
 ) -> ExecutionService:
     return ExecutionService(repository=repository, judge0=judge0, settings=settings)
+
+
+@lru_cache(maxsize=4)
+def _cached_ml_classifier(
+    artifact_path: str,
+    low_confidence_threshold: float,
+) -> MLErrorClassifierService:
+    settings = Settings(
+        ml_model_artifact_path=artifact_path,
+        ml_low_confidence_threshold=low_confidence_threshold,
+    )
+    return MLErrorClassifierService(settings)
+
+
+def get_ml_classifier_service(
+    settings: Settings = Depends(get_settings),
+) -> MLErrorClassifierService:
+    return _cached_ml_classifier(
+        settings.ml_model_artifact_path,
+        settings.ml_low_confidence_threshold,
+    )
+
+
+def get_mentor_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> MentorRepository:
+    return MentorRepository(session)
+
+
+def get_rag_knowledge_service(
+    repository: MentorRepository = Depends(get_mentor_repository),
+    settings: Settings = Depends(get_settings),
+) -> RagKnowledgeService:
+    return RagKnowledgeService(repository=repository, settings=settings)
+
+
+def get_llm_client(
+    settings: Settings = Depends(get_settings),
+) -> SocraticLLMClient:
+    return SocraticLLMClient(settings)
+
+
+def get_socratic_mentor_service(
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    ml_service: MLErrorClassifierService = Depends(get_ml_classifier_service),
+    rag_service: RagKnowledgeService = Depends(get_rag_knowledge_service),
+    llm_client: SocraticLLMClient = Depends(get_llm_client),
+    settings: Settings = Depends(get_settings),
+) -> SocraticMentorService:
+    return SocraticMentorService(
+        mentor_repo=mentor_repo,
+        problem_repo=problem_repo,
+        ml_service=ml_service,
+        rag_service=rag_service,
+        llm_client=llm_client,
+        settings=settings,
+    )
+
+
+def get_verification_service(
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    execution_service: ExecutionService = Depends(get_execution_service),
+) -> VerificationService:
+    return VerificationService(
+        mentor_repo=mentor_repo,
+        execution_service=execution_service,
+    )
 
 
 async def get_current_principal(

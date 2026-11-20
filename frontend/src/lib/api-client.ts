@@ -27,6 +27,18 @@ import {
   type SubmissionResponse,
   type SubmissionSummaryItem,
 } from "@/types/problems";
+import {
+  learningEventViewSchema,
+  mentorSessionDetailSchema,
+  mlDiagnosisResponseSchema,
+  transferChallengeSummarySchema,
+  verificationAttemptViewSchema,
+  type LearningEventView,
+  type MentorSessionDetail,
+  type MLDiagnosisResponse,
+  type TransferChallengeSummary,
+  type VerificationAttemptView,
+} from "@/types/mentor";
 
 export const apiMetaSchema = z.object({
   service: z.string(),
@@ -430,4 +442,121 @@ export async function syncAdminLanguages(
       languages: z.array(languageItemSchema),
     })
     .parse(await response.json());
+}
+
+// --- Phase 4: AI Mentor, ML Diagnosis, RAG & Independent Transfer Verification ---
+
+export async function startOrResumeMentorSession(
+  accessToken: string,
+  payload: {
+    problem_id: string;
+    submission_id?: string | null;
+    explanation_language?: "en" | "bn";
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<MentorSessionDetail> {
+  const response = await fetch(`${baseUrl}/api/v1/mentor/sessions`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return mentorSessionDetailSchema.parse(await response.json());
+}
+
+export async function sendMentorTurn(
+  accessToken: string,
+  sessionId: string,
+  payload: {
+    action: "diagnose" | "respond" | "request_hint";
+    submission_id?: string | null;
+    student_message?: string;
+    requested_hint_level?: 1 | 2 | 3;
+    explanation_language?: "en" | "bn";
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<MentorSessionDetail> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/mentor/sessions/${sessionId}/turns`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return mentorSessionDetailSchema.parse(await response.json());
+}
+
+export async function diagnoseSubmission(
+  accessToken: string,
+  submissionId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<MLDiagnosisResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/mentor/diagnose/${submissionId}`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return mlDiagnosisResponseSchema.parse(await response.json());
+}
+
+export async function fetchTransferChallenge(
+  accessToken: string,
+  sourceProblemId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TransferChallengeSummary | null> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/verifications/problem/${sourceProblemId}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  const raw: unknown = await response.json();
+  if (raw === null) return null;
+  return transferChallengeSummarySchema.parse(raw);
+}
+
+export async function submitTransferVerificationAttempt(
+  accessToken: string,
+  verificationLinkId: string,
+  payload: {
+    source_submission_id?: string | null;
+    language_slug: string;
+    source_code: string;
+    student_explanation: string;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<VerificationAttemptView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/verifications/${verificationLinkId}/attempts`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return verificationAttemptViewSchema.parse(await response.json());
+}
+
+export async function fetchMyLearningEvents(
+  accessToken: string,
+  limit = 20,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningEventView[]> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/events?limit=${limit}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(learningEventViewSchema).parse(await response.json());
 }

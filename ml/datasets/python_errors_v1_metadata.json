@@ -1,0 +1,23 @@
+{
+  "dataset_version": "python_errors_v1",
+  "total_families": 42,
+  "validated_samples": 309,
+  "dropped_samples": 1,
+  "class_distribution": {
+    "condition_error": 34,
+    "function_return_error": 49,
+    "indexing_error": 32,
+    "initialization_error": 28,
+    "logic_error": 41,
+    "loop_boundary_error": 39,
+    "runtime_error": 43,
+    "syntax_error": 43
+  },
+  "dropped_details": [
+    {
+      "family_id": "fam_41_count_below_avg",
+      "mutation": "skip_last_bound",
+      "reason": "verdict=accepted, passed=3/3"
+    }
+  ]
+}

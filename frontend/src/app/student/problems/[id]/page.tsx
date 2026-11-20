@@ -4,6 +4,7 @@ import {
   ApiClientError,
   fetchMySubmissions,
   fetchProblemDetail,
+  fetchTransferChallenge,
   fetchWorkspaceRevisions,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
@@ -31,9 +32,10 @@ export default async function ProblemWorkspacePage({
     throw err;
   }
 
-  const [submissionsRes, revisions] = await Promise.all([
+  const [submissionsRes, revisions, transferChallenge] = await Promise.all([
     fetchMySubmissions(accessToken, problem.problem_id),
     fetchWorkspaceRevisions(accessToken, problem.version_id),
+    fetchTransferChallenge(accessToken, problem.problem_id).catch(() => null),
   ]);
 
   return (
@@ -42,6 +44,7 @@ export default async function ProblemWorkspacePage({
       problem={problem}
       initialSubmissions={submissionsRes.items}
       initialRevisions={revisions}
+      initialTransferChallenge={transferChallenge}
     />
   );
 }

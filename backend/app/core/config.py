@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     execution_rate_limit_per_minute: int = 20
     execution_daily_quota: int = 200
 
+    # Phase 4+ ML, RAG & Socratic AI Mentor settings
+    ml_model_artifact_path: str = "../ml/artifacts/error_classifier_v1.joblib"
+    ml_low_confidence_threshold: float = 0.55
+    rag_embedding_dimensions: int = 256
+    rag_similarity_threshold: float = 0.22
+    llm_provider: Literal["none", "openai", "gemini", "ollama"] = "none"
+    llm_model: str = ""
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_timeout_seconds: float = 15.0
+    mentor_rate_limit_per_minute: int = 15
+
 
 @lru_cache
 def get_settings() -> Settings:

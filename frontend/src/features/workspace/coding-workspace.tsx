@@ -19,12 +19,19 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { VerdictBadge } from "@/components/ui/verdict-badge";
+import { MentorPanel } from "@/features/mentor/mentor-panel";
+import { TransferVerificationPanel } from "@/features/verification/transfer-verification-panel";
 import { CodeEditor } from "@/features/workspace/code-editor";
 import {
   createSubmission,
   fetchSubmissionDetail,
+  fetchTransferChallenge,
   saveWorkspaceRevision,
 } from "@/lib/api-client";
+import type {
+  MentorSessionDetail,
+  TransferChallengeSummary,
+} from "@/types/mentor";
 import type {
   RevisionResponse,
   StudentProblemDetail,
@@ -32,14 +39,15 @@ import type {
   SubmissionSummaryItem,
 } from "@/types/problems";
 
-type MobileTab = "problem" | "editor" | "results" | "history";
-type BottomTab = "results" | "submissions" | "revisions";
+type MobileTab = "problem" | "editor" | "results" | "mentor" | "verify";
+type BottomTab = "results" | "mentor" | "verify" | "submissions" | "revisions";
 
 interface CodingWorkspaceProps {
   accessToken: string;
   problem: StudentProblemDetail;
   initialSubmissions: SubmissionSummaryItem[];
   initialRevisions: RevisionResponse[];
+  initialTransferChallenge?: TransferChallengeSummary | null;
   usePlainEditor?: boolean;
   onExecuteCode?: (payload: {
     problem_id: string;
@@ -64,6 +72,7 @@ export function CodingWorkspace({
   problem,
   initialSubmissions,
   initialRevisions,
+  initialTransferChallenge = null,
   usePlainEditor = false,
   onExecuteCode,
   onSaveRevision,
@@ -109,6 +118,10 @@ export function CodingWorkspace({
     useState<RevisionResponse[]>(initialRevisions);
   const [activeSubmission, setActiveSubmission] =
     useState<SubmissionResponse | null>(null);
+  const [mentorSession, setMentorSession] =
+    useState<MentorSessionDetail | null>(null);
+  const [transferChallenge, setTransferChallenge] =
+    useState<TransferChallengeSummary | null>(initialTransferChallenge);
 
   const [runningKind, setRunningKind] = useState<"run" | "submit" | null>(null);
   const [loadingSubId, setLoadingSubId] = useState<string | null>(null);
@@ -226,6 +239,13 @@ export function CodingWorkspace({
       setLastSavedAt(result.created_at);
       setBottomTab("results");
       setMobileTab("results");
+
+      // Refresh linked independent transfer challenge unlock state after Submit Code passes
+      if (result.submission_kind === "submit" && result.verdict === "accepted") {
+        fetchTransferChallenge(accessToken, problem.problem_id)
+          .then((nextChallenge) => setTransferChallenge(nextChallenge))
+          .catch(() => undefined);
+      }
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -365,14 +385,15 @@ export function CodingWorkspace({
       <div
         role="tablist"
         aria-label="Workspace panels"
-        className="grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white p-1 lg:hidden"
+        className="grid grid-cols-5 gap-1 rounded-xl border border-slate-200 bg-white p-1 lg:hidden"
       >
         {(
           [
             ["problem", "Problem"],
             ["editor", "Editor"],
             ["results", "Results"],
-            ["history", "History"],
+            ["mentor", "Mentor"],
+            ["verify", "Transfer"],
           ] as const
         ).map(([tabKey, label]) => (
           <button
@@ -383,9 +404,10 @@ export function CodingWorkspace({
             onClick={() => {
               setMobileTab(tabKey);
               if (tabKey === "results") setBottomTab("results");
-              if (tabKey === "history") setBottomTab("submissions");
+              if (tabKey === "mentor") setBottomTab("mentor");
+              if (tabKey === "verify") setBottomTab("verify");
             }}
-            className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
+            className={`truncate rounded-lg px-1.5 py-2 text-[11px] font-semibold transition sm:text-xs ${
               mobileTab === tabKey
                 ? "bg-indigo-600 text-white"
                 : "text-slate-600 hover:bg-slate-100"
@@ -631,11 +653,13 @@ export function CodingWorkspace({
             />
           </section>
 
-          {/* Bottom Panel: Results / Submissions / Revisions */}
+          {/* Bottom Panel: Results / AI Mentor / Transfer Verify / Submissions / Revisions */}
           <section
-            aria-label="Execution results and history"
+            aria-label="Execution results, AI Mentor, and verification"
             className={`rounded-xl border border-slate-200 bg-white shadow-sm ${
-              mobileTab === "results" || mobileTab === "history"
+              mobileTab === "results" ||
+              mobileTab === "mentor" ||
+              mobileTab === "verify"
                 ? "block"
                 : "hidden lg:block"
             }`}
@@ -644,6 +668,13 @@ export function CodingWorkspace({
               {(
                 [
                   ["results", "Execution Results"],
+                  ["mentor", "AI Mentor"],
+                  [
+                    "verify",
+                    transferChallenge?.unlocked
+                      ? "Transfer Check (Unlocked)"
+                      : "Transfer Check",
+                  ],
                   ["submissions", `Submissions (${submissions.length})`],
                   ["revisions", `Revisions (${revisions.length})`],
                 ] as const
@@ -701,14 +732,39 @@ export function CodingWorkspace({
                           </span>
                         </Badge>
                       </div>
-                      <div className="text-xs text-slate-600">
-                        {activeSubmission.runtime_ms != null
-                          ? `${activeSubmission.runtime_ms} ms`
-                          : "—"}
-                        {" · "}
-                        {activeSubmission.memory_kb != null
-                          ? `${activeSubmission.memory_kb} KB`
-                          : "—"}
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                        <span>
+                          {activeSubmission.runtime_ms != null
+                            ? `${activeSubmission.runtime_ms} ms`
+                            : "—"}
+                          {" · "}
+                          {activeSubmission.memory_kb != null
+                            ? `${activeSubmission.memory_kb} KB`
+                            : "—"}
+                        </span>
+                        {activeSubmission.verdict !== "accepted" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBottomTab("mentor");
+                              setMobileTab("mentor");
+                            }}
+                            className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
+                          >
+                            Ask Socratic AI Mentor →
+                          </button>
+                        ) : transferChallenge?.unlocked ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBottomTab("verify");
+                              setMobileTab("verify");
+                            }}
+                            className="rounded-md bg-teal-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-teal-500"
+                          >
+                            Open Transfer Check →
+                          </button>
+                        ) : null}
                       </div>
                     </div>
 
@@ -797,6 +853,43 @@ export function CodingWorkspace({
                     and hidden tests in Judge0.
                   </div>
                 )
+              ) : bottomTab === "mentor" ? (
+                <MentorPanel
+                  accessToken={accessToken}
+                  problemId={problem.problem_id}
+                  latestSubmissionId={
+                    activeSubmission?.id ?? submissions[0]?.id ?? null
+                  }
+                  latestVerdict={
+                    activeSubmission?.verdict ?? submissions[0]?.verdict ?? null
+                  }
+                  session={mentorSession}
+                  onSessionChange={setMentorSession}
+                />
+              ) : bottomTab === "verify" ? (
+                <TransferVerificationPanel
+                  accessToken={accessToken}
+                  challenge={transferChallenge}
+                  latestAcceptedSubmissionId={
+                    submissions.find(
+                      (s) =>
+                        s.submission_kind === "submit" &&
+                        s.verdict === "accepted",
+                    )?.id ?? null
+                  }
+                  usePlainEditor={usePlainEditor}
+                  onRefreshChallenge={async () => {
+                    try {
+                      const refreshed = await fetchTransferChallenge(
+                        accessToken,
+                        problem.problem_id,
+                      );
+                      setTransferChallenge(refreshed);
+                    } catch {
+                      // ignore transient refresh failure
+                    }
+                  }}
+                />
               ) : bottomTab === "submissions" ? (
                 submissions.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-500">

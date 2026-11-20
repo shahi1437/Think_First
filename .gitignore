@@ -36,6 +36,7 @@ pnpm-debug.log*
 
 # ML artifacts & scratch data (tracked explicitly when versioned)
 ml/artifacts/*.joblib
+!ml/artifacts/error_classifier_v1.joblib
 ml/artifacts/*.pkl
 ml/datasets/raw/
 

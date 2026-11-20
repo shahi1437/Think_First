@@ -80,9 +80,44 @@ npm test
 npm run build
 ```
 
+### ML & RAG Evaluation (Phase 4)
+```bash
+# 1. Regenerate execution-validated Python error dataset (42 families, 309 samples)
+python -m ml.preprocessing.generate_dataset
+
+# 2. Train & evaluate grouped-split models (Rule-Based vs TF-IDF+LogReg vs Random Forest)
+python -m ml.training.train
+
+# 3. Evaluate verified RAG retrieval & no-match fallback
+python -m ml.evaluation.evaluate_rag
+
+# 4. Run ML pipeline tests
+python -m pytest -v ml/tests
+```
+
+## Phase 4 API Endpoints (AI Mentor, Verified RAG & Independent Transfer)
+
+| Method & Path | Role | Purpose |
+| --- | --- | --- |
+| `POST /api/v1/mentor/sessions` | Authenticated | Start or resume a Socratic AI Mentor session grounded in real Judge0 evidence |
+| `GET /api/v1/mentor/sessions/{session_id}` | Owner / Admin | Fetch session dialogue, ML diagnosis, and approved RAG citations |
+| `POST /api/v1/mentor/sessions/{session_id}/turns` | Owner / Admin | Submit `diagnose`, `respond`, or `request_hint` (3 progressive levels; 0 hints on transfer challenges) |
+| `POST /api/v1/mentor/diagnose/{submission_id}` | Owner / Admin | Run own scikit-learn error classifier directly on a Judge0 submission |
+| `GET /api/v1/verifications/problem/{source_problem_id}` | Authenticated | Inspect linked unseen transfer challenge and unlock status |
+| `POST /api/v1/verifications/{link_id}/attempts` | Authenticated | Submit independent transfer solution evaluated on real Judge0 |
+| `GET /api/v1/verifications/attempts` | Owner | List persisted transfer verification outcomes (`verified_independent` / `attempted_not_verified`) |
+| `GET /api/v1/learning/events` | Owner | List traceable Phase 4 learning evidence events |
+| `GET/POST /api/v1/admin/knowledge` | Admin | Manage instructor-reviewable RAG documents & `pgvector` embeddings |
+| `POST /api/v1/admin/knowledge/seed` | Admin | Idempotently seed all 10 curated approved Python educational documents |
+| `PATCH /api/v1/admin/knowledge/{doc_id}/status` | Admin | Approve, draft, or archive a knowledge document |
+| `POST /api/v1/admin/knowledge/search` | Admin | Debug `pgvector` retrieval strictly over approved documents |
+
 ## Documentation
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
 - [ADR-002: Authoritative Supabase SQL Migrations](docs/architecture/ADR-002-database-migrations.md)
 - [ADR-003: Asymmetric JWKS Auth, DB-Backed RBAC & PostgreSQL RLS](docs/architecture/ADR-003-auth-jwks-and-rls.md)
 - [ADR-004: Isolated Judge0 CE Execution & Problem Content Governance](docs/architecture/ADR-004-judge0-and-problem-governance.md)
+- [ADR-005: Hybrid ML, Verified pgvector RAG, Socratic Mentor & Transfer Verification](docs/architecture/ADR-005-hybrid-ml-rag-socratic-mentor.md)
+- [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
+- [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)

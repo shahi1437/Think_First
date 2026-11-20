@@ -1,0 +1,215 @@
+{
+  "corpus_documents": 10,
+  "corpus_chunks": 19,
+  "embedding_dimensions": 256,
+  "similarity_threshold": 0.16,
+  "in_domain_queries": 14,
+  "hit_at_1": 1.0,
+  "hit_at_3": 1.0,
+  "mrr": 1.0,
+  "out_of_domain_queries": 3,
+  "no_match_rejection_rate": 1.0,
+  "results": [
+    {
+      "query": "initializing best = 0 fails on all negative numbers maximum list",
+      "expected_slug": "py-variables-and-initialization",
+      "matched": true,
+      "top_slugs": [
+        "py-variables-and-initialization",
+        "py-variables-and-initialization",
+        "py-variables-and-initialization"
+      ],
+      "top_raw_similarity": 0.5443,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "resetting accumulator total = 0 inside loop body loses sum",
+      "expected_slug": "py-variables-and-initialization",
+      "matched": true,
+      "top_slugs": [
+        "py-variables-and-initialization",
+        "py-variables-and-initialization",
+        "py-variables-and-initialization"
+      ],
+      "top_raw_similarity": 0.5378,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "strict greater than > vs inclusive >= boundary threshold elif order",
+      "expected_slug": "py-conditions-and-boolean-logic",
+      "matched": true,
+      "top_slugs": [
+        "py-conditions-and-boolean-logic",
+        "py-conditions-and-boolean-logic",
+        "py-loops-and-boundaries"
+      ],
+      "top_raw_similarity": 0.3564,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "boolean operator and vs or condition checking",
+      "expected_slug": "py-conditions-and-boolean-logic",
+      "matched": true,
+      "top_slugs": [
+        "py-conditions-and-boolean-logic",
+        "py-conditions-and-boolean-logic",
+        "py-test-design-and-edge-cases"
+      ],
+      "top_raw_similarity": 0.5848,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "range(a, b) excludes upper endpoint off-by-one loop boundary",
+      "expected_slug": "py-loops-and-boundaries",
+      "matched": true,
+      "top_slugs": [
+        "py-loops-and-boundaries",
+        "py-loops-and-boundaries",
+        "py-test-design-and-edge-cases"
+      ],
+      "top_raw_similarity": 0.5048,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "range(len(arr) - 1) skips final element last iteration",
+      "expected_slug": "py-loops-and-boundaries",
+      "matched": true,
+      "top_slugs": [
+        "py-loops-and-boundaries",
+        "py-loops-and-boundaries",
+        "py-test-design-and-edge-cases"
+      ],
+      "top_raw_similarity": 0.5043,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "IndexError list index out of range accessing arr[len(arr)] or arr[i + 1]",
+      "expected_slug": "py-arrays-and-indexing",
+      "matched": true,
+      "top_slugs": [
+        "py-arrays-and-indexing",
+        "py-arrays-and-indexing",
+        "py-test-design-and-edge-cases"
+      ],
+      "top_raw_similarity": 0.6285,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "function returns None missing return statement",
+      "expected_slug": "py-functions-and-returns",
+      "matched": true,
+      "top_slugs": [
+        "py-functions-and-returns",
+        "py-functions-and-returns"
+      ],
+      "top_raw_similarity": 0.8165,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "premature return inside for loop exits on first iteration",
+      "expected_slug": "py-functions-and-returns",
+      "matched": true,
+      "top_slugs": [
+        "py-functions-and-returns",
+        "py-functions-and-returns",
+        "py-loops-and-boundaries"
+      ],
+      "top_raw_similarity": 0.5882,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "SyntaxError missing colon after if or for header unmatched parenthesis",
+      "expected_slug": "py-syntax-and-indentation",
+      "matched": true,
+      "top_slugs": [
+        "py-syntax-and-indentation",
+        "py-syntax-and-indentation",
+        "py-runtime-exceptions"
+      ],
+      "top_raw_similarity": 0.44,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "ZeroDivisionError TypeError NameError AttributeError traceback last line",
+      "expected_slug": "py-runtime-exceptions",
+      "matched": true,
+      "top_slugs": [
+        "py-runtime-exceptions",
+        "py-strings-and-dictionaries"
+      ],
+      "top_raw_similarity": 0.4708,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "wrong answer hand trace variable state table operator choice logic bug",
+      "expected_slug": "py-logic-and-tracing",
+      "matched": true,
+      "top_slugs": [
+        "py-logic-and-tracing",
+        "py-logic-and-tracing",
+        "py-conditions-and-boolean-logic"
+      ],
+      "top_raw_similarity": 0.3454,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "dictionary frequency counting KeyError use dict.get and string .lower()",
+      "expected_slug": "py-strings-and-dictionaries",
+      "matched": true,
+      "top_slugs": [
+        "py-strings-and-dictionaries",
+        "py-strings-and-dictionaries",
+        "py-conditions-and-boolean-logic"
+      ],
+      "top_raw_similarity": 0.4681,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "edge case tests single element all negative boundary inputs before submitting",
+      "expected_slug": "py-test-design-and-edge-cases",
+      "matched": true,
+      "top_slugs": [
+        "py-test-design-and-edge-cases",
+        "py-conditions-and-boolean-logic",
+        "py-loops-and-boundaries"
+      ],
+      "top_raw_similarity": 0.5149,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "query": "medieval french cathedral flying buttress limestone masonry architecture",
+      "expected_slug": null,
+      "matched": false,
+      "top_slugs": [],
+      "passed": true
+    },
+    {
+      "query": "sourdough bread fermentation hydration starter recipe oven temperature",
+      "expected_slug": null,
+      "matched": false,
+      "top_slugs": [],
+      "passed": true
+    },
+    {
+      "query": "photosynthesis chlorophyll thylakoid membrane calvin cycle botany",
+      "expected_slug": null,
+      "matched": false,
+      "top_slugs": [],
+      "passed": true
+    }
+  ]
+}
