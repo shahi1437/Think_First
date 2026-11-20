@@ -131,6 +131,18 @@ python -m pytest -v ml/tests
 | `POST /api/v1/admin/learning/lessons` | Admin | Create/version/publish bilingual beginner lessons |
 | `POST /api/v1/admin/learning/diagnostic-questions` | Admin | Create/publish diagnostic items with isolated private answer keys |
 
+## Phase 6 API Endpoints (Learning DNA, Adaptive Daily Plan, Persistent History & Retention)
+
+| Method & Path | Role | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/growth/learning-dna` | Authenticated | Compute & persist evidence-based 6-dimension Learning DNA snapshot (tracing, coding, debugging, testing, transfer, retention) |
+| `GET /api/v1/growth/daily-plan` | Authenticated | Fetch or generate today's time-budgeted Adaptive Daily Learning Plan & version history |
+| `POST /api/v1/growth/daily-plan/regenerate` | Authenticated | Regenerate today's plan with updated study time budget while archiving prior versions |
+| `PATCH /api/v1/growth/daily-plan/tasks/{task_id}` | Owner / Admin | Update task completion status (`pending` / `completed` / `skipped`) |
+| `GET /api/v1/growth/history` | Authenticated | Searchable, category-filterable longitudinal timeline across lessons, diagnostics, Judge0, revisions, Mentor, hints, transfers, skills, daily plans, and retention |
+| `GET /api/v1/growth/retention` | Authenticated | Sync 24-hour spaced retention schedules & list upcoming/due checks + attempt history |
+| `POST /api/v1/growth/retention/{schedule_id}/attempts` | Owner / Admin | Execute real Judge0 retention check enforcing `>=24h` spacing before promoting Skill Graph to `retained` |
+
 ## Documentation
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
@@ -139,13 +151,14 @@ python -m pytest -v ml/tests
 - [ADR-004: Isolated Judge0 CE Execution & Problem Content Governance](docs/architecture/ADR-004-judge0-and-problem-governance.md)
 - [ADR-005: Hybrid ML, Verified pgvector RAG, Socratic Mentor & Transfer Verification](docs/architecture/ADR-005-hybrid-ml-rag-socratic-mentor.md)
 - [ADR-006: Adaptive Learning Tracks, Bilingual Lessons, 8-Domain Diagnostics & Skill Graph](docs/architecture/ADR-006-adaptive-learning-diagnostics-skill-graph.md)
+- [ADR-007: Live Gemini Socratic Tutor, Learning DNA, Daily Plan, History & Spaced Retention](docs/architecture/ADR-007-learning-dna-daily-plan-history-retention.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
 
-## Configuring a Live LLM Provider (Optional)
+## Configuring a Live LLM Provider (Google Gemini / OpenAI / Ollama)
 
-By default, `LLM_PROVIDER=none` runs the Socratic AI Mentor transparently in `deterministic_fallback` mode (explicitly badged in the UI and API responses). To enable live LLM Socratic tutoring in `backend/.env` (never commit real keys):
+When configured in `backend/.env` (never commit real keys), the Socratic AI Mentor authenticates directly with the live provider and reports `provider_mode="live_llm"`, while keeping deterministic prompt-injection blocking, solution-leakage checks, and safe fallback (`provider_mode="deterministic_fallback"`):
 
+- **Google Gemini (Verified Live):** `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.5-flash-lite`, `LLM_API_KEY=<your-key>`
 - **OpenAI:** `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, `LLM_API_KEY=<your-key>`
-- **Google Gemini:** `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-2.5-flash`, `LLM_API_KEY=<your-key>`
 - **Local Ollama:** `LLM_PROVIDER=ollama`, `LLM_MODEL=qwen2.5-coder:7b`, `LLM_BASE_URL=http://127.0.0.1:11434`

@@ -3,11 +3,15 @@
 import {
   ArrowRight,
   BookOpen,
+  Calendar,
   CheckCircle2,
   ClipboardCheck,
   Compass,
+  Dna,
+  History,
   Loader2,
   Sparkles,
+  Timer,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -25,6 +29,22 @@ interface LearningDashboardClientProps {
   studentName: string;
   initialDashboard: LearningDashboardView;
   initialLanguage?: "en" | "bn";
+  dnaSummary?: {
+    verifiedCount: number;
+    totalDimensions: number;
+    strengths: string[];
+  };
+  dailyPlanSummary?: {
+    completedTasks: number;
+    totalTasks: number;
+    availableMinutes: number;
+    versionNumber: number;
+  };
+  retentionSummary?: {
+    dueCount: number;
+    scheduledCount: number;
+    retainedSkillsCount: number;
+  };
 }
 
 export function LearningDashboardClient({
@@ -32,6 +52,9 @@ export function LearningDashboardClient({
   studentName,
   initialDashboard,
   initialLanguage = "en",
+  dnaSummary,
+  dailyPlanSummary,
+  retentionSummary,
 }: LearningDashboardClientProps) {
   const [lang, setLang] = useState<"en" | "bn">(initialLanguage);
   const [trackStatus, setTrackStatus] = useState<StudentTrackStatus>(
@@ -369,6 +392,123 @@ export function LearningDashboardClient({
 
       {/* Prerequisite-Aware Skill Graph */}
       <SkillGraphPanel graph={initialDashboard.skill_graph} language={lang} />
+
+      {/* Phase 6 Adaptive Growth Hub: Daily Plan, Learning DNA, Retention, History */}
+      <section aria-label="Adaptive growth tools" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link
+          href="/student/daily-plan"
+          className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <Calendar className="h-4 w-4 text-teal-600" aria-hidden="true" />
+              <Badge variant="teal">
+                {dailyPlanSummary
+                  ? `${dailyPlanSummary.completedTasks}/${dailyPlanSummary.totalTasks}`
+                  : isBn
+                    ? "আজকের প্ল্যান"
+                    : "Today"}
+              </Badge>
+            </div>
+            <h3 className="mt-2.5 text-sm font-bold text-slate-900">
+              {isBn ? "অ্যাডাপ্টিভ দৈনিক পরিকল্পনা" : "Adaptive Daily Plan"}
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              {dailyPlanSummary
+                ? `${dailyPlanSummary.availableMinutes}m budget · v${dailyPlanSummary.versionNumber}`
+                : isBn
+                  ? "তোমার সময় ও দক্ষতা অনুযায়ী কাজ"
+                  : "Personalized tasks for your time & gaps"}
+            </p>
+          </div>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
+            {isBn ? "খুলুন" : "Open Plan"}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </Link>
+
+        <Link
+          href="/student/dna"
+          className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <Dna className="h-4 w-4 text-indigo-600" aria-hidden="true" />
+              <Badge variant="indigo">
+                {dnaSummary
+                  ? `${dnaSummary.verifiedCount}/${dnaSummary.totalDimensions} verified`
+                  : "6 Dimensions"}
+              </Badge>
+            </div>
+            <h3 className="mt-2.5 text-sm font-bold text-slate-900">
+              {isBn ? "লার্নিং ডিএনএ" : "Learning DNA"}
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              {isBn
+                ? "ট্রেসিং, কোডিং, ডিবাগিং, টেস্টিং, ট্রান্সফার ও রিটেনশন"
+                : "Tracing, coding, debugging, testing, transfer & retention"}
+            </p>
+          </div>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
+            {isBn ? "প্রোফাইল দেখুন" : "View Profile"}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </Link>
+
+        <Link
+          href="/student/retention"
+          className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <Timer className="h-4 w-4 text-teal-600" aria-hidden="true" />
+              <Badge variant={retentionSummary && retentionSummary.dueCount > 0 ? "amber" : "neutral"}>
+                {retentionSummary
+                  ? `${retentionSummary.dueCount} due · ${retentionSummary.retainedSkillsCount} retained`
+                  : "24h Spaced"}
+              </Badge>
+            </div>
+            <h3 className="mt-2.5 text-sm font-bold text-slate-900">
+              {isBn ? "রিটেনশন যাচাই" : "Retention Verification"}
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              {isBn
+                ? "২৪ ঘণ্টা পর আসল Judge0 যাচাই"
+                : "Delayed Judge0 checks (>=24h) before Retained"}
+            </p>
+          </div>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
+            {isBn ? "যাচাই করুন" : "Check Retention"}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </Link>
+
+        <Link
+          href="/student/history"
+          className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <History className="h-4 w-4 text-slate-700" aria-hidden="true" />
+              <Badge variant="neutral">
+                {isBn ? "টাইমলাইন" : "Timeline"}
+              </Badge>
+            </div>
+            <h3 className="mt-2.5 text-sm font-bold text-slate-900">
+              {isBn ? "শেখার ইতিহাস" : "Persistent History"}
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              {isBn
+                ? "লেসন, Judge0, মেন্টর, হিন্ট ও ট্রান্সফার অনুসন্ধান"
+                : "Searchable log of lessons, Judge0, mentor & skills"}
+            </p>
+          </div>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
+            {isBn ? "ইতিহাস দেখুন" : "Explore History"}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </Link>
+      </section>
 
       {/* Quick Links to Lessons & Problem Bank */}
       <section className="grid gap-4 sm:grid-cols-2">

@@ -12,12 +12,17 @@ from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.integrations.llm.client import SocraticLLMClient
+from app.repositories.growth import GrowthRepository
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
 from app.services.execution.service import ExecutionService
+from app.services.growth.daily_plan_service import DailyPlanService
+from app.services.growth.dna_service import LearningDnaService
+from app.services.growth.history_service import LearningHistoryService
+from app.services.growth.retention_service import RetentionVerificationService
 from app.services.identity.service import IdentityService
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
 from app.services.learning.lessons_service import LessonsAndTracksService
@@ -234,6 +239,68 @@ def get_recommendation_service(
         diagnostics_service=diagnostics_service,
         skill_graph_service=skill_graph_service,
     )
+
+
+def get_growth_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> GrowthRepository:
+    return GrowthRepository(session)
+
+
+def get_retention_service(
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    skill_graph_service: SkillGraphService = Depends(get_skill_graph_service),
+    execution_service: ExecutionService = Depends(get_execution_service),
+) -> RetentionVerificationService:
+    return RetentionVerificationService(
+        growth_repo=growth_repo,
+        learning_repo=learning_repo,
+        problem_repo=problem_repo,
+        mentor_repo=mentor_repo,
+        skill_graph_service=skill_graph_service,
+        execution_service=execution_service,
+    )
+
+
+def get_learning_dna_service(
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+    lessons_service: LessonsAndTracksService = Depends(get_lessons_and_tracks_service),
+    skill_graph_service: SkillGraphService = Depends(get_skill_graph_service),
+) -> LearningDnaService:
+    return LearningDnaService(
+        growth_repo=growth_repo,
+        lessons_service=lessons_service,
+        skill_graph_service=skill_graph_service,
+    )
+
+
+def get_daily_plan_service(
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    lessons_service: LessonsAndTracksService = Depends(get_lessons_and_tracks_service),
+    diagnostics_service: DiagnosticAssessmentService = Depends(get_diagnostic_assessment_service),
+    skill_graph_service: SkillGraphService = Depends(get_skill_graph_service),
+    retention_service: RetentionVerificationService = Depends(get_retention_service),
+) -> DailyPlanService:
+    return DailyPlanService(
+        growth_repo=growth_repo,
+        problem_repo=problem_repo,
+        mentor_repo=mentor_repo,
+        lessons_service=lessons_service,
+        diagnostics_service=diagnostics_service,
+        skill_graph_service=skill_graph_service,
+        retention_service=retention_service,
+    )
+
+
+def get_learning_history_service(
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+) -> LearningHistoryService:
+    return LearningHistoryService(growth_repo=growth_repo)
 
 
 async def get_current_principal(

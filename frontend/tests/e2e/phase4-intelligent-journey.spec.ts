@@ -76,13 +76,13 @@ test.describe("Phase 4 Complete Live Intelligent Debugging & Transfer Verificati
     await page.getByRole("button", { name: /Start AI Diagnosis/i }).click();
 
     await expect(page.getByText(/ML Error Diagnosis/i)).toBeVisible({
-      timeout: 20_000,
+      timeout: 35_000,
     });
     await expect(
       page.getByText(/Loop Boundary Error/i).first(),
     ).toBeVisible();
     await expect(
-      page.getByText(/Deterministic Socratic Fallback/i),
+      page.getByText(/Live LLM/i).first(),
     ).toBeVisible();
     await expect(
       page.getByText(/Verified Knowledge Citations/i),
@@ -93,20 +93,31 @@ test.describe("Phase 4 Complete Live Intelligent Debugging & Transfer Verificati
 
     await page.getByRole("button", { name: "Hint 1" }).click();
     await expect(page.getByText(/Hint \(Level 1\)/i)).toBeVisible({
-      timeout: 15_000,
+      timeout: 30_000,
     });
     await expect(page.getByText(/Progressive Hints \(1 \/ 3 used\)/i)).toBeVisible();
 
-    // 7. Switch to Bangla and send a student reasoning turn -> verify Bangla Socratic reply
+    // 7. Switch to Bangla and send a student reasoning turn -> verify real Bangla Gemini reply
     await page.getByRole("button", { name: "বাংলা" }).click();
     await expect(page.getByText(/তোমার ধারণা বা ট্রেস/i)).toBeVisible();
     await page
       .locator("#mentor-student-reply")
       .fill("range(a, b) শেষ সংখ্যা b বাদ দিচ্ছে");
+    const turnResponsePromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/v1/mentor/sessions/") &&
+        res.url().includes("/turns") &&
+        res.request().method() === "POST",
+    );
     await page.getByRole("button", { name: /^Send$/i }).click();
-    await expect(page.getByText(/সবচেয়ে ছোট/i).first()).toBeVisible({
-      timeout: 15_000,
-    });
+    const turnRes = await turnResponsePromise;
+    expect(turnRes.ok()).toBeTruthy();
+    const turnPayload = (await turnRes.json()) as {
+      turns: Array<{ message_text: string; provider_mode: string }>;
+    };
+    const latestTurn = turnPayload.turns[turnPayload.turns.length - 1];
+    expect(latestTurn.provider_mode).toBe("live_llm");
+    expect(/[\u0980-\u09ff]/.test(latestTurn.message_text)).toBeTruthy();
 
     // 8. Student fixes code in Monaco Editor and submits -> Real Judge0 Accepted (5/5)
     await page.evaluate(() => {

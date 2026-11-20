@@ -21,7 +21,7 @@ from app.api.v1.deps import (
     get_problem_repository,
     get_verification_service,
 )
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.integrations.llm.client import (
     SocraticLLMClient,
     TutorPromptContext,
@@ -560,7 +560,9 @@ async def test_socratic_mentor_state_machine_bilingual_security_and_rbac() -> No
     problem_repo = InMemoryProblemRepository(problem, version, {sub_id: failing_sub})
 
     active_user_holder: dict[str, UserRecord] = {"user": student_a}
-    app = create_app(settings=Settings(app_env="test", llm_provider="none"))
+    test_settings = Settings(app_env="test", llm_provider="none")
+    app = create_app(settings=test_settings)
+    app.dependency_overrides[get_settings] = lambda: test_settings
     app.dependency_overrides[get_current_user] = lambda: active_user_holder["user"]
     app.dependency_overrides[get_mentor_repository] = lambda: mentor_repo
     app.dependency_overrides[get_problem_repository] = lambda: problem_repo

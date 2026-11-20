@@ -20,10 +20,13 @@ export default async function StudentLayout({
       activeRole="student"
       navLinks={[
         { href: "/student", label: "Dashboard" },
+        { href: "/student/daily-plan", label: "Daily Plan" },
         { href: "/student/lessons", label: "Lessons" },
         { href: "/student/diagnostic", label: "Diagnostic" },
         { href: "/student/problems", label: "Problem Bank" },
-        { href: "/student/onboarding", label: "Onboarding" },
+        { href: "/student/dna", label: "Learning DNA" },
+        { href: "/student/retention", label: "Retention" },
+        { href: "/student/history", label: "History" },
         { href: "/student/settings", label: "Settings" },
       ]}
     >

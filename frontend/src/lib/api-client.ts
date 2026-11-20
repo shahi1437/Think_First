@@ -56,6 +56,22 @@ import {
   type StudentTrackStatus,
   type TrackSlug,
 } from "@/types/learning";
+import {
+  dailyLearningPlanViewSchema,
+  dailyPlanWorkspaceViewSchema,
+  learningDnaProfileViewSchema,
+  learningHistoryResponseViewSchema,
+  retentionAttemptViewSchema,
+  retentionOverviewViewSchema,
+  type DailyLearningPlanView,
+  type DailyPlanWorkspaceView,
+  type DailyTaskStatus,
+  type HistoryCategory,
+  type LearningDnaProfileView,
+  type LearningHistoryResponseView,
+  type RetentionAttemptView,
+  type RetentionOverviewView,
+} from "@/types/growth";
 
 export const apiMetaSchema = z.object({
   service: z.string(),
@@ -736,4 +752,134 @@ export async function fetchStudentSkillGraph(
   });
   if (!response.ok) throw await parseErrorResponse(response);
   return skillGraphViewSchema.parse(await response.json());
+}
+
+// =============================================================================
+// Phase 6: Learning DNA, Adaptive Daily Plan, Persistent History & Retention
+// =============================================================================
+
+export async function fetchLearningDnaProfile(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningDnaProfileView> {
+  const response = await fetch(`${baseUrl}/api/v1/growth/learning-dna`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return learningDnaProfileViewSchema.parse(await response.json());
+}
+
+export async function fetchDailyPlanWorkspace(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DailyPlanWorkspaceView> {
+  const response = await fetch(`${baseUrl}/api/v1/growth/daily-plan`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return dailyPlanWorkspaceViewSchema.parse(await response.json());
+}
+
+export async function regenerateDailyPlan(
+  accessToken: string,
+  availableMinutes?: number,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DailyPlanWorkspaceView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/growth/daily-plan/regenerate`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(
+        availableMinutes ? { available_minutes: availableMinutes } : {},
+      ),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return dailyPlanWorkspaceViewSchema.parse(await response.json());
+}
+
+export async function updateDailyPlanTaskStatus(
+  accessToken: string,
+  taskId: string,
+  status: DailyTaskStatus,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DailyLearningPlanView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/growth/daily-plan/tasks/${taskId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ status }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return dailyLearningPlanViewSchema.parse(await response.json());
+}
+
+export async function fetchLearningHistory(
+  accessToken: string,
+  params: {
+    q?: string;
+    category?: HistoryCategory | "";
+    limit?: number;
+    offset?: number;
+  } = {},
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningHistoryResponseView> {
+  const sp = new URLSearchParams();
+  if (params.q?.trim()) sp.set("q", params.q.trim());
+  if (params.category) sp.set("category", params.category);
+  if (params.limit) sp.set("limit", String(params.limit));
+  if (params.offset) sp.set("offset", String(params.offset));
+  const qs = sp.toString();
+  const response = await fetch(
+    `${baseUrl}/api/v1/growth/history${qs ? `?${qs}` : ""}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return learningHistoryResponseViewSchema.parse(await response.json());
+}
+
+export async function fetchRetentionOverview(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<RetentionOverviewView> {
+  const response = await fetch(`${baseUrl}/api/v1/growth/retention`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return retentionOverviewViewSchema.parse(await response.json());
+}
+
+export async function submitRetentionAttempt(
+  accessToken: string,
+  scheduleId: string,
+  payload: {
+    language_slug?: string;
+    source_code: string;
+    student_explanation: string;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<RetentionAttemptView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/growth/retention/${scheduleId}/attempts`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({
+        language_slug: payload.language_slug ?? "python",
+        source_code: payload.source_code,
+        student_explanation: payload.student_explanation,
+      }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return retentionAttemptViewSchema.parse(await response.json());
 }

@@ -4,6 +4,7 @@ from app.api.v1.admin_knowledge import admin_knowledge_router
 from app.api.v1.admin_learning import admin_learning_router
 from app.api.v1.admin_problems import admin_languages_router, admin_problems_router
 from app.api.v1.admin_users import admin_users_router
+from app.api.v1.growth import growth_router
 from app.api.v1.health import meta_router
 from app.api.v1.learning import phase5_learning_router
 from app.api.v1.mentor import mentor_router
@@ -27,5 +28,6 @@ api_v1_router.include_router(mentor_router)
 api_v1_router.include_router(verifications_router)
 api_v1_router.include_router(learning_router)
 api_v1_router.include_router(phase5_learning_router)
+api_v1_router.include_router(growth_router)
 api_v1_router.include_router(admin_knowledge_router)
 api_v1_router.include_router(admin_learning_router)
