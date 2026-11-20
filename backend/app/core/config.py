@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 15.0
     mentor_rate_limit_per_minute: int = 15
 
+    # Phase 9 security & observability settings
+    rate_limit_enabled: bool = True
+    api_write_rate_limit_per_minute: int = 120
+    class_join_rate_limit_per_minute: int = 15
+    max_request_body_bytes: int = 2_097_152
+    slow_request_threshold_ms: float = 2500.0
+
 
 @lru_cache
 def get_settings() -> Settings:

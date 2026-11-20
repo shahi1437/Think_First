@@ -82,6 +82,20 @@ class MLErrorClassifierService:
         """Eagerly load the trained artifact at startup to avoid cold-start latency."""
         return self._ensure_loaded() is not None
 
+    def get_status_summary(self) -> dict[str, Any]:
+        """Return non-sensitive ML classifier readiness metadata for admin telemetry."""
+        artifact_path = self._resolve_artifact_path()
+        bundle = self._ensure_loaded()
+        return {
+            "loaded": bundle is not None,
+            "artifact_exists": artifact_path.exists(),
+            "model_version": (
+                str(bundle.get("model_version", "error-clf-v1.0.0"))
+                if bundle is not None
+                else "rule-fallback-v1"
+            ),
+        }
+
     def predict(self, sample: ExecutionSample) -> MLDiagnosisResponse:
         bundle = self._ensure_loaded()
         threshold = self._settings.ml_low_confidence_threshold

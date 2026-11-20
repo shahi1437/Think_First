@@ -58,7 +58,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-6xl px-6 py-14 sm:py-20">
           <p className="text-sm font-semibold uppercase tracking-wider text-teal-300">
             Think First. Code Better.
           </p>
@@ -71,6 +71,20 @@ export default function LandingPage() {
             programmers diagnose concrete misconceptions, debug real code, and
             prove independent transfer—built for Students, Teachers, and Admins.
           </p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Link
+              href="/register"
+              className="rounded-xl bg-teal-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-teal-300"
+            >
+              Start Learning →
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-xl border border-slate-600 bg-slate-900/70 px-5 py-2.5 text-sm font-semibold text-white transition hover:border-slate-400 hover:bg-slate-800"
+            >
+              Sign in (Student · Teacher · Admin)
+            </Link>
+          </div>
         </div>
       </header>
 

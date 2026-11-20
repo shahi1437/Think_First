@@ -225,7 +225,9 @@ export function LearningDashboardClient({
             href="/student/lessons"
             className="text-xs font-semibold text-indigo-700 hover:underline"
           >
-            {isBn ? "সব ৮টি লেসন দেখো →" : "Browse all 8 lessons →"}
+            {isBn
+              ? `সব ${initialDashboard.lessons_total}টি লেসন দেখো →`
+              : `Browse all ${initialDashboard.lessons_total} lessons →`}
           </Link>
         </div>
 

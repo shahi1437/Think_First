@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { LogoutButton } from "@/components/logout-button";
+import { NavLinks } from "@/components/nav-links";
 import type { RoleName, UserMeResponse } from "@/types/identity";
 
 interface NavLink {
@@ -35,36 +36,15 @@ export function AppShell({
               </span>
             </Link>
 
-            <nav
-              aria-label="Primary navigation"
-              className="flex flex-wrap items-center gap-x-4 gap-y-1.5"
-            >
-              {navLinks.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="text-sm font-medium text-slate-300 transition hover:text-white"
-                >
-                  {item.label}
-                </Link>
-              ))}
-              {user.roles.includes("teacher") && activeRole !== "teacher" ? (
-                <Link
-                  href="/teacher"
-                  className="text-sm font-medium text-teal-300 transition hover:text-teal-200"
-                >
-                  Teacher Portal
-                </Link>
-              ) : null}
-              {user.roles.includes("admin") && activeRole !== "admin" ? (
-                <Link
-                  href="/admin"
-                  className="text-sm font-medium text-indigo-300 transition hover:text-indigo-200"
-                >
-                  Admin Studio
-                </Link>
-              ) : null}
-            </nav>
+            <NavLinks
+              navLinks={navLinks}
+              showTeacherPortal={
+                user.roles.includes("teacher") && activeRole !== "teacher"
+              }
+              showAdminStudio={
+                user.roles.includes("admin") && activeRole !== "admin"
+              }
+            />
           </div>
 
           <div className="flex items-center gap-3">

@@ -37,6 +37,7 @@ import {
   adminDashboardOverviewSchema,
   adminDiagnosticQuestionDetailSchema,
   adminLessonDetailViewSchema,
+  adminOperationsHealthSchema,
   adminUserSummarySchema,
   knowledgeDocumentSchema,
   type AdminAuditLogItem,
@@ -44,6 +45,7 @@ import {
   type AdminDashboardOverview,
   type AdminDiagnosticQuestionDetail,
   type AdminLessonDetailView,
+  type AdminOperationsHealth,
   type AdminUserSummary,
   type KnowledgeDocumentItem,
 } from "@/types/admin";
@@ -1690,4 +1692,16 @@ export async function revokeAdminUserRole(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return response.json();
+}
+
+export async function fetchAdminOperationsHealth(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminOperationsHealth> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/operations/health`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminOperationsHealthSchema.parse(await response.json());
 }

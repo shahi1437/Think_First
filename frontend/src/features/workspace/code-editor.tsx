@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
@@ -30,6 +30,13 @@ export function CodeEditor({
   const [monacoMounted, setMonacoMounted] = useState(false);
   const [fallbackToTextarea, setFallbackToTextarea] =
     useState(usePlainTextarea);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+  }, [value, onChange]);
 
   useEffect(() => {
     if (usePlainTextarea || monacoMounted) return;
@@ -55,12 +62,12 @@ export function CodeEditor({
     win.monaco.editor = {
       getModels: () => [
         {
-          getValue: () => value,
-          setValue: (nextVal: string) => onChange(nextVal),
+          getValue: () => valueRef.current,
+          setValue: (nextVal: string) => onChangeRef.current(nextVal),
         },
       ],
     };
-  }, [fallbackToTextarea, monacoMounted, value, onChange]);
+  }, [fallbackToTextarea, monacoMounted]);
 
   if (usePlainTextarea) {
     return (
@@ -75,7 +82,7 @@ export function CodeEditor({
   }
 
   return (
-    <div className="relative h-[380px] w-full overflow-hidden bg-[#1e1e1e] lg:h-[420px]">
+    <div className="relative h-[320px] w-full overflow-hidden bg-[#1e1e1e] sm:h-[380px] lg:h-[420px]">
       {fallbackToTextarea && !monacoMounted ? (
         <textarea
           aria-label="Code editor"

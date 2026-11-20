@@ -221,3 +221,20 @@ class AdminCurriculumImportReport(BaseModel):
     diagnostic_questions_imported: int
     knowledge_documents_imported: int
     errors: list[str] = Field(default_factory=list)
+
+
+class OperationalCheckStatus(BaseModel):
+    name: str
+    status: Literal["ok", "degraded", "unavailable"]
+    latency_ms: float | None = None
+    detail: str
+
+
+class AdminOperationsHealthResponse(BaseModel):
+    overall_status: Literal["ok", "degraded"]
+    environment: str
+    rate_limit_enabled: bool
+    llm_provider_mode: Literal["live_llm", "deterministic_fallback"]
+    llm_provider: str
+    llm_model: str
+    checks: list[OperationalCheckStatus] = Field(default_factory=list)

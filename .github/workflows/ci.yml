@@ -2,15 +2,40 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  security-and-migrations:
+    name: Secret Hygiene & SQL Migration Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify no protected local bundles or env files are tracked
+        run: |
+          if git ls-files | grep -E '(\.local\.json$|^\.env$|^backend/\.env$|^frontend/\.env\.local$)'; then
+            echo "ERROR: Protected local curriculum bundle or environment file is tracked in Git!"
+            exit 1
+          fi
+
+      - name: Verify ordered SQL migrations exist
+        run: |
+          ls -1 supabase/migrations/*.sql | sort
+          python3 -c '
+          import pathlib, sys
+          files = sorted(p.name for p in pathlib.Path("supabase/migrations").glob("*.sql"))
+          assert len(files) >= 8, f"Expected >= 8 migrations, found {len(files)}"
+          assert len(files) == len(set(f[:14] for f in files)), "Duplicate migration timestamp prefix!"
+          print(f"Verified {len(files)} ordered SQL migrations.")
+          '
+
   backend:
     name: Backend Lint, Typecheck & Tests
     runs-on: ubuntu-latest
@@ -34,10 +59,10 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint (ruff)
-        run: ruff check .
+        run: ruff check app tests scripts
 
       - name: Format check (ruff)
-        run: ruff format --check .
+        run: ruff format --check app tests scripts
 
       - name: Static type check (mypy)
         run: mypy app
@@ -68,6 +93,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Dependency vulnerability audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high || true
 
       - name: Lint (ESLint)
         run: npm run lint

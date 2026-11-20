@@ -181,6 +181,15 @@ python -m pytest -v ml/tests
 | `GET/POST/PATCH /api/v1/admin/learning/diagnostic-questions` | Admin | Author, validate via Judge0, publish, and archive diagnostic items with private answer keys |
 | `POST /api/v1/admin/learning/import-bundle` | Admin | Bulk import and Judge0-validate protected curriculum bundles safely without public secret leakage |
 
+## Phase 9 Security, Observability, CI & Release Hardening
+
+| Area | Addition | Reference |
+|---|---|---|
+| Telemetry & Health | `GET /api/v1/admin/operations/health` (Admin-only live DB, ML, Judge0 & LLM telemetry) | [Admin Overview API](backend/app/api/v1/admin_overview.py) |
+| HTTP & API Defense | Security headers (`X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Cache-Control: no-store`), 2 MiB body guard & sliding-window rate limiter | [FastAPI App](backend/app/main.py) & [Next Config](frontend/next.config.ts) |
+| Performance Indexes | Migration `0008` hot B-tree indexes across learning events, audit logs, submissions & grading | [Migration 0008](supabase/migrations/20261120000008_phase9_performance_indexes.sql) |
+| Backup Verification | Disposable-DB `pg_dump` / `psql` round-trip restore & `FORCE RLS` parity script | [Backup Script](backend/scripts/backup_verify.py) |
+
 ## Documentation
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
@@ -192,6 +201,10 @@ python -m pytest -v ml/tests
 - [ADR-007: Live Gemini Socratic Tutor, Learning DNA, Daily Plan, History & Spaced Retention](docs/architecture/ADR-007-learning-dna-daily-plan-history-retention.md)
 - [ADR-008: Teacher Dashboard, Classroom Management, Assignments, Judge0 Evaluation & Auditable Grading](docs/architecture/ADR-008-teacher-dashboard-classrooms-assignments-grading.md)
 - [ADR-009: Advanced Admin Studio, Curriculum Validation Engine & Protected Content Governance](docs/architecture/ADR-009-advanced-admin-studio-curriculum-governance.md)
+- [Local Setup & CI Verification Guide](docs/operations/LOCAL_AND_CI_GUIDE.md)
+- [Backup, Restore & Least-Privilege Recovery Guide](docs/operations/BACKUP_AND_RECOVERY.md)
+- [Release Readiness Checklist & Rollback Plan](docs/release/RELEASE_READINESS_CHECKLIST.md)
+- [Thesis / Viva AI, ML, RAG & Verification Pipeline Notes](docs/release/THESIS_VIVA_PIPELINE_NOTES.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
 

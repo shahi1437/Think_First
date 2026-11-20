@@ -11,16 +11,21 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import type { AdminDashboardOverview } from "@/types/admin";
+import type {
+  AdminDashboardOverview,
+  AdminOperationsHealth,
+} from "@/types/admin";
 
 interface AdminDashboardClientProps {
   adminName: string;
   overview: AdminDashboardOverview;
+  operationsHealth?: AdminOperationsHealth | null;
 }
 
 export function AdminDashboardClient({
   adminName,
   overview,
+  operationsHealth = null,
 }: AdminDashboardClientProps) {
   return (
     <div className="space-y-6">
@@ -55,6 +60,75 @@ export function AdminDashboardClient({
           </div>
         </div>
       </section>
+
+      {operationsHealth ? (
+        <section
+          aria-label="Live infrastructure health"
+          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-indigo-600" />
+              <h2 className="text-sm font-bold text-slate-900">
+                Live Infrastructure &amp; AI Operations Telemetry
+              </h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge
+                variant={
+                  operationsHealth.overall_status === "ok" ? "emerald" : "amber"
+                }
+              >
+                {operationsHealth.overall_status}
+              </Badge>
+              <Badge
+                variant={
+                  operationsHealth.llm_provider_mode === "live_llm"
+                    ? "emerald"
+                    : "amber"
+                }
+              >
+                LLM: {operationsHealth.llm_provider_mode}
+              </Badge>
+              <Badge variant="neutral">
+                Rate Limit:{" "}
+                {operationsHealth.rate_limit_enabled ? "enabled" : "off"}
+              </Badge>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {operationsHealth.checks.map((chk) => (
+              <div
+                key={chk.name}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-semibold text-slate-800">
+                    {chk.name}
+                  </span>
+                  <Badge
+                    variant={
+                      chk.status === "ok"
+                        ? "emerald"
+                        : chk.status === "degraded"
+                          ? "amber"
+                          : "rose"
+                    }
+                  >
+                    {chk.status}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-600">{chk.detail}</p>
+                {chk.latency_ms != null ? (
+                  <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                    {chk.latency_ms} ms
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Primary KPI Grid */}
       <section

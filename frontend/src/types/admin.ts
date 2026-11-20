@@ -147,8 +147,26 @@ export const adminUserSummarySchema = z.object({
   created_at: z.string(),
 });
 
+export const operationalCheckStatusSchema = z.object({
+  name: z.string(),
+  status: z.enum(["ok", "degraded", "unavailable"]),
+  latency_ms: z.number().nullable().optional(),
+  detail: z.string(),
+});
+
+export const adminOperationsHealthSchema = z.object({
+  overall_status: z.enum(["ok", "degraded"]),
+  environment: z.string(),
+  rate_limit_enabled: z.boolean(),
+  llm_provider_mode: z.enum(["live_llm", "deterministic_fallback"]),
+  llm_provider: z.string(),
+  llm_model: z.string(),
+  checks: z.array(operationalCheckStatusSchema),
+});
+
 export type AdminAuditLogItem = z.infer<typeof adminAuditLogItemSchema>;
 export type AdminDashboardOverview = z.infer<typeof adminDashboardOverviewSchema>;
+export type AdminOperationsHealth = z.infer<typeof adminOperationsHealthSchema>;
 export type AdminLessonDetailView = z.infer<typeof adminLessonDetailViewSchema>;
 export type AdminCurriculumValidateResponse = z.infer<
   typeof adminCurriculumValidateResponseSchema

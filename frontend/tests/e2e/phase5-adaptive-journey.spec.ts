@@ -233,7 +233,7 @@ test.describe("Phase 5 Complete Adaptive Learning, Diagnostic, Lesson & Skill Gr
       .click();
     await page.waitForURL("**/student");
 
-    await expect(page.getByText("1 / 8")).toBeVisible();
+    await expect(page.getByText(/^1 \/ (8|24)$/)).toBeVisible();
     await expect(page.getByText(/Recommended Next Steps/i)).toBeVisible();
     await expect(page.getByText(/Backed by diagnostic evidence/i)).toBeVisible();
 
