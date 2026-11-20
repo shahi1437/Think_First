@@ -54,7 +54,9 @@ known-first-party = ["app", "tests", "ml"]
 "app/services/mentor/socratic_agent.py" = ["E501"]
 "app/services/verification/service.py" = ["E501"]
 "app/services/mentor/rag_service.py" = ["E501"]
+"app/services/learning/*.py" = ["E501"]
 "tests/test_phase4_mentor_rag_and_security.py" = ["E501"]
+"tests/test_phase5_learning_and_security.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

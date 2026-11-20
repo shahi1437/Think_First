@@ -13,11 +13,16 @@ from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.integrations.llm.client import SocraticLLMClient
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
+from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
 from app.services.execution.service import ExecutionService
 from app.services.identity.service import IdentityService
+from app.services.learning.diagnostics_service import DiagnosticAssessmentService
+from app.services.learning.lessons_service import LessonsAndTracksService
+from app.services.learning.recommendations_service import AdaptiveRecommendationService
+from app.services.learning.skill_graph import SkillGraphService
 from app.services.mentor.ml_inference import MLErrorClassifierService
 from app.services.mentor.rag_service import RagKnowledgeService
 from app.services.mentor.socratic_agent import SocraticMentorService
@@ -160,6 +165,74 @@ def get_verification_service(
     return VerificationService(
         mentor_repo=mentor_repo,
         execution_service=execution_service,
+    )
+
+
+def get_learning_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> LearningRepository:
+    return LearningRepository(session)
+
+
+def get_skill_graph_service(
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+) -> SkillGraphService:
+    return SkillGraphService(
+        learning_repo=learning_repo,
+        mentor_repo=mentor_repo,
+        problem_repo=problem_repo,
+    )
+
+
+def get_lessons_and_tracks_service(
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    judge0: Judge0Client = Depends(get_judge0_client),
+    skill_graph: SkillGraphService = Depends(get_skill_graph_service),
+) -> LessonsAndTracksService:
+    return LessonsAndTracksService(
+        learning_repo=learning_repo,
+        problem_repo=problem_repo,
+        mentor_repo=mentor_repo,
+        judge0=judge0,
+        skill_graph=skill_graph,
+    )
+
+
+def get_diagnostic_assessment_service(
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    judge0: Judge0Client = Depends(get_judge0_client),
+    skill_graph: SkillGraphService = Depends(get_skill_graph_service),
+) -> DiagnosticAssessmentService:
+    return DiagnosticAssessmentService(
+        learning_repo=learning_repo,
+        problem_repo=problem_repo,
+        mentor_repo=mentor_repo,
+        judge0=judge0,
+        skill_graph=skill_graph,
+    )
+
+
+def get_recommendation_service(
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    lessons_service: LessonsAndTracksService = Depends(get_lessons_and_tracks_service),
+    diagnostics_service: DiagnosticAssessmentService = Depends(get_diagnostic_assessment_service),
+    skill_graph_service: SkillGraphService = Depends(get_skill_graph_service),
+) -> AdaptiveRecommendationService:
+    return AdaptiveRecommendationService(
+        learning_repo=learning_repo,
+        problem_repo=problem_repo,
+        mentor_repo=mentor_repo,
+        lessons_service=lessons_service,
+        diagnostics_service=diagnostics_service,
+        skill_graph_service=skill_graph_service,
     )
 
 

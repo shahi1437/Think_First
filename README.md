@@ -112,6 +112,25 @@ python -m pytest -v ml/tests
 | `PATCH /api/v1/admin/knowledge/{doc_id}/status` | Admin | Approve, draft, or archive a knowledge document |
 | `POST /api/v1/admin/knowledge/search` | Admin | Debug `pgvector` retrieval strictly over approved documents |
 
+## Phase 5 API Endpoints (Tracks, Beginner Lessons, Adaptive Diagnostic & Skill Graph)
+
+| Method & Path | Role | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/learning/dashboard` | Authenticated | Unified Student Learning Dashboard (track status, lessons, Skill Graph, explainable recommendations) |
+| `GET /api/v1/learning/tracks` | Authenticated | List 4 learner tracks and student's active vs. evidence-recommended track |
+| `POST /api/v1/learning/tracks/select` | Authenticated | Select active learner track |
+| `GET /api/v1/learning/lessons` | Authenticated | List 8 published bilingual beginner Python lessons with per-student progress |
+| `GET /api/v1/learning/lessons/{slug}` | Authenticated | Fetch bilingual lesson markdown, interactive examples, and Judge0 guided exercise |
+| `POST /api/v1/learning/lessons/{id}/reading` | Authenticated | Record reading completion (advances Skill Graph to `introduced`, not mastery) |
+| `POST /api/v1/learning/lessons/{id}/exercise/run` | Authenticated | Execute guided practice on real Judge0 CE and persist lesson completion (`guided`) |
+| `POST /api/v1/learning/diagnostics/sessions` | Authenticated | Start or resume 8-domain adaptive diagnostic assessment |
+| `GET /api/v1/learning/diagnostics/sessions/{id}` | Owner / Admin | Fetch diagnostic state, adaptive follow-ups, and factual 8-domain evidence |
+| `POST /api/v1/learning/diagnostics/sessions/{id}/answers` | Owner / Admin | Submit MCQ or real Judge0 code check and trigger adaptive next-question selection |
+| `GET /api/v1/learning/skill-graph` | Authenticated | Fetch prerequisite-aware 10-node Skill Graph, uncertainty notes, and audited transitions |
+| `GET /api/v1/learning/recommendations` | Authenticated | Explainable prerequisite-based next lesson, diagnostic, debugging, and transfer recommendations |
+| `POST /api/v1/admin/learning/lessons` | Admin | Create/version/publish bilingual beginner lessons |
+| `POST /api/v1/admin/learning/diagnostic-questions` | Admin | Create/publish diagnostic items with isolated private answer keys |
+
 ## Documentation
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
@@ -119,6 +138,7 @@ python -m pytest -v ml/tests
 - [ADR-003: Asymmetric JWKS Auth, DB-Backed RBAC & PostgreSQL RLS](docs/architecture/ADR-003-auth-jwks-and-rls.md)
 - [ADR-004: Isolated Judge0 CE Execution & Problem Content Governance](docs/architecture/ADR-004-judge0-and-problem-governance.md)
 - [ADR-005: Hybrid ML, Verified pgvector RAG, Socratic Mentor & Transfer Verification](docs/architecture/ADR-005-hybrid-ml-rag-socratic-mentor.md)
+- [ADR-006: Adaptive Learning Tracks, Bilingual Lessons, 8-Domain Diagnostics & Skill Graph](docs/architecture/ADR-006-adaptive-learning-diagnostics-skill-graph.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
 

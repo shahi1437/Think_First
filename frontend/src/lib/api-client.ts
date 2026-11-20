@@ -39,6 +39,23 @@ import {
   type TransferChallengeSummary,
   type VerificationAttemptView,
 } from "@/types/mentor";
+import {
+  diagnosticSessionViewSchema,
+  learningDashboardViewSchema,
+  lessonDetailViewSchema,
+  lessonExerciseRunResponseSchema,
+  lessonSummaryViewSchema,
+  skillGraphViewSchema,
+  studentTrackStatusSchema,
+  type DiagnosticSessionView,
+  type LearningDashboardView,
+  type LessonDetailView,
+  type LessonExerciseRunResponse,
+  type LessonSummaryView,
+  type SkillGraphView,
+  type StudentTrackStatus,
+  type TrackSlug,
+} from "@/types/learning";
 
 export const apiMetaSchema = z.object({
   service: z.string(),
@@ -559,4 +576,164 @@ export async function fetchMyLearningEvents(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return z.array(learningEventViewSchema).parse(await response.json());
+}
+
+// --- Phase 5: Tracks, Bilingual Beginner Lessons, Adaptive Diagnostic & Skill Graph ---
+
+export async function fetchLearningDashboard(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningDashboardView> {
+  const response = await fetch(`${baseUrl}/api/v1/learning/dashboard`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return learningDashboardViewSchema.parse(await response.json());
+}
+
+export async function selectLearningTrack(
+  accessToken: string,
+  trackSlug: TrackSlug,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentTrackStatus> {
+  const response = await fetch(`${baseUrl}/api/v1/learning/tracks/select`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify({ track_slug: trackSlug }),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return studentTrackStatusSchema.parse(await response.json());
+}
+
+export async function fetchLessons(
+  accessToken: string,
+  trackSlug?: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LessonSummaryView[]> {
+  const qs = trackSlug ? `?track=${encodeURIComponent(trackSlug)}` : "";
+  const response = await fetch(`${baseUrl}/api/v1/learning/lessons${qs}`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(lessonSummaryViewSchema).parse(await response.json());
+}
+
+export async function fetchLessonDetail(
+  accessToken: string,
+  slug: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LessonDetailView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/lessons/${encodeURIComponent(slug)}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return lessonDetailViewSchema.parse(await response.json());
+}
+
+export async function markLessonReadingComplete(
+  accessToken: string,
+  lessonId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LessonDetailView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/lessons/${lessonId}/reading`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ reading_completed: true }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return lessonDetailViewSchema.parse(await response.json());
+}
+
+export async function runLessonGuidedExercise(
+  accessToken: string,
+  lessonId: string,
+  sourceCode: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LessonExerciseRunResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/lessons/${lessonId}/exercise/run`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ source_code: sourceCode }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return lessonExerciseRunResponseSchema.parse(await response.json());
+}
+
+export async function startOrResumeDiagnosticSession(
+  accessToken: string,
+  explanationLanguage: "en" | "bn" = "en",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DiagnosticSessionView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/diagnostics/sessions`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ explanation_language: explanationLanguage }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return diagnosticSessionViewSchema.parse(await response.json());
+}
+
+export async function fetchMyDiagnosticSessions(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DiagnosticSessionView[]> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/diagnostics/sessions`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(diagnosticSessionViewSchema).parse(await response.json());
+}
+
+export async function submitDiagnosticAnswer(
+  accessToken: string,
+  sessionId: string,
+  payload: {
+    question_id: string;
+    selected_option_id?: string;
+    source_code?: string;
+    response_time_ms?: number;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DiagnosticSessionView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/learning/diagnostics/sessions/${sessionId}/answers`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return diagnosticSessionViewSchema.parse(await response.json());
+}
+
+export async function fetchStudentSkillGraph(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<SkillGraphView> {
+  const response = await fetch(`${baseUrl}/api/v1/learning/skill-graph`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return skillGraphViewSchema.parse(await response.json());
 }
