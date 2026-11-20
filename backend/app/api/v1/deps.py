@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.integrations.llm.client import SocraticLLMClient
+from app.repositories.admin import AdminRepository
 from app.repositories.classroom import ClassroomRepository
 from app.repositories.growth import GrowthRepository
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
@@ -19,6 +20,8 @@ from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
+from app.services.admin.curriculum_service import AdminCurriculumService
+from app.services.admin.overview_service import AdminOverviewService
 from app.services.classroom.analytics_service import TeacherAnalyticsService
 from app.services.classroom.assignment_service import AssignmentService
 from app.services.classroom.course_service import ClassroomCourseService
@@ -348,6 +351,34 @@ def get_teacher_analytics_service(
         repo=repo,
         course_service=course_service,
         assignment_service=assignment_service,
+    )
+
+
+def get_admin_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> AdminRepository:
+    return AdminRepository(session)
+
+
+def get_admin_overview_service(
+    repo: AdminRepository = Depends(get_admin_repository),
+) -> AdminOverviewService:
+    return AdminOverviewService(repo=repo)
+
+
+def get_admin_curriculum_service(
+    admin_repo: AdminRepository = Depends(get_admin_repository),
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    judge0: Judge0Client = Depends(get_judge0_client),
+    rag_service: RagKnowledgeService = Depends(get_rag_knowledge_service),
+) -> AdminCurriculumService:
+    return AdminCurriculumService(
+        admin_repo=admin_repo,
+        learning_repo=learning_repo,
+        problem_repo=problem_repo,
+        judge0=judge0,
+        rag_service=rag_service,
     )
 
 

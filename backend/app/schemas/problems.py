@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 Difficulty = Literal["beginner", "basic", "intermediate", "advanced"]
+TrackSlug = Literal["absolute_beginner", "basic_university", "intermediate", "advanced"]
 ProblemMode = Literal["coding", "debugging"]
 ProblemStatus = Literal["draft", "validated", "in_review", "approved", "published", "archived"]
 SubmissionKind = Literal["run", "submit"]
@@ -64,6 +65,7 @@ class StudentProblemListItem(BaseModel):
     slug: str
     title: str
     difficulty: Difficulty
+    track_slug: TrackSlug | None = None
     mode: ProblemMode
     topics: list[str]
     skills: list[str]
@@ -79,6 +81,7 @@ class StudentProblemDetail(BaseModel):
     title: str
     statement_md: str
     difficulty: Difficulty
+    track_slug: TrackSlug | None = None
     mode: ProblemMode
     topics: list[str]
     skills: list[str]
@@ -203,6 +206,7 @@ class AdminVariantInput(BaseModel):
     debugging_prompt: str | None = None
     reference_solution: str = Field(..., min_length=1)
     expected_bug_summary: str | None = None
+    expected_failure_category: str | None = None
 
 
 class AdminProblemCreateRequest(BaseModel):
@@ -212,6 +216,7 @@ class AdminProblemCreateRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=160)
     statement_md: str = Field(..., min_length=10)
     difficulty: Difficulty
+    track_slug: TrackSlug | None = None
     mode: ProblemMode
     topics: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
@@ -232,6 +237,7 @@ class AdminProblemUpdateRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=160)
     statement_md: str = Field(..., min_length=10)
     difficulty: Difficulty
+    track_slug: TrackSlug | None = None
     mode: ProblemMode
     topics: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
@@ -267,10 +273,12 @@ class AdminProblemListItem(BaseModel):
     latest_version_number: int
     title: str
     difficulty: Difficulty
+    track_slug: TrackSlug | None = None
     mode: ProblemMode
     status: ProblemStatus
     topics: list[str]
     is_published: bool
+    is_archived: bool = False
     updated_at: datetime
 
 
@@ -282,8 +290,10 @@ class AdminProblemDetail(BaseModel):
     title: str
     statement_md: str
     difficulty: Difficulty
+    track_slug: TrackSlug | None = None
     mode: ProblemMode
     status: ProblemStatus
+    is_archived: bool = False
     topics: list[str]
     skills: list[str]
     prerequisites: list[str]
@@ -294,8 +304,38 @@ class AdminProblemDetail(BaseModel):
     variants: list[AdminVariantDetail]
     test_cases: list[AdminTestCaseDetail]
     reviews: list[AdminContentReviewItem]
+    assigned_courses_count: int = 0
     validated_at: datetime | None = None
     published_at: datetime | None = None
+
+
+class AdminProblemVersionSummary(BaseModel):
+    version_id: UUID
+    version_number: int
+    title: str
+    statement_md: str
+    difficulty: Difficulty
+    track_slug: TrackSlug | None = None
+    mode: ProblemMode
+    status: ProblemStatus
+    topics: list[str]
+    skills: list[str]
+    time_limit_ms: int
+    memory_limit_kb: int
+    test_case_count: int
+    hidden_test_count: int
+    is_current_published: bool
+    validated_at: datetime | None = None
+    published_at: datetime | None = None
+    created_at: datetime
+    reviews: list[AdminContentReviewItem] = Field(default_factory=list)
+
+
+class AdminProblemVersionsResponse(BaseModel):
+    problem_id: UUID
+    slug: str
+    current_published_version_id: UUID | None = None
+    versions: list[AdminProblemVersionSummary]
 
 
 class AdminReviewActionRequest(BaseModel):
@@ -304,13 +344,33 @@ class AdminReviewActionRequest(BaseModel):
     notes: str = Field(default="", max_length=1000)
 
 
+class AdminProblemRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    notes: str = Field(..., min_length=5, max_length=1000)
+
+
+class AdminProblemArchiveResponse(BaseModel):
+    problem_id: UUID
+    slug: str
+    is_archived: bool
+    latest_version_status: ProblemStatus
+    assigned_courses_count: int
+    message: str
+
+
 class AdminValidationVariantResult(BaseModel):
     language_slug: str
+    syntax_ok: bool = True
+    syntax_errors: list[str] = Field(default_factory=list)
     reference_passed: int
     total_tests: int
     reference_all_passed: bool
     buggy_starter_tested: bool
     buggy_starter_failed_as_expected: bool | None = None
+    observed_buggy_failure_category: str | None = None
+    max_runtime_ms: int | None = None
+    max_memory_kb: int | None = None
     errors: list[str] = Field(default_factory=list)
 
 
@@ -319,6 +379,7 @@ class AdminValidationReport(BaseModel):
     version_id: UUID
     passed: bool
     new_status: ProblemStatus
+    quality_warnings: list[str] = Field(default_factory=list)
     variant_results: list[AdminValidationVariantResult]
 
 

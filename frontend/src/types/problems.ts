@@ -64,6 +64,7 @@ export const studentProblemListItemSchema = z.object({
   slug: z.string(),
   title: z.string(),
   difficulty: difficultySchema,
+  track_slug: z.string().nullable().optional(),
   mode: problemModeSchema,
   topics: z.array(z.string()),
   skills: z.array(z.string()),
@@ -86,6 +87,7 @@ export const studentProblemDetailSchema = z.object({
   title: z.string(),
   statement_md: z.string(),
   difficulty: difficultySchema,
+  track_slug: z.string().nullable().optional(),
   mode: problemModeSchema,
   topics: z.array(z.string()),
   skills: z.array(z.string()),
@@ -174,10 +176,12 @@ export const adminProblemListItemSchema = z.object({
   latest_version_number: z.number().int(),
   title: z.string(),
   difficulty: difficultySchema,
+  track_slug: z.string().nullable().optional(),
   mode: problemModeSchema,
   status: problemStatusSchema,
   topics: z.array(z.string()),
   is_published: z.boolean(),
+  is_archived: z.boolean().default(false),
   updated_at: z.string(),
 });
 
@@ -196,6 +200,7 @@ export const adminVariantDetailSchema = z.object({
   debugging_prompt: z.string().nullable().optional(),
   reference_solution: z.string(),
   expected_bug_summary: z.string().nullable().optional(),
+  expected_failure_category: z.string().nullable().optional(),
 });
 
 export const adminTestCaseDetailSchema = z.object({
@@ -224,8 +229,10 @@ export const adminProblemDetailSchema = z.object({
   title: z.string(),
   statement_md: z.string(),
   difficulty: difficultySchema,
+  track_slug: z.string().nullable().optional(),
   mode: problemModeSchema,
   status: problemStatusSchema,
+  is_archived: z.boolean().default(false),
   topics: z.array(z.string()),
   skills: z.array(z.string()),
   prerequisites: z.array(z.string()),
@@ -236,8 +243,47 @@ export const adminProblemDetailSchema = z.object({
   variants: z.array(adminVariantDetailSchema),
   test_cases: z.array(adminTestCaseDetailSchema),
   reviews: z.array(adminContentReviewItemSchema),
+  assigned_courses_count: z.number().int().default(0),
   validated_at: z.string().nullable().optional(),
   published_at: z.string().nullable().optional(),
+});
+
+export const adminProblemVersionSummarySchema = z.object({
+  version_id: z.string(),
+  version_number: z.number().int(),
+  title: z.string(),
+  statement_md: z.string(),
+  difficulty: difficultySchema,
+  track_slug: z.string().nullable().optional(),
+  mode: problemModeSchema,
+  status: problemStatusSchema,
+  topics: z.array(z.string()),
+  skills: z.array(z.string()),
+  time_limit_ms: z.number().int(),
+  memory_limit_kb: z.number().int(),
+  test_case_count: z.number().int(),
+  hidden_test_count: z.number().int(),
+  is_current_published: z.boolean(),
+  validated_at: z.string().nullable().optional(),
+  published_at: z.string().nullable().optional(),
+  created_at: z.string(),
+  reviews: z.array(adminContentReviewItemSchema).default([]),
+});
+
+export const adminProblemVersionsResponseSchema = z.object({
+  problem_id: z.string(),
+  slug: z.string(),
+  current_published_version_id: z.string().nullable().optional(),
+  versions: z.array(adminProblemVersionSummarySchema),
+});
+
+export const adminProblemArchiveResponseSchema = z.object({
+  problem_id: z.string(),
+  slug: z.string(),
+  is_archived: z.boolean(),
+  latest_version_status: problemStatusSchema,
+  assigned_courses_count: z.number().int(),
+  message: z.string(),
 });
 
 export const adminValidationReportSchema = z.object({
@@ -245,14 +291,20 @@ export const adminValidationReportSchema = z.object({
   version_id: z.string(),
   passed: z.boolean(),
   new_status: problemStatusSchema,
+  quality_warnings: z.array(z.string()).default([]),
   variant_results: z.array(
     z.object({
       language_slug: z.string(),
+      syntax_ok: z.boolean().default(true),
+      syntax_errors: z.array(z.string()).default([]),
       reference_passed: z.number().int(),
       total_tests: z.number().int(),
       reference_all_passed: z.boolean(),
       buggy_starter_tested: z.boolean(),
       buggy_starter_failed_as_expected: z.boolean().nullable().optional(),
+      observed_buggy_failure_category: z.string().nullable().optional(),
+      max_runtime_ms: z.number().int().nullable().optional(),
+      max_memory_kb: z.number().int().nullable().optional(),
       errors: z.array(z.string()),
     }),
   ),
@@ -269,4 +321,10 @@ export type SubmissionSummaryItem = z.infer<typeof submissionSummaryItemSchema>;
 export type RevisionResponse = z.infer<typeof revisionResponseSchema>;
 export type AdminProblemListItem = z.infer<typeof adminProblemListItemSchema>;
 export type AdminProblemDetail = z.infer<typeof adminProblemDetailSchema>;
+export type AdminProblemVersionsResponse = z.infer<
+  typeof adminProblemVersionsResponseSchema
+>;
+export type AdminProblemArchiveResponse = z.infer<
+  typeof adminProblemArchiveResponseSchema
+>;
 export type AdminValidationReport = z.infer<typeof adminValidationReportSchema>;

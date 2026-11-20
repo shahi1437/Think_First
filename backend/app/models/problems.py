@@ -98,6 +98,7 @@ class ProblemVersion(Base):
     examples: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     time_limit_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
     memory_limit_kb: Mapped[int] = mapped_column(Integer, nullable=False, default=131072)
+    track_slug: Mapped[str | None] = mapped_column(String(48), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
     validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -174,6 +175,7 @@ class ProblemReferenceSolution(Base):
     )
     reference_solution: Mapped[str] = mapped_column(Text, nullable=False)
     expected_bug_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expected_failure_category: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

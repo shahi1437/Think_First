@@ -11,6 +11,7 @@ from app.schemas.problems import (
     ProblemMode,
     StudentProblemDetail,
     StudentProblemListItem,
+    TrackSlug,
 )
 from app.services.problems.service import ProblemService
 
@@ -33,6 +34,7 @@ async def list_problems(
     difficulty: Difficulty | None = Query(default=None),
     mode: ProblemMode | None = Query(default=None),
     topic: str | None = Query(default=None, max_length=64),
+    track: TrackSlug | None = Query(default=None),
     language: str | None = Query(default=None, max_length=32),
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
@@ -45,6 +47,7 @@ async def list_problems(
         difficulty=difficulty,
         mode=mode,
         topic=topic,
+        track=track,
         language=language,
         limit=limit,
         offset=offset,

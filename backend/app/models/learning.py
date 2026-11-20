@@ -1,4 +1,4 @@
-"""SQLAlchemy 2.x ORM models for Phase 5 Learning Tracks, Lessons, Diagnostics & Skill Graph."""
+"""SQLAlchemy 2.x ORM models for Phase 5-8 Learning Tracks, Lessons, Diagnostics & Skill Graph."""
 
 from datetime import datetime
 from typing import Any
@@ -339,6 +339,8 @@ class DiagnosticQuestionAnswer(Base):
     evaluation_tests: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
+    reference_solution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -448,6 +450,26 @@ class StudentRecommendation(Base):
     reason_en: Mapped[str] = mapped_column(Text, nullable=False)
     reason_bn: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_factors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class CurriculumValidation(Base):
+    __tablename__ = "curriculum_validations"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    validator_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("public.profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

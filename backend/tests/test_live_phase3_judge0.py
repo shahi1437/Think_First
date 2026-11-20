@@ -307,6 +307,14 @@ async def test_live_phase3_problem_bank_judge0_rls_and_admin_studio() -> None:
             )
             assert student_lookup.status_code == 200
             assert student_lookup.json()["slug"] == new_slug
+
+            # Archive synthetic test problem so Problem Bank remains clean
+            arch_resp = await api.post(
+                f"/api/v1/admin/problems/{created_id}/archive",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"notes": "Cleanup synthetic integration test problem."},
+            )
+            assert arch_resp.status_code == 200
             _ = student_a_id
     finally:
         await db_manager.dispose()

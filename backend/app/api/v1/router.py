@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.admin_knowledge import admin_knowledge_router
 from app.api.v1.admin_learning import admin_learning_router
+from app.api.v1.admin_overview import admin_overview_router
 from app.api.v1.admin_problems import admin_languages_router, admin_problems_router
 from app.api.v1.admin_users import admin_users_router
 from app.api.v1.growth import growth_router
@@ -35,3 +36,4 @@ api_v1_router.include_router(teacher_classroom_router)
 api_v1_router.include_router(student_classroom_router)
 api_v1_router.include_router(admin_knowledge_router)
 api_v1_router.include_router(admin_learning_router)
+api_v1_router.include_router(admin_overview_router)

@@ -166,6 +166,21 @@ python -m pytest -v ml/tests
 | `GET /api/v1/student/assignments/{id}` | Enrolled Student | Fetch assignment details, pinned problems, attempts, released grade, and feedback |
 | `POST /api/v1/student/assignments/{id}/submit` | Enrolled Student | Evaluate code on real Judge0 and record an assignment attempt with server-enforced deadline, attempt, and hint limits |
 
+## Phase 8 API Endpoints (Advanced Admin Studio, Validation Engine & Expanded Curriculum)
+
+| Method & Path | Role | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/admin/overview` | Admin | Real DB counts across problems, review queue, 4-track curriculum coverage, diagnostics, RAG docs, and audit trail |
+| `GET /api/v1/admin/audit-logs` | Admin | Paginated immutable governance audit logs filterable by action prefix and target type |
+| `POST /api/v1/admin/problems/{id}/submit-review` | Admin | Advance validated problem version into human curriculum review queue |
+| `POST /api/v1/admin/problems/{id}/reject` | Admin | Return candidate version to draft with mandatory reviewer feedback notes |
+| `POST /api/v1/admin/problems/{id}/archive` | Admin | Archive problem from discovery while preserving pinned versions for teacher assignments |
+| `GET /api/v1/admin/problems/{id}/versions` | Admin | Inspect immutable problem version history and content reviews |
+| `GET/PATCH /api/v1/admin/learning/tracks` | Admin | Manage track summaries and Skill Graph focus sets across all 4 tracks |
+| `GET/POST/PATCH /api/v1/admin/learning/lessons` | Admin | Author, version, validate guided exercises via Judge0, publish, and archive 24 bilingual lessons |
+| `GET/POST/PATCH /api/v1/admin/learning/diagnostic-questions` | Admin | Author, validate via Judge0, publish, and archive diagnostic items with private answer keys |
+| `POST /api/v1/admin/learning/import-bundle` | Admin | Bulk import and Judge0-validate protected curriculum bundles safely without public secret leakage |
+
 ## Documentation
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
@@ -176,6 +191,7 @@ python -m pytest -v ml/tests
 - [ADR-006: Adaptive Learning Tracks, Bilingual Lessons, 8-Domain Diagnostics & Skill Graph](docs/architecture/ADR-006-adaptive-learning-diagnostics-skill-graph.md)
 - [ADR-007: Live Gemini Socratic Tutor, Learning DNA, Daily Plan, History & Spaced Retention](docs/architecture/ADR-007-learning-dna-daily-plan-history-retention.md)
 - [ADR-008: Teacher Dashboard, Classroom Management, Assignments, Judge0 Evaluation & Auditable Grading](docs/architecture/ADR-008-teacher-dashboard-classrooms-assignments-grading.md)
+- [ADR-009: Advanced Admin Studio, Curriculum Validation Engine & Protected Content Governance](docs/architecture/ADR-009-advanced-admin-studio-curriculum-governance.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
 

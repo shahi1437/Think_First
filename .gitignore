@@ -4,6 +4,8 @@
 !.env.example
 *.pem
 *.key
+backend/protected_content/*.local.json
+content/protected/
 
 # Python
 __pycache__/

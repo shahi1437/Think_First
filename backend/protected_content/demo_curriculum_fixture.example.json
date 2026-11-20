@@ -1,0 +1,43 @@
+{
+  "lessons": [
+    {
+      "slug": "demo-safe-lesson-fixture",
+      "skill_slug": "variables",
+      "display_order": 999,
+      "title_en": "Demo Fixture: Variable Assignment",
+      "title_bn": "ডেমো: ভেরিয়েবল অ্যাসাইনমেন্ট",
+      "summary_en": "Safe public schema demonstration lesson (unpublished draft).",
+      "summary_bn": "নিরাপদ পাবলিক স্কিমা ডেমো লেসন।",
+      "content_en_md": "## Overview\nDemonstrates the Admin curriculum JSON import contract cleanly without exposing production keys.",
+      "content_bn_md": "## সারসংক্ষেপ\nএটি কেবল নিরাপদ ডেমো স্ট্রাকচার প্রদর্শন করে।",
+      "learning_objectives": ["Understand Admin import format"],
+      "prerequisite_lesson_slugs": [],
+      "track_slugs": ["absolute_beginner"],
+      "interactive_examples": [
+        {
+          "title": "Echo input",
+          "code": "x = input().strip()\nprint(x)",
+          "input_data": "hello",
+          "expected_output": "hello",
+          "explanation_en": "Prints the trimmed input string.",
+          "explanation_bn": "ইনপুট স্ট্রিং প্রিন্ট করে।"
+        }
+      ],
+      "guided_exercise": {
+        "prompt_en": "Read one integer and print it unchanged.",
+        "prompt_bn": "একটি পূর্ণসংখ্যা পড়ে সেটাই প্রিন্ট করো।",
+        "language_slug": "python",
+        "starter_code": "n = int(input())\n# print n\n",
+        "test_cases": [
+          { "name": "Demo case", "input_data": "42", "expected_output": "42" }
+        ]
+      },
+      "estimated_minutes": 10,
+      "publish": false,
+      "validate_with_judge0": false
+    }
+  ],
+  "problems": [],
+  "diagnostic_questions": [],
+  "knowledge_documents": []
+}

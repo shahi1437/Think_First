@@ -8,7 +8,7 @@ export default async function AdminProblemsPage() {
     currentPath: "/admin/problems",
   });
 
-  const initial = await fetchAdminProblems(accessToken);
+  const initial = await fetchAdminProblems(accessToken, { limit: 100 });
 
   return (
     <AdminProblemStudio

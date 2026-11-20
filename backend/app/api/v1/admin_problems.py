@@ -7,10 +7,13 @@ from app.repositories.identity import UserRecord
 from app.schemas.common import PaginatedResponse
 from app.schemas.problems import (
     AdminLanguageSyncResponse,
+    AdminProblemArchiveResponse,
     AdminProblemCreateRequest,
     AdminProblemDetail,
     AdminProblemListItem,
+    AdminProblemRejectRequest,
     AdminProblemUpdateRequest,
+    AdminProblemVersionsResponse,
     AdminReviewActionRequest,
     AdminValidationReport,
     ProblemMode,
@@ -143,3 +146,67 @@ async def publish_admin_problem(
         notes=payload.notes,
         request_id=request_id,
     )
+
+
+@admin_problems_router.post("/{problem_id}/submit-review", response_model=AdminProblemDetail)
+async def submit_problem_for_review(
+    problem_id: UUID,
+    payload: AdminReviewActionRequest,
+    request: Request,
+    admin_user: UserRecord = Depends(require_roles("admin")),
+    service: ProblemService = Depends(get_problem_service),
+) -> AdminProblemDetail:
+    """Move a validated problem version into human review queue."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.submit_for_review(
+        actor=admin_user,
+        problem_id=problem_id,
+        notes=payload.notes,
+        request_id=request_id,
+    )
+
+
+@admin_problems_router.post("/{problem_id}/reject", response_model=AdminProblemDetail)
+async def reject_admin_problem(
+    problem_id: UUID,
+    payload: AdminProblemRejectRequest,
+    request: Request,
+    admin_user: UserRecord = Depends(require_roles("admin")),
+    service: ProblemService = Depends(get_problem_service),
+) -> AdminProblemDetail:
+    """Reject content back to draft with mandatory reviewer feedback notes."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.reject_problem(
+        actor=admin_user,
+        problem_id=problem_id,
+        notes=payload.notes,
+        request_id=request_id,
+    )
+
+
+@admin_problems_router.post("/{problem_id}/archive", response_model=AdminProblemArchiveResponse)
+async def archive_admin_problem(
+    problem_id: UUID,
+    payload: AdminReviewActionRequest,
+    request: Request,
+    admin_user: UserRecord = Depends(require_roles("admin")),
+    service: ProblemService = Depends(get_problem_service),
+) -> AdminProblemArchiveResponse:
+    """Archive problem from new discovery while preserving published versions for assignments."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.archive_problem(
+        actor=admin_user,
+        problem_id=problem_id,
+        notes=payload.notes,
+        request_id=request_id,
+    )
+
+
+@admin_problems_router.get("/{problem_id}/versions", response_model=AdminProblemVersionsResponse)
+async def list_admin_problem_versions(
+    problem_id: UUID,
+    _admin_user: UserRecord = Depends(require_roles("admin")),
+    service: ProblemService = Depends(get_problem_service),
+) -> AdminProblemVersionsResponse:
+    """Return full immutable version history & reviews for side-by-side comparison."""
+    return await service.list_problem_versions(problem_id)

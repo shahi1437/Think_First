@@ -6,7 +6,9 @@ import {
   type UserMeResponse,
 } from "@/types/identity";
 import {
+  adminProblemArchiveResponseSchema,
   adminProblemDetailSchema,
+  adminProblemVersionsResponseSchema,
   adminValidationReportSchema,
   languageItemSchema,
   paginatedAdminProblemsSchema,
@@ -15,8 +17,10 @@ import {
   revisionResponseSchema,
   studentProblemDetailSchema,
   submissionResponseSchema,
+  type AdminProblemArchiveResponse,
   type AdminProblemDetail,
   type AdminProblemListItem,
+  type AdminProblemVersionsResponse,
   type AdminValidationReport,
   type Difficulty,
   type ProblemMode,
@@ -27,6 +31,22 @@ import {
   type SubmissionResponse,
   type SubmissionSummaryItem,
 } from "@/types/problems";
+import {
+  adminAuditLogItemSchema,
+  adminCurriculumValidateResponseSchema,
+  adminDashboardOverviewSchema,
+  adminDiagnosticQuestionDetailSchema,
+  adminLessonDetailViewSchema,
+  adminUserSummarySchema,
+  knowledgeDocumentSchema,
+  type AdminAuditLogItem,
+  type AdminCurriculumValidateResponse,
+  type AdminDashboardOverview,
+  type AdminDiagnosticQuestionDetail,
+  type AdminLessonDetailView,
+  type AdminUserSummary,
+  type KnowledgeDocumentItem,
+} from "@/types/admin";
 import {
   learningEventViewSchema,
   mentorSessionDetailSchema,
@@ -42,6 +62,7 @@ import {
 import {
   diagnosticSessionViewSchema,
   learningDashboardViewSchema,
+  learningTrackViewSchema,
   lessonDetailViewSchema,
   lessonExerciseRunResponseSchema,
   lessonSummaryViewSchema,
@@ -49,6 +70,7 @@ import {
   studentTrackStatusSchema,
   type DiagnosticSessionView,
   type LearningDashboardView,
+  type LearningTrackView,
   type LessonDetailView,
   type LessonExerciseRunResponse,
   type LessonSummaryView,
@@ -377,12 +399,13 @@ export async function fetchWorkspaceRevisions(
 
 export async function fetchAdminProblems(
   accessToken: string,
-  params?: { status?: ProblemStatus | ""; search?: string },
+  params?: { status?: ProblemStatus | ""; search?: string; limit?: number },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<{ items: AdminProblemListItem[]; total: number }> {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
   if (params?.search) query.set("search", params.search);
+  if (params?.limit) query.set("limit", String(params.limit));
   const qs = query.toString();
   const response = await fetch(
     `${baseUrl}/api/v1/admin/problems${qs ? `?${qs}` : ""}`,
@@ -1290,4 +1313,381 @@ export async function submitStudentAssignment(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return studentAssignmentAttemptResponseSchema.parse(await response.json());
+}
+
+// =============================================================================
+// Phase 8: Advanced Admin Studio, Curriculum Governance, Diagnostics & Audit
+// =============================================================================
+
+export async function fetchAdminOverview(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminDashboardOverview> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/overview`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminDashboardOverviewSchema.parse(await response.json());
+}
+
+export async function fetchAdminAuditLogs(
+  accessToken: string,
+  params?: { action_prefix?: string; target_type?: string; limit?: number },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<{ items: AdminAuditLogItem[]; total: number }> {
+  const sp = new URLSearchParams();
+  if (params?.action_prefix) sp.set("action_prefix", params.action_prefix);
+  if (params?.target_type) sp.set("target_type", params.target_type);
+  if (params?.limit) sp.set("limit", String(params.limit));
+  const qs = sp.toString();
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/audit-logs${qs ? `?${qs}` : ""}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z
+    .object({
+      items: z.array(adminAuditLogItemSchema),
+      total: z.number().int(),
+    })
+    .parse(await response.json());
+}
+
+export async function submitAdminProblemForReview(
+  accessToken: string,
+  problemId: string,
+  notes: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminProblemDetail> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/problems/${problemId}/submit-review`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ notes }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminProblemDetailSchema.parse(await response.json());
+}
+
+export async function rejectAdminProblem(
+  accessToken: string,
+  problemId: string,
+  notes: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminProblemDetail> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/problems/${problemId}/reject`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ notes }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminProblemDetailSchema.parse(await response.json());
+}
+
+export async function archiveAdminProblem(
+  accessToken: string,
+  problemId: string,
+  notes: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminProblemArchiveResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/problems/${problemId}/archive`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ notes }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminProblemArchiveResponseSchema.parse(await response.json());
+}
+
+export async function fetchAdminProblemVersions(
+  accessToken: string,
+  problemId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminProblemVersionsResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/problems/${problemId}/versions`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminProblemVersionsResponseSchema.parse(await response.json());
+}
+
+export async function fetchAdminTracks(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningTrackView[]> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/learning/tracks`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(learningTrackViewSchema).parse(await response.json());
+}
+
+export async function updateAdminTrack(
+  accessToken: string,
+  trackSlug: string,
+  payload: {
+    title_en: string;
+    title_bn: string;
+    summary_en: string;
+    summary_bn: string;
+    recommended_focus_skills: string[];
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningTrackView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/tracks/${trackSlug}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return learningTrackViewSchema.parse(await response.json());
+}
+
+export async function fetchAdminLessons(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminLessonDetailView[]> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/learning/lessons`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(adminLessonDetailViewSchema).parse(await response.json());
+}
+
+export async function upsertAdminLesson(
+  accessToken: string,
+  payload: Record<string, unknown>,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LessonSummaryView> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/learning/lessons`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return lessonSummaryViewSchema.parse(await response.json());
+}
+
+export async function updateAdminLessonStatus(
+  accessToken: string,
+  lessonId: string,
+  status: "draft" | "published" | "archived",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminLessonDetailView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/lessons/${lessonId}/status`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ status }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminLessonDetailViewSchema.parse(await response.json());
+}
+
+export async function validateAdminLessonExercise(
+  accessToken: string,
+  lessonId: string,
+  referenceSolution: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminCurriculumValidateResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/lessons/${lessonId}/validate-exercise`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ reference_solution: referenceSolution }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminCurriculumValidateResponseSchema.parse(await response.json());
+}
+
+export async function fetchAdminDiagnostics(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminDiagnosticQuestionDetail[]> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/diagnostic-questions`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z
+    .array(adminDiagnosticQuestionDetailSchema)
+    .parse(await response.json());
+}
+
+export async function createAdminDiagnostic(
+  accessToken: string,
+  payload: Record<string, unknown>,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<unknown> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/diagnostic-questions`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return response.json();
+}
+
+export async function validateAdminDiagnostic(
+  accessToken: string,
+  questionId: string,
+  referenceSolution?: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminCurriculumValidateResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/diagnostic-questions/${questionId}/validate`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ reference_solution: referenceSolution ?? null }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminCurriculumValidateResponseSchema.parse(await response.json());
+}
+
+export async function updateAdminDiagnosticStatus(
+  accessToken: string,
+  questionId: string,
+  status: "draft" | "approved" | "published" | "archived",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AdminDiagnosticQuestionDetail> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/learning/diagnostic-questions/${questionId}/status`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ status }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return adminDiagnosticQuestionDetailSchema.parse(await response.json());
+}
+
+export async function fetchAdminKnowledgeDocs(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<KnowledgeDocumentItem[]> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/knowledge`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(knowledgeDocumentSchema).parse(await response.json());
+}
+
+export async function upsertAdminKnowledgeDoc(
+  accessToken: string,
+  payload: Record<string, unknown>,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<KnowledgeDocumentItem> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/knowledge`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return knowledgeDocumentSchema.parse(await response.json());
+}
+
+export async function updateAdminKnowledgeStatus(
+  accessToken: string,
+  docId: string,
+  status: "draft" | "approved" | "archived",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<KnowledgeDocumentItem> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/knowledge/${docId}/status`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ status }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return knowledgeDocumentSchema.parse(await response.json());
+}
+
+export async function fetchAdminUsers(
+  accessToken: string,
+  limit = 50,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<{ items: AdminUserSummary[]; total: number }> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/users?limit=${limit}`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z
+    .object({
+      items: z.array(adminUserSummarySchema),
+      total: z.number().int(),
+    })
+    .parse(await response.json());
+}
+
+export async function grantAdminUserRole(
+  accessToken: string,
+  userId: string,
+  role: "student" | "teacher" | "admin",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<unknown> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/users/${userId}/roles`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ role }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return response.json();
+}
+
+export async function revokeAdminUserRole(
+  accessToken: string,
+  userId: string,
+  role: "student" | "teacher" | "admin",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<unknown> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/admin/users/${userId}/roles/${role}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return response.json();
 }

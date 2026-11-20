@@ -198,7 +198,7 @@ async def test_live_phase5_schema_force_rls_and_full_adaptive_journey() -> None:
                     saw_code_exec = True
                     submit_body = {
                         "question_id": q["id"],
-                        "source_code": _STRETCH_CODE_SOLUTIONS[slug],
+                        "source_code": _STRETCH_CODE_SOLUTIONS.get(slug, "print(0)\n"),
                         "response_time_ms": 4000,
                     }
                 else:

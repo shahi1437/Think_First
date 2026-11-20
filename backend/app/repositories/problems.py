@@ -85,6 +85,7 @@ class ProblemRepository:
         difficulty: Difficulty | None = None,
         mode: ProblemMode | None = None,
         topic: str | None = None,
+        track: str | None = None,
         language: str | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -111,6 +112,8 @@ class ProblemRepository:
             base = base.where(ProblemVersion.mode == mode)
         if topic:
             base = base.where(ProblemVersion.topics.contains([topic]))
+        if track:
+            base = base.where(ProblemVersion.track_slug == track)
         if language:
             base = base.where(
                 ProblemVersion.variants.any(ProblemLanguageVariant.language_slug == language)
@@ -234,6 +237,7 @@ class ProblemRepository:
             title=payload.title.strip(),
             statement_md=payload.statement_md,
             difficulty=payload.difficulty,
+            track_slug=payload.track_slug,
             mode=payload.mode,
             topics=payload.topics,
             skills=payload.skills,
@@ -276,6 +280,7 @@ class ProblemRepository:
                 title=payload.title.strip(),
                 statement_md=payload.statement_md,
                 difficulty=payload.difficulty,
+                track_slug=payload.track_slug,
                 mode=payload.mode,
                 topics=payload.topics,
                 skills=payload.skills,
@@ -294,6 +299,7 @@ class ProblemRepository:
             latest_version.title = payload.title.strip()
             latest_version.statement_md = payload.statement_md
             latest_version.difficulty = payload.difficulty
+            latest_version.track_slug = payload.track_slug
             latest_version.mode = payload.mode
             latest_version.topics = payload.topics
             latest_version.skills = payload.skills
@@ -367,6 +373,7 @@ class ProblemRepository:
                 variant_id=variant.id,
                 reference_solution=v_in.reference_solution,
                 expected_bug_summary=v_in.expected_bug_summary,
+                expected_failure_category=getattr(v_in, "expected_failure_category", None),
             )
             self._session.add(ref)
 
@@ -409,6 +416,81 @@ class ProblemRepository:
             validation_summary=validation_summary or {},
         )
         self._session.add(review)
+        await self._session.commit()
+
+    async def list_problem_versions(
+        self, problem_id: UUID
+    ) -> tuple[Problem, list[ProblemVersion]] | None:
+        problem = (
+            await self._session.execute(select(Problem).where(Problem.id == problem_id))
+        ).scalar_one_or_none()
+        if problem is None:
+            return None
+        stmt = (
+            select(ProblemVersion)
+            .where(ProblemVersion.problem_id == problem_id)
+            .order_by(ProblemVersion.version_number.desc())
+            .options(
+                selectinload(ProblemVersion.test_cases),
+                selectinload(ProblemVersion.reviews),
+            )
+            .execution_options(populate_existing=True)
+        )
+        versions = list((await self._session.execute(stmt)).scalars().all())
+        return problem, versions
+
+    async def count_assigned_courses_for_problem(self, problem_id: UUID) -> int:
+        from app.models.classroom import Assignment, AssignmentProblemLink
+
+        stmt = (
+            select(func.count(func.distinct(Assignment.course_id)))
+            .select_from(AssignmentProblemLink)
+            .join(Assignment, Assignment.id == AssignmentProblemLink.assignment_id)
+            .where(AssignmentProblemLink.problem_id == problem_id)
+        )
+        return int((await self._session.execute(stmt)).scalar_one() or 0)
+
+    async def archive_problem_version(
+        self,
+        *,
+        problem: Problem,
+        version: ProblemVersion,
+        reviewer_id: UUID,
+        notes: str,
+    ) -> None:
+        problem.is_archived = True
+        version.status = "archived"
+        self._session.add(
+            ContentReview(
+                problem_version_id=version.id,
+                reviewer_id=reviewer_id,
+                action="archived",
+                notes=notes or "Archived in Admin Problem Studio.",
+                validation_summary={},
+            )
+        )
+        await self._session.commit()
+
+    async def record_curriculum_validation(
+        self,
+        *,
+        target_type: str,
+        target_id: UUID,
+        validator_id: UUID,
+        passed: bool,
+        summary: dict[str, Any],
+    ) -> None:
+        from app.models.learning import CurriculumValidation
+
+        self._session.add(
+            CurriculumValidation(
+                target_type=target_type,
+                target_id=target_id,
+                validator_id=validator_id,
+                passed=passed,
+                summary=summary,
+            )
+        )
         await self._session.commit()
 
     # --- Submissions, Execution Results, Quotas & Revisions ---

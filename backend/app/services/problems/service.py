@@ -1,3 +1,4 @@
+import ast
 from typing import Any
 from uuid import UUID
 
@@ -12,10 +13,13 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.problems import (
     AdminContentReviewItem,
     AdminLanguageSyncResponse,
+    AdminProblemArchiveResponse,
     AdminProblemCreateRequest,
     AdminProblemDetail,
     AdminProblemListItem,
     AdminProblemUpdateRequest,
+    AdminProblemVersionsResponse,
+    AdminProblemVersionSummary,
     AdminTestCaseDetail,
     AdminValidationReport,
     AdminValidationVariantResult,
@@ -29,7 +33,70 @@ from app.schemas.problems import (
     StudentLanguageVariantView,
     StudentProblemDetail,
     StudentProblemListItem,
+    TrackSlug,
 )
+
+_FAILURE_PRIORITY: dict[str, int] = {
+    "compilation_error": 5,
+    "runtime_error": 4,
+    "time_limit_exceeded": 3,
+    "memory_limit_exceeded": 2,
+    "wrong_answer": 1,
+}
+
+
+def _check_python_syntax(label: str, code: str) -> str | None:
+    """Parse Python AST strictly without executing any code."""
+    try:
+        ast.parse(code)
+        return None
+    except SyntaxError as exc:
+        return f"{label} syntax error at line {exc.lineno or '?'}: {exc.msg}"
+
+
+def _analyze_test_suite(tests: list[Any]) -> tuple[list[str], list[str]]:
+    """Detect contradictory, duplicate, or ineffective test cases."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    by_input: dict[str, set[str]] = {}
+    seen_pairs: set[tuple[str, str]] = set()
+    distinct_outputs: set[str] = set()
+
+    for tc in tests:
+        norm_in = tc.input_data.strip()
+        norm_out = tc.expected_output.strip()
+        distinct_outputs.add(norm_out)
+        pair = (norm_in, norm_out)
+        if pair in seen_pairs:
+            warnings.append(
+                f"Duplicate test case #{tc.ordinal} ({tc.name}): "
+                "identical stdin and expected output already covered."
+            )
+        seen_pairs.add(pair)
+        by_input.setdefault(norm_in, set()).add(norm_out)
+
+    for norm_in, outputs in by_input.items():
+        if len(outputs) > 1:
+            preview = norm_in[:40].replace("\n", "\\n")
+            errors.append(
+                f"Contradictory test cases for identical input '{preview}': "
+                "multiple distinct expected outputs."
+            )
+
+    if len(tests) >= 2 and len(distinct_outputs) == 1:
+        warnings.append(
+            "All test cases share the exact same expected output; consider adding "
+            "negative/boundary cases to prevent constant-output solutions from passing."
+        )
+    return errors, warnings
+
+
+def _classify_buggy_failure(verdicts: list[str]) -> str | None:
+    non_accepted = [v for v in verdicts if v != "accepted"]
+    if not non_accepted:
+        return None
+    return max(non_accepted, key=lambda v: _FAILURE_PRIORITY.get(v, 0))
+
 
 _LANGUAGE_MATCH_RULES: tuple[tuple[str, str, str, str, bool], ...] = (
     ("python", "Python 3", "python", "Python (3.", True),
@@ -106,6 +173,7 @@ class ProblemService:
         difficulty: Difficulty | None = None,
         mode: ProblemMode | None = None,
         topic: str | None = None,
+        track: TrackSlug | None = None,
         language: str | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -115,6 +183,7 @@ class ProblemService:
             difficulty=difficulty,
             mode=mode,
             topic=topic,
+            track=track,
             language=language,
             limit=limit,
             offset=offset,
@@ -126,6 +195,7 @@ class ProblemService:
                 slug=problem.slug,
                 title=version.title,
                 difficulty=version.difficulty,
+                track_slug=version.track_slug,
                 mode=version.mode,
                 topics=list(version.topics),
                 skills=list(version.skills),
@@ -192,6 +262,7 @@ class ProblemService:
             title=version.title,
             statement_md=version.statement_md,
             difficulty=version.difficulty,
+            track_slug=version.track_slug,
             mode=version.mode,
             topics=list(version.topics),
             skills=list(version.skills),
@@ -259,7 +330,13 @@ class ProblemService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
-    def _to_admin_detail(self, problem: Problem, version: ProblemVersion) -> AdminProblemDetail:
+    def _to_admin_detail(
+        self,
+        problem: Problem,
+        version: ProblemVersion,
+        *,
+        assigned_courses_count: int = 0,
+    ) -> AdminProblemDetail:
         variants = [
             AdminVariantDetail(
                 id=v.id,
@@ -272,6 +349,9 @@ class ProblemService:
                 ),
                 expected_bug_summary=(
                     v.reference_solution.expected_bug_summary if v.reference_solution else None
+                ),
+                expected_failure_category=(
+                    v.reference_solution.expected_failure_category if v.reference_solution else None
                 ),
             )
             for v in sorted(version.variants, key=lambda item: item.language_slug)
@@ -307,8 +387,10 @@ class ProblemService:
             title=version.title,
             statement_md=version.statement_md,
             difficulty=version.difficulty,
+            track_slug=version.track_slug,
             mode=version.mode,
             status=version.status,
+            is_archived=problem.is_archived,
             topics=list(version.topics),
             skills=list(version.skills),
             prerequisites=list(version.prerequisites),
@@ -319,6 +401,7 @@ class ProblemService:
             variants=variants,
             test_cases=test_cases,
             reviews=reviews,
+            assigned_courses_count=assigned_courses_count,
             validated_at=version.validated_at,
             published_at=version.published_at,
         )
@@ -347,10 +430,12 @@ class ProblemService:
                 latest_version_number=pv.version_number,
                 title=pv.title,
                 difficulty=pv.difficulty,
+                track_slug=pv.track_slug,
                 mode=pv.mode,
                 status=pv.status,
                 topics=list(pv.topics),
                 is_published=p.current_published_version_id is not None,
+                is_archived=p.is_archived,
                 updated_at=pv.updated_at,
             )
             for p, pv in rows
@@ -365,7 +450,57 @@ class ProblemService:
                 message="Problem not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
             )
-        return self._to_admin_detail(found[0], found[1])
+        assigned_count = await self._repo.count_assigned_courses_for_problem(problem_id)
+        return self._to_admin_detail(found[0], found[1], assigned_courses_count=assigned_count)
+
+    async def list_problem_versions(self, problem_id: UUID) -> AdminProblemVersionsResponse:
+        found = await self._repo.list_problem_versions(problem_id)
+        if found is None:
+            raise AppError(
+                code="PROBLEM_NOT_FOUND",
+                message="Problem not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        problem, versions = found
+        items = [
+            AdminProblemVersionSummary(
+                version_id=pv.id,
+                version_number=pv.version_number,
+                title=pv.title,
+                statement_md=pv.statement_md,
+                difficulty=pv.difficulty,
+                track_slug=pv.track_slug,
+                mode=pv.mode,
+                status=pv.status,
+                topics=list(pv.topics),
+                skills=list(pv.skills),
+                time_limit_ms=pv.time_limit_ms,
+                memory_limit_kb=pv.memory_limit_kb,
+                test_case_count=len(pv.test_cases),
+                hidden_test_count=sum(1 for tc in pv.test_cases if tc.is_hidden),
+                is_current_published=problem.current_published_version_id == pv.id,
+                validated_at=pv.validated_at,
+                published_at=pv.published_at,
+                created_at=pv.created_at,
+                reviews=[
+                    AdminContentReviewItem(
+                        id=r.id,
+                        action=r.action,
+                        notes=r.notes,
+                        validation_summary=dict(r.validation_summary or {}),
+                        created_at=r.created_at,
+                    )
+                    for r in sorted(pv.reviews, key=lambda item: item.created_at, reverse=True)
+                ],
+            )
+            for pv in versions
+        ]
+        return AdminProblemVersionsResponse(
+            problem_id=problem.id,
+            slug=problem.slug,
+            current_published_version_id=problem.current_published_version_id,
+            versions=items,
+        )
 
     async def create_problem(
         self,
@@ -460,9 +595,10 @@ class ProblemService:
             lang.slug: lang for lang in await self._repo.list_languages(enabled_only=False)
         }
         sorted_tests = sorted(version.test_cases, key=lambda tc: tc.ordinal)
+        suite_errors, quality_warnings = _analyze_test_suite(sorted_tests)
 
         variant_results: list[AdminValidationVariantResult] = []
-        overall_passed = True
+        overall_passed = len(suite_errors) == 0
 
         for variant in version.variants:
             lang = languages.get(variant.language_slug)
@@ -471,6 +607,7 @@ class ProblemService:
                 variant_results.append(
                     AdminValidationVariantResult(
                         language_slug=variant.language_slug,
+                        syntax_ok=False,
                         reference_passed=0,
                         total_tests=len(sorted_tests),
                         reference_all_passed=False,
@@ -483,8 +620,20 @@ class ProblemService:
             ref_code = (
                 variant.reference_solution.reference_solution if variant.reference_solution else ""
             )
+            syntax_errors: list[str] = []
+            if variant.language_slug == "python":
+                ref_syntax_err = _check_python_syntax("Reference solution", ref_code)
+                if ref_syntax_err:
+                    syntax_errors.append(ref_syntax_err)
+                starter_syntax_err = _check_python_syntax("Starter code", variant.starter_code)
+                if starter_syntax_err:
+                    syntax_errors.append(starter_syntax_err)
+            syntax_ok = len(syntax_errors) == 0
+
             ref_passed = 0
-            errors: list[str] = []
+            errors: list[str] = [*suite_errors, *syntax_errors]
+            max_runtime_ms = 0
+            max_memory_kb = 0
 
             for tc in sorted_tests:
                 outcome = await self._judge0.execute_test_case(
@@ -495,6 +644,10 @@ class ProblemService:
                     cpu_time_limit_seconds=version.time_limit_ms / 1000.0,
                     memory_limit_kb=version.memory_limit_kb,
                 )
+                if outcome.runtime_ms is not None:
+                    max_runtime_ms = max(max_runtime_ms, outcome.runtime_ms)
+                if outcome.memory_kb is not None:
+                    max_memory_kb = max(max_memory_kb, outcome.memory_kb)
                 if outcome.verdict == "accepted":
                     ref_passed += 1
                 else:
@@ -505,10 +658,12 @@ class ProblemService:
             ref_all_passed = ref_passed == len(sorted_tests) and len(sorted_tests) > 0
             buggy_tested = False
             buggy_failed_expected: bool | None = None
+            observed_buggy_category: str | None = None
 
             if version.mode == "debugging" and variant.buggy_starter_code:
                 buggy_tested = True
                 buggy_passed = 0
+                buggy_verdicts: list[str] = []
                 for tc in sorted_tests:
                     bug_outcome = await self._judge0.execute_test_case(
                         source_code=variant.buggy_starter_code,
@@ -518,27 +673,39 @@ class ProblemService:
                         cpu_time_limit_seconds=version.time_limit_ms / 1000.0,
                         memory_limit_kb=version.memory_limit_kb,
                     )
+                    buggy_verdicts.append(bug_outcome.verdict)
                     if bug_outcome.verdict == "accepted":
                         buggy_passed += 1
                 buggy_failed_expected = buggy_passed < len(sorted_tests)
+                observed_buggy_category = _classify_buggy_failure(buggy_verdicts)
                 if not buggy_failed_expected:
                     errors.append(
                         "Debugging starter code unexpectedly passed all tests; "
                         "it must contain a verifiable bug."
                     )
 
-            variant_ok = ref_all_passed and (buggy_failed_expected is not False)
+            variant_ok = (
+                syntax_ok
+                and ref_all_passed
+                and (buggy_failed_expected is not False)
+                and not suite_errors
+            )
             if not variant_ok:
                 overall_passed = False
 
             variant_results.append(
                 AdminValidationVariantResult(
                     language_slug=variant.language_slug,
+                    syntax_ok=syntax_ok,
+                    syntax_errors=syntax_errors,
                     reference_passed=ref_passed,
                     total_tests=len(sorted_tests),
                     reference_all_passed=ref_all_passed,
                     buggy_starter_tested=buggy_tested,
                     buggy_starter_failed_as_expected=buggy_failed_expected,
+                    observed_buggy_failure_category=observed_buggy_category,
+                    max_runtime_ms=max_runtime_ms or None,
+                    max_memory_kb=max_memory_kb or None,
                     errors=errors,
                 )
             )
@@ -546,6 +713,7 @@ class ProblemService:
         new_status: ProblemStatus = "validated" if overall_passed else "draft"
         summary = {
             "passed": overall_passed,
+            "quality_warnings": quality_warnings,
             "variants": [vr.model_dump() for vr in variant_results],
         }
         await self._repo.record_content_review(
@@ -560,6 +728,13 @@ class ProblemService:
             ),
             validation_summary=summary,
         )
+        await self._repo.record_curriculum_validation(
+            target_type="problem_version",
+            target_id=version.id,
+            validator_id=actor.id,
+            passed=overall_passed,
+            summary=summary,
+        )
         await self._repo.record_audit(
             actor_user_id=actor.id,
             action="problem.validated",
@@ -573,8 +748,48 @@ class ProblemService:
             version_id=version.id,
             passed=overall_passed,
             new_status=new_status,
+            quality_warnings=quality_warnings,
             variant_results=variant_results,
         )
+
+    async def submit_for_review(
+        self,
+        *,
+        actor: UserRecord,
+        problem_id: UUID,
+        notes: str,
+        request_id: str | None,
+    ) -> AdminProblemDetail:
+        found = await self._repo.get_admin_problem_latest(problem_id)
+        if found is None:
+            raise AppError(
+                code="PROBLEM_NOT_FOUND",
+                message="Problem not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        problem, version = found
+        if version.status != "validated" or version.validated_at is None:
+            raise AppError(
+                code="VALIDATION_REQUIRED",
+                message="Run and pass automated Judge0 validation before submitting for review.",
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        await self._repo.record_content_review(
+            version=version,
+            reviewer_id=actor.id,
+            action="submitted_for_review",
+            new_status="in_review",
+            notes=notes or "Submitted for human curriculum review.",
+        )
+        await self._repo.record_audit(
+            actor_user_id=actor.id,
+            action="problem.submitted_for_review",
+            target_type="problem_version",
+            target_id=str(version.id),
+            metadata={"notes": notes},
+            request_id=request_id,
+        )
+        return await self.get_admin_problem(problem.id)
 
     async def approve_problem(
         self,
@@ -613,10 +828,48 @@ class ProblemService:
             metadata={"notes": notes},
             request_id=request_id,
         )
-        reloaded = await self._repo.get_admin_problem_latest(problem.id)
-        if reloaded is None:
-            raise RuntimeError("Failed to reload approved problem")
-        return self._to_admin_detail(reloaded[0], reloaded[1])
+        return await self.get_admin_problem(problem.id)
+
+    async def reject_problem(
+        self,
+        *,
+        actor: UserRecord,
+        problem_id: UUID,
+        notes: str,
+        request_id: str | None,
+    ) -> AdminProblemDetail:
+        found = await self._repo.get_admin_problem_latest(problem_id)
+        if found is None:
+            raise AppError(
+                code="PROBLEM_NOT_FOUND",
+                message="Problem not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        problem, version = found
+        if version.status not in ("validated", "in_review", "approved"):
+            raise AppError(
+                code="INVALID_STATE_TRANSITION",
+                message=(
+                    "Only validated, in-review, or approved drafts can be rejected with feedback."
+                ),
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        await self._repo.record_content_review(
+            version=version,
+            reviewer_id=actor.id,
+            action="rejected",
+            new_status="draft",
+            notes=notes,
+        )
+        await self._repo.record_audit(
+            actor_user_id=actor.id,
+            action="problem.rejected",
+            target_type="problem_version",
+            target_id=str(version.id),
+            metadata={"notes": notes},
+            request_id=request_id,
+        )
+        return await self.get_admin_problem(problem.id)
 
     async def publish_problem(
         self,
@@ -640,6 +893,7 @@ class ProblemService:
                 message="Refusing to publish untested content. Run automated validation first.",
                 status_code=status.HTTP_409_CONFLICT,
             )
+        problem.is_archived = False
         await self._repo.record_content_review(
             version=version,
             reviewer_id=actor.id,
@@ -656,7 +910,51 @@ class ProblemService:
             metadata={"slug": problem.slug, "version_number": version.version_number},
             request_id=request_id,
         )
-        reloaded = await self._repo.get_admin_problem_latest(problem.id)
-        if reloaded is None:
-            raise RuntimeError("Failed to reload published problem")
-        return self._to_admin_detail(reloaded[0], reloaded[1])
+        return await self.get_admin_problem(problem.id)
+
+    async def archive_problem(
+        self,
+        *,
+        actor: UserRecord,
+        problem_id: UUID,
+        notes: str,
+        request_id: str | None,
+    ) -> AdminProblemArchiveResponse:
+        found = await self._repo.get_admin_problem_latest(problem_id)
+        if found is None:
+            raise AppError(
+                code="PROBLEM_NOT_FOUND",
+                message="Problem not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        problem, version = found
+        assigned_courses = await self._repo.count_assigned_courses_for_problem(problem.id)
+        await self._repo.archive_problem_version(
+            problem=problem,
+            version=version,
+            reviewer_id=actor.id,
+            notes=notes,
+        )
+        await self._repo.record_audit(
+            actor_user_id=actor.id,
+            action="problem.archived",
+            target_type="problem_version",
+            target_id=str(version.id),
+            metadata={
+                "slug": problem.slug,
+                "version_number": version.version_number,
+                "assigned_courses_count": assigned_courses,
+            },
+            request_id=request_id,
+        )
+        return AdminProblemArchiveResponse(
+            problem_id=problem.id,
+            slug=problem.slug,
+            is_archived=True,
+            latest_version_status="archived",
+            assigned_courses_count=assigned_courses,
+            message=(
+                f"Problem archived from new discovery while preserving historical "
+                f"version v{version.version_number} for {assigned_courses} assigned course(s)."
+            ),
+        )
