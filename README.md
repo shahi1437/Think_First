@@ -121,3 +121,11 @@ python -m pytest -v ml/tests
 - [ADR-005: Hybrid ML, Verified pgvector RAG, Socratic Mentor & Transfer Verification](docs/architecture/ADR-005-hybrid-ml-rag-socratic-mentor.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
+
+## Configuring a Live LLM Provider (Optional)
+
+By default, `LLM_PROVIDER=none` runs the Socratic AI Mentor transparently in `deterministic_fallback` mode (explicitly badged in the UI and API responses). To enable live LLM Socratic tutoring in `backend/.env` (never commit real keys):
+
+- **OpenAI:** `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, `LLM_API_KEY=<your-key>`
+- **Google Gemini:** `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-2.5-flash`, `LLM_API_KEY=<your-key>`
+- **Local Ollama:** `LLM_PROVIDER=ollama`, `LLM_MODEL=qwen2.5-coder:7b`, `LLM_BASE_URL=http://127.0.0.1:11434`

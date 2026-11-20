@@ -8,6 +8,7 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.deps import get_ml_classifier_service
 from app.api.v1.health import health_router
 from app.api.v1.router import api_v1_router
 from app.core.config import Settings, get_settings
@@ -22,6 +23,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    if settings.app_env != "test":
+        get_ml_classifier_service(settings).warmup()
     logger.info(
         "application_startup",
         service=settings.app_name,

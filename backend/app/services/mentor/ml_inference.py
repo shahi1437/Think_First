@@ -78,6 +78,10 @@ class MLErrorClassifierService:
             self._bundle = None
         return self._bundle
 
+    def warmup(self) -> bool:
+        """Eagerly load the trained artifact at startup to avoid cold-start latency."""
+        return self._ensure_loaded() is not None
+
     def predict(self, sample: ExecutionSample) -> MLDiagnosisResponse:
         bundle = self._ensure_loaded()
         threshold = self._settings.ml_low_confidence_threshold
