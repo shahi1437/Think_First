@@ -1,12 +1,52 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/features/auth/login-form";
+import { fetchCurrentUser } from "@/lib/api-client";
+import { resolvePostLoginRedirect } from "@/lib/auth/roles";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 interface LoginPageProps {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
+}
+
+function mapLoginError(errorCode?: string): string | undefined {
+  if (errorCode === "auth_callback_failed") {
+    return "Authentication link verification failed or expired. Please sign in again.";
+  }
+  if (errorCode === "supabase_unconfigured") {
+    return "Supabase authentication is not configured for this environment yet.";
+  }
+  return undefined;
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
+
+  const supabase = await createSupabaseServerClient();
+  if (supabase) {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    if (authUser) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        let target: string | null = null;
+        try {
+          const user = await fetchCurrentUser(session.access_token);
+          target = resolvePostLoginRedirect(user.roles, params.next);
+        } catch {
+          target = null;
+        }
+        if (target) {
+          redirect(target);
+        }
+      }
+    }
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
@@ -29,7 +69,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </p>
         </div>
 
-        <LoginForm nextPath={params.next} />
+        <LoginForm
+          nextPath={params.next}
+          initialError={mapLoginError(params.error)}
+        />
       </div>
     </main>
   );

@@ -60,7 +60,7 @@ test.describe("Phase 8 Complete Admin Studio, Validation, Curriculum & Student D
     await adminPage.getByLabel(/Email address/i).fill(adminEmail);
     await adminPage.getByLabel(/Password/i).fill(password);
     await adminPage.getByRole("button", { name: /Sign in/i }).click();
-    await adminPage.waitForURL("**/student/onboarding");
+    await adminPage.waitForURL("**/admin", { timeout: 25_000 });
 
     await adminPage.goto("/admin");
     await expect(

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { fetchCurrentUser } from "@/lib/api-client";
+import { resolveDefaultPortalPath } from "@/lib/auth/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { RoleName, UserMeResponse } from "@/types/identity";
 
@@ -43,7 +44,7 @@ export async function requireAuthenticatedUser(options?: {
       options.allowedRoles?.includes(role),
     );
     if (!authorized) {
-      redirect("/student?error=forbidden");
+      redirect(`${resolveDefaultPortalPath(user.roles)}?error=forbidden`);
     }
   }
 

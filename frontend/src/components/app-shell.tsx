@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { LogoutButton } from "@/components/logout-button";
 import { NavLinks } from "@/components/nav-links";
+import { getAuthorizedPortals } from "@/lib/auth/roles";
 import type { RoleName, UserMeResponse } from "@/types/identity";
 
 interface NavLink {
@@ -38,12 +39,8 @@ export function AppShell({
 
             <NavLinks
               navLinks={navLinks}
-              showTeacherPortal={
-                user.roles.includes("teacher") && activeRole !== "teacher"
-              }
-              showAdminStudio={
-                user.roles.includes("admin") && activeRole !== "admin"
-              }
+              activeRole={activeRole}
+              authorizedPortals={getAuthorizedPortals(user.roles)}
             />
           </div>
 

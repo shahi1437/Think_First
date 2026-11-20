@@ -7,8 +7,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { fetchCurrentUser } from "@/lib/api-client";
+import { resolvePostLoginRedirect } from "@/lib/auth/roles";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { RoleName } from "@/types/identity";
 
 const loginSchema = z.object({
   email: z.email("Please enter a valid email address."),
@@ -19,12 +22,19 @@ export type LoginFormValues = z.infer<typeof loginSchema>;
 
 interface LoginFormProps {
   nextPath?: string;
-  onAuthenticate?: (values: LoginFormValues) => Promise<void>;
+  initialError?: string;
+  onAuthenticate?: (values: LoginFormValues) => Promise<RoleName[] | void>;
 }
 
-export function LoginForm({ nextPath = "/student", onAuthenticate }: LoginFormProps) {
+export function LoginForm({
+  nextPath,
+  initialError,
+  onAuthenticate,
+}: LoginFormProps) {
   const router = useRouter();
-  const [serverError, setServerError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(
+    initialError ?? null,
+  );
   const configured = isSupabaseConfigured();
 
   const {
@@ -36,17 +46,16 @@ export function LoginForm({ nextPath = "/student", onAuthenticate }: LoginFormPr
     defaultValues: { email: "", password: "" },
   });
 
-  const safeNext =
-    nextPath.startsWith("/") && !nextPath.startsWith("//")
-      ? nextPath
-      : "/student";
-
   async function onSubmit(values: LoginFormValues) {
     setServerError(null);
     try {
       if (onAuthenticate) {
-        await onAuthenticate(values);
-        router.push(safeNext);
+        const resultRoles = await onAuthenticate(values);
+        const resolvedRoles: RoleName[] =
+          Array.isArray(resultRoles) && resultRoles.length > 0
+            ? resultRoles
+            : ["student"];
+        router.push(resolvePostLoginRedirect(resolvedRoles, nextPath));
         router.refresh();
         return;
       }
@@ -62,7 +71,22 @@ export function LoginForm({ nextPath = "/student", onAuthenticate }: LoginFormPr
         return;
       }
 
-      router.push(safeNext);
+      let roles: RoleName[] = ["student"];
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        try {
+          const user = await fetchCurrentUser(session.access_token);
+          if (user.roles.length > 0) {
+            roles = user.roles;
+          }
+        } catch {
+          roles = ["student"];
+        }
+      }
+
+      router.push(resolvePostLoginRedirect(roles, nextPath));
       router.refresh();
     } catch (err) {
       setServerError(

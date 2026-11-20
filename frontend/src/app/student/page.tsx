@@ -8,7 +8,12 @@ import {
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
-export default async function StudentDashboardPage() {
+export default async function StudentDashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const { user, accessToken } = await requireAuthenticatedUser({
     allowedRoles: ["student", "teacher", "admin"],
     currentPath: "/student",
@@ -27,7 +32,22 @@ export default async function StudentDashboardPage() {
     ]);
 
   return (
-    <LearningDashboardClient
+    <div className="space-y-4">
+      {params.error === "forbidden" ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          Access denied for the requested Teacher/Admin portal: your current
+          account only holds{" "}
+          <span className="font-mono font-semibold">
+            {user.roles.join(", ")}
+          </span>{" "}
+          permissions. An authorized Admin must grant Teacher or Admin access
+          first.
+        </div>
+      ) : null}
+      <LearningDashboardClient
       accessToken={accessToken}
       studentName={user.full_name || user.email}
       initialDashboard={dashboard}
@@ -51,5 +71,6 @@ export default async function StudentDashboardPage() {
         retainedSkillsCount: retentionOverview.retained_skills_count,
       }}
     />
+    </div>
   );
 }

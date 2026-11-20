@@ -25,7 +25,7 @@ PUBLIC_DEMO_PROBLEM_SLUGS: tuple[str, ...] = (
 async def _run(mode: str) -> int:
     db_manager = get_db_manager()
     try:
-        async with db_manager.session() as session:
+        async for session in db_manager.session():
             active_demo_rows = (
                 await session.execute(
                     text(

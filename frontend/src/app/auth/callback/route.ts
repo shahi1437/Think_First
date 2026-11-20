@@ -1,24 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { fetchCurrentUser } from "@/lib/api-client";
+import { resolvePostLoginRedirect, sanitizeInternalPath } from "@/lib/auth/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-function sanitizeNextPath(rawNext: string | null): string {
-  if (!rawNext || !rawNext.startsWith("/") || rawNext.startsWith("//")) {
-    return "/student";
-  }
-  return rawNext;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = sanitizeNextPath(searchParams.get("next"));
+  const rawNext = searchParams.get("next");
 
   if (code) {
     const supabase = await createSupabaseServerClient();
     if (supabase) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (!error) {
-        return NextResponse.redirect(`${origin}${next}`);
+        let target = sanitizeInternalPath(rawNext) ?? "/student";
+        const accessToken = data.session?.access_token;
+        if (accessToken) {
+          try {
+            const user = await fetchCurrentUser(accessToken);
+            target = resolvePostLoginRedirect(user.roles, rawNext);
+          } catch {
+            target = sanitizeInternalPath(rawNext) ?? "/student";
+          }
+        }
+        return NextResponse.redirect(`${origin}${target}`);
       }
     }
   }

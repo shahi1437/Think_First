@@ -64,7 +64,7 @@ test.describe("Phase 7 Complete Teacher Classroom, Assignment, Judge0 & Grading 
     await teacherPage.getByLabel(/Email address/i).fill(teacherEmail);
     await teacherPage.getByLabel(/Password/i).fill(password);
     await teacherPage.getByRole("button", { name: /Sign in/i }).click();
-    await teacherPage.waitForURL("**/student/onboarding");
+    await teacherPage.waitForURL("**/teacher", { timeout: 25_000 });
     await teacherPage.goto("/teacher/classes");
 
     const classCode = `CSE-${suffix.slice(-4).toUpperCase()}`;

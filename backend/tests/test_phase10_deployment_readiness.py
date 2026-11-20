@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from scripts.bootstrap_first_admin import _mask_email, _validate_args
 from scripts.prepare_production_content import PUBLIC_DEMO_PROBLEM_SLUGS
 
 from app.core.config import Settings
@@ -45,3 +47,13 @@ def test_public_demo_problem_slugs_cover_seeded_demo_assessments() -> None:
     assert len(PUBLIC_DEMO_PROBLEM_SLUGS) == 6
     assert "sum-of-even-numbers" in PUBLIC_DEMO_PROBLEM_SLUGS
     assert "transfer-step-range-sum" in PUBLIC_DEMO_PROBLEM_SLUGS
+
+
+def test_bootstrap_first_admin_requires_explicit_confirm_and_valid_email() -> None:
+    with pytest.raises(ValueError, match="--confirm"):
+        _validate_args("user@example.edu", confirm=False)
+    with pytest.raises(ValueError, match="valid registered account email"):
+        _validate_args("invalid", confirm=True)
+
+    assert _validate_args("  Admin@University.EDU ", confirm=True) == "admin@university.edu"
+    assert _mask_email("shahi@gmail.com") == "sha***@gmail.com"

@@ -150,7 +150,9 @@ test.describe("Phase 6 Complete Adaptive Growth E2E (Learning DNA, Daily Plan, H
     await page.getByRole("link", { name: /^Retention$/i }).first().click();
     await page.waitForURL("**/student/retention");
     await expect(
-      page.getByText(/Prove Long-Term Retention with Delayed Judge0 Checks/i),
+      page.getByRole("heading", {
+        name: /Prove Long-Term Retention with Delayed Judge0 Checks/i,
+      }),
     ).toBeVisible();
     await expect(page.getByText(/Scheduled Retention Checks/i)).toBeVisible();
 
