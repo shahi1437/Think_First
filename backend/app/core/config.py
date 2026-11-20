@@ -1,8 +1,9 @@
+import json
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -22,7 +23,25 @@ class Settings(BaseSettings):
 
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value: object) -> list[str]:
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(item).strip().rstrip("/") for item in parsed if str(item).strip()]
+            return [item.strip().rstrip("/") for item in raw.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip().rstrip("/") for item in value if str(item).strip()]
+        raise ValueError("CORS_ORIGINS must be a JSON array or comma-separated list of origins.")
 
     database_url: str = "postgresql+asyncpg://codementor:codementor_dev@localhost:5432/codementor"
     db_pool_size: int = 5
@@ -37,7 +56,11 @@ class Settings(BaseSettings):
 
     # Phase 3+ Judge0 CE isolated code execution settings
     judge0_base_url: str = "http://127.0.0.1:2359"
+    judge0_auth_mode: str = "auto"  # "auto" | "auth_token" | "rapidapi" | "disabled"
     judge0_auth_token: str | None = None
+    judge0_rapidapi_key: str | None = None
+    judge0_rapidapi_host: str = "judge0-ce.p.rapidapi.com"
+    judge0_http_timeout_seconds: float = 15.0
     judge0_poll_interval_seconds: float = 0.4
     judge0_poll_timeout_seconds: float = 20.0
     judge0_max_retries: int = 2
@@ -85,8 +108,19 @@ class Settings(BaseSettings):
             issues.append("CORS_ORIGINS allows wildcard or localhost in production")
 
         j0 = self.judge0_base_url.strip().lower()
-        if not j0 or "127.0.0.1" in j0 or "localhost" in j0:
-            issues.append("JUDGE0_BASE_URL points to local loopback in production")
+        j0_mode = (self.judge0_auth_mode or "auto").strip().lower()
+        if j0_mode == "disabled":
+            issues.append("JUDGE0_AUTH_MODE is disabled (code execution unavailable)")
+        elif j0_mode not in {"auto", "auth_token", "rapidapi"}:
+            issues.append("JUDGE0_AUTH_MODE must be one of: auto, auth_token, rapidapi, disabled")
+        else:
+            if not j0 or "127.0.0.1" in j0 or "localhost" in j0:
+                issues.append("JUDGE0_BASE_URL points to local loopback in production")
+            if j0_mode == "rapidapi" or (j0_mode == "auto" and "rapidapi.com" in j0):
+                if not (self.judge0_rapidapi_key or "").strip():
+                    issues.append("JUDGE0_RAPIDAPI_KEY is missing for RapidAPI Judge0 mode")
+                if j0 and not j0.startswith("https://"):
+                    issues.append("JUDGE0_BASE_URL must use HTTPS for RapidAPI Judge0 mode")
 
         return issues
 

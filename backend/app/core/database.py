@@ -1,7 +1,9 @@
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,16 +17,49 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def normalize_database_url_and_connect_args(raw_url: str) -> tuple[str, dict[str, Any]]:
+    """Normalize PostgreSQL URLs for asyncpg + Supabase Session/Transaction poolers."""
+    cleaned = raw_url.strip()
+    url = make_url(cleaned)
+    if url.drivername in {"postgres", "postgresql"}:
+        url = url.set(drivername="postgresql+asyncpg")
+
+    query = dict(url.query)
+    connect_args: dict[str, Any] = {}
+
+    raw_sslmode = str(query.pop("sslmode", "")).strip().lower()
+    raw_pgbouncer = str(query.pop("pgbouncer", "")).strip().lower()
+
+    host = (url.host or "").lower()
+    is_supabase_cloud = host.endswith(".supabase.co") or host.endswith(".pooler.supabase.com")
+
+    if raw_sslmode in {"require", "verify-ca", "verify-full"} or (
+        is_supabase_cloud and raw_sslmode != "disable"
+    ):
+        connect_args["ssl"] = "require"
+
+    # Transaction pooler (port 6543 / pgbouncer=true) does not support asyncpg prepared cache
+    if url.port == 6543 or raw_pgbouncer == "true":
+        connect_args["statement_cache_size"] = 0
+
+    normalized_url = url.set(query=query).render_as_string(hide_password=False)
+    return normalized_url, connect_args
+
+
 class DatabaseManager:
     """Manages the async SQLAlchemy engine and session factory."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        normalized_url, connect_args = normalize_database_url_and_connect_args(
+            settings.database_url
+        )
         self._engine: AsyncEngine = create_async_engine(
-            settings.database_url,
+            normalized_url,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
             pool_pre_ping=True,
+            connect_args=connect_args,
         )
         self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine,

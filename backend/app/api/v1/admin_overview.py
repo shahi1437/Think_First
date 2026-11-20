@@ -12,6 +12,8 @@ from app.api.v1.deps import (
 )
 from app.core.config import Settings, get_settings
 from app.core.database import DatabaseManager, get_db_manager
+from app.core.errors import AppError
+from app.integrations.judge0.client import build_judge0_auth_headers, is_judge0_configured
 from app.repositories.identity import UserRecord
 from app.schemas.admin import (
     AdminAuditLogItem,
@@ -74,25 +76,30 @@ async def get_admin_operations_health(
     judge0_latency: float | None = None
     judge0_detail = "Judge0 endpoint unreachable."
     j_start = time.perf_counter()
-    try:
-        headers = (
-            {"X-Auth-Token": settings.judge0_auth_token} if settings.judge0_auth_token else None
-        )
-        async with httpx.AsyncClient(timeout=2.5) as client:
-            resp = await client.get(
-                f"{settings.judge0_base_url.rstrip('/')}/about",
-                headers=headers,
-            )
+    if not is_judge0_configured(settings):
+        judge0_latency = 0.0
+        judge0_detail = "Judge0 CE is disabled or not configured yet (code execution unavailable)."
+    else:
+        try:
+            headers = build_judge0_auth_headers(settings) or None
+            async with httpx.AsyncClient(timeout=2.5) as client:
+                resp = await client.get(
+                    f"{settings.judge0_base_url.rstrip('/')}/about",
+                    headers=headers,
+                )
+                judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
+                if resp.status_code == 200:
+                    judge0_ok = True
+                    version = resp.json().get("version", "unknown")
+                    judge0_detail = f"Judge0 CE online (version={version})."
+                else:
+                    judge0_detail = f"Judge0 CE returned HTTP {resp.status_code}."
+        except AppError as exc:
             judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-            if resp.status_code == 200:
-                judge0_ok = True
-                version = resp.json().get("version", "unknown")
-                judge0_detail = f"Judge0 CE online (version={version})."
-            else:
-                judge0_detail = f"Judge0 CE returned HTTP {resp.status_code}."
-    except Exception as exc:
-        judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-        judge0_detail = f"Judge0 check failed ({type(exc).__name__})."
+            judge0_detail = exc.message
+        except Exception as exc:
+            judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
+            judge0_detail = f"Judge0 check failed ({type(exc).__name__})."
 
     checks.append(
         OperationalCheckStatus(

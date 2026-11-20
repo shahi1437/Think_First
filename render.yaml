@@ -21,15 +21,15 @@ services:
         value: authenticated
       - key: CORS_ORIGINS
         sync: false
-      - key: JUDGE0_BASE_URL
-        sync: false
-      - key: JUDGE0_AUTH_TOKEN
-        sync: false
+      - key: JUDGE0_AUTH_MODE
+        value: disabled
+      # Add Judge0 variables in Render Dashboard -> Environment once Judge0 is ready:
+      # JUDGE0_BASE_URL, JUDGE0_AUTH_TOKEN (self-hosted) OR JUDGE0_RAPIDAPI_KEY + JUDGE0_RAPIDAPI_HOST
       - key: LLM_PROVIDER
         value: gemini
       - key: LLM_MODEL
         value: gemini-2.5-flash-lite
-      - key: LLM_API_KEY
-        sync: false
+      # Optional free Gemini key can be added in Render Dashboard -> Environment (LLM_API_KEY);
+      # without LLM_API_KEY, the Socratic mentor safely uses deterministic fallback mode.
       - key: RATE_LIMIT_ENABLED
         value: "true"

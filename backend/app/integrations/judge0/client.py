@@ -2,6 +2,7 @@ import asyncio
 import base64
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import status
@@ -89,20 +90,95 @@ def map_judge0_status_to_verdict(status_id: int, stderr: str | None) -> Verdict:
     return "internal_error"
 
 
+def is_judge0_configured(settings: Settings) -> bool:
+    """Return True only when Judge0 execution is enabled and has a non-empty base URL."""
+    mode = (settings.judge0_auth_mode or "auto").strip().lower()
+    if mode == "disabled":
+        return False
+    return bool((settings.judge0_base_url or "").strip())
+
+
+def resolve_judge0_auth_mode(settings: Settings) -> Literal["auth_token", "rapidapi", "disabled"]:
+    """Resolve effective Judge0 CE authentication mode without mutating config."""
+    mode = (settings.judge0_auth_mode or "auto").strip().lower()
+    if mode == "disabled":
+        return "disabled"
+    if mode not in {"auto", "auth_token", "rapidapi"}:
+        raise AppError(
+            code="INVALID_EXECUTION_CONFIG",
+            message="Judge0 authentication mode configuration is invalid.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    if mode == "rapidapi":
+        return "rapidapi"
+    if mode == "auth_token":
+        return "auth_token"
+
+    if (settings.judge0_rapidapi_key or "").strip() or (
+        "rapidapi.com" in settings.judge0_base_url.lower()
+    ):
+        return "rapidapi"
+    return "auth_token"
+
+
+def build_judge0_auth_headers(settings: Settings) -> dict[str, str]:
+    """Build Judge0 authentication headers for self-hosted X-Auth-Token or RapidAPI."""
+    mode = resolve_judge0_auth_mode(settings)
+    if mode == "disabled" or not (settings.judge0_base_url or "").strip():
+        raise AppError(
+            code="EXECUTION_SERVICE_UNAVAILABLE",
+            message="Code execution is temporarily unavailable because Judge0 is not configured.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    if mode == "rapidapi":
+        api_key = (settings.judge0_rapidapi_key or "").strip()
+        if not api_key:
+            raise AppError(
+                code="EXECUTION_SERVICE_UNAVAILABLE",
+                message="RapidAPI code execution credentials are not configured.",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        parsed_host = urlparse(settings.judge0_base_url).netloc
+        rapidapi_host = (settings.judge0_rapidapi_host or "").strip() or parsed_host
+        if not rapidapi_host:
+            rapidapi_host = "judge0-ce.p.rapidapi.com"
+        return {
+            "X-RapidAPI-Key": api_key,
+            "X-RapidAPI-Host": rapidapi_host,
+        }
+
+    auth_token = (settings.judge0_auth_token or "").strip()
+    if auth_token:
+        return {"X-Auth-Token": auth_token}
+    return {}
+
+
 class HttpJudge0Client:
     """Async HTTP client for Judge0 CE with base64 safety, bounded retries, and polling."""
 
     def __init__(self, settings: Settings) -> None:
-        self._base_url = settings.judge0_base_url.rstrip("/")
-        self._auth_token = settings.judge0_auth_token
-        self._poll_interval = settings.judge0_poll_interval_seconds
-        self._poll_timeout = settings.judge0_poll_timeout_seconds
-        self._max_retries = settings.judge0_max_retries
+        self._settings = settings
+        self._base_url = (
+            settings.judge0_base_url.rstrip("/") if is_judge0_configured(settings) else ""
+        )
+        self._http_timeout = max(settings.judge0_http_timeout_seconds, 1.0)
+        self._poll_interval = max(settings.judge0_poll_interval_seconds, 0.1)
+        self._poll_timeout = max(settings.judge0_poll_timeout_seconds, 1.0)
+        self._max_retries = max(settings.judge0_max_retries, 0)
+
+    def _ensure_configured(self) -> None:
+        if not is_judge0_configured(self._settings):
+            raise AppError(
+                code="EXECUTION_SERVICE_UNAVAILABLE",
+                message=(
+                    "Code execution is temporarily unavailable because Judge0 is not configured."
+                ),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self._auth_token:
-            headers["X-Auth-Token"] = self._auth_token
+        headers.update(build_judge0_auth_headers(self._settings))
         return headers
 
     async def _request_with_retry(
@@ -112,15 +188,41 @@ class HttpJudge0Client:
         url: str,
         **kwargs: Any,
     ) -> httpx.Response:
+        self._ensure_configured()
         last_exc: Exception | None = None
+        auth_mode = resolve_judge0_auth_mode(self._settings)
+        request_headers = self._headers()
         for attempt in range(self._max_retries + 1):
             try:
-                response = await client.request(method, url, headers=self._headers(), **kwargs)
+                response = await client.request(method, url, headers=request_headers, **kwargs)
+                if response.status_code == 429:
+                    logger.warning("judge0_rate_limited", status_code=429, auth_mode=auth_mode)
+                    raise AppError(
+                        code="EXECUTION_RATE_LIMITED",
+                        message=(
+                            "Code execution service rate or quota limit reached. "
+                            "Please try again shortly."
+                        ),
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    )
+                if response.status_code in (401, 403):
+                    logger.error(
+                        "judge0_auth_failed",
+                        status_code=response.status_code,
+                        auth_mode=auth_mode,
+                    )
+                    raise AppError(
+                        code="EXECUTION_SERVICE_UNAVAILABLE",
+                        message="Code execution service authentication failed.",
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
                 if response.status_code >= 500 and attempt < self._max_retries:
                     await asyncio.sleep(0.3 * (attempt + 1))
                     continue
                 response.raise_for_status()
                 return response
+            except AppError:
+                raise
             except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
                 last_exc = exc
                 is_transient = isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)) or (
@@ -130,8 +232,15 @@ class HttpJudge0Client:
                     await asyncio.sleep(0.3 * (attempt + 1))
                     continue
                 break
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                break
 
-        logger.error("judge0_request_failed", error_type=type(last_exc).__name__)
+        logger.error(
+            "judge0_request_failed",
+            error_type=type(last_exc).__name__,
+            auth_mode=auth_mode,
+        )
         raise AppError(
             code="EXECUTION_SERVICE_UNAVAILABLE",
             message="Code execution service is currently unavailable.",
@@ -139,7 +248,8 @@ class HttpJudge0Client:
         ) from last_exc
 
     async def list_languages(self) -> list[Judge0Language]:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        self._ensure_configured()
+        async with httpx.AsyncClient(timeout=self._http_timeout) as client:
             response = await self._request_with_retry(client, "GET", f"{self._base_url}/languages")
             items = response.json()
             languages: list[Judge0Language] = []
@@ -161,6 +271,7 @@ class HttpJudge0Client:
         cpu_time_limit_seconds: float,
         memory_limit_kb: int,
     ) -> Judge0ExecutionOutcome:
+        self._ensure_configured()
         payload = {
             "source_code": _b64_encode(source_code),
             "language_id": judge0_language_id,
@@ -173,7 +284,7 @@ class HttpJudge0Client:
             "enable_network": False,
         }
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=self._http_timeout) as client:
             create_resp = await self._request_with_retry(
                 client,
                 "POST",

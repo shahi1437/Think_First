@@ -28,12 +28,15 @@
 
 ## 3. Render Backend (`render.yaml` + `infrastructure/docker/backend.Dockerfile`)
 - Deploy `shahi1437/Think_First` (`develop` branch) via `render.yaml` (`healthCheckPath: /health/ready`).
-- Required private server env vars (`sync: false`):
-  - `DATABASE_URL` (Cloud Supabase asyncpg URI)
-  - `SUPABASE_URL=https://<your-cloud-ref>.supabase.co`
-  - `CORS_ORIGINS=["https://think-first-pi.vercel.app","https://think-first-staysafe.vercel.app"]`
-  - `JUDGE0_BASE_URL` + `JUDGE0_AUTH_TOKEN` (isolated Linux Judge0 VM)
-  - `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.5-flash-lite`, `LLM_API_KEY`
+- Required private server env vars (`sync: false` in Render Blueprint form — **only 3 values needed**):
+  - `DATABASE_URL`: Supabase Cloud **Session Pooler (IPv4)** URI on port `5432` (Render Free uses IPv4-only outbound networking). Use `postgresql+asyncpg://...` (plain `postgresql://` is also auto-normalized).
+  - `SUPABASE_URL`: `https://vsmrwfoqqjvomtjpypyv.supabase.co`
+  - `CORS_ORIGINS`: `https://think-first-pi.vercel.app` (both JSON array `["https://..."]` and comma-separated URLs are accepted)
+- Judge0 starts in `JUDGE0_AUTH_MODE=disabled` so login, lessons, diagnostics, RAG, ML diagnosis, and Teacher/Admin portals work with zero paid services while code execution clearly returns `503 EXECUTION_SERVICE_UNAVAILABLE`.
+- Optional later in Render Dashboard → Environment:
+  - Self-hosted Judge0 VPS: `JUDGE0_AUTH_MODE=auth_token`, `JUDGE0_BASE_URL`, `JUDGE0_AUTH_TOKEN`
+  - Temporary RapidAPI Demo: `JUDGE0_AUTH_MODE=rapidapi`, `JUDGE0_BASE_URL=https://judge0-ce.p.rapidapi.com`, `JUDGE0_RAPIDAPI_KEY`, `JUDGE0_RAPIDAPI_HOST=judge0-ce.p.rapidapi.com`
+  - Optional AI Mentor key: `LLM_API_KEY` (when omitted, Socratic mentor runs in deterministic fallback mode)
 
 ## 4. Secure First-Admin Bootstrap (Cloud & Local)
 Remember: **Local Supabase accounts and roles do NOT carry over to Supabase Cloud.**

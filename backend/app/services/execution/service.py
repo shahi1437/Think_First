@@ -5,7 +5,11 @@ from fastapi import status
 
 from app.core.config import Settings
 from app.core.errors import AppError
-from app.integrations.judge0.client import Judge0Client
+from app.integrations.judge0.client import (
+    HttpJudge0Client,
+    Judge0Client,
+    is_judge0_configured,
+)
 from app.models.problems import CodeRevision, ExecutionResult, Submission, TestCase
 from app.repositories.identity import UserRecord
 from app.repositories.problems import ProblemRepository
@@ -210,6 +214,16 @@ class ExecutionService:
                 code="NO_TESTS_CONFIGURED",
                 message="No executable test cases configured for this problem.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # 4b. Fail clearly before creating a submission row if Judge0 is intentionally disabled
+        if isinstance(self._judge0, HttpJudge0Client) and not is_judge0_configured(self._settings):
+            raise AppError(
+                code="EXECUTION_SERVICE_UNAVAILABLE",
+                message=(
+                    "Code execution is temporarily unavailable because Judge0 is not configured."
+                ),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         # 5. Persist submission + revision snapshot
