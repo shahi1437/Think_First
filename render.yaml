@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: codementor-ai-backend
+    runtime: docker
+    dockerfilePath: ./infrastructure/docker/backend.Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    branch: develop
+    healthCheckPath: /health/ready
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JUDGE0_BASE_URL
+        sync: false
+      - key: JUDGE0_AUTH_TOKEN
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_MODEL
+        value: gemini-2.5-flash-lite
+      - key: LLM_API_KEY
+        sync: false
+      - key: RATE_LIMIT_ENABLED
+        value: "true"

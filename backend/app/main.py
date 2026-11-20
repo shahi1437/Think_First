@@ -48,6 +48,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     if settings.app_env != "test":
         get_ml_classifier_service(settings).warmup()
+    prod_issues = settings.validate_production_readiness()
+    if prod_issues:
+        logger.warning("production_config_warnings", warnings=prod_issues)
     logger.info(
         "application_startup",
         service=settings.app_name,

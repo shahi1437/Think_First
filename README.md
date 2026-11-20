@@ -204,7 +204,13 @@ python -m pytest -v ml/tests
 - [Local Setup & CI Verification Guide](docs/operations/LOCAL_AND_CI_GUIDE.md)
 - [Backup, Restore & Least-Privilege Recovery Guide](docs/operations/BACKUP_AND_RECOVERY.md)
 - [Release Readiness Checklist & Rollback Plan](docs/release/RELEASE_READINESS_CHECKLIST.md)
+- [Phase 10 Security Audit & Remediation Report](docs/release/PHASE10_SECURITY_AUDIT.md)
 - [Thesis / Viva AI, ML, RAG & Verification Pipeline Notes](docs/release/THESIS_VIVA_PIPELINE_NOTES.md)
+- [Capstone Architecture, Workflow & Database ER Diagrams](docs/capstone/ARCHITECTURE_AND_ER_DIAGRAMS.md)
+- [Capstone Live Demo Scripts (Student / Teacher / Admin)](docs/capstone/DEMO_SCRIPTS.md)
+- [Technical Feature Inventory, Deployment Runbook & ML Evaluation](docs/capstone/TECHNICAL_INVENTORY_AND_EVALUATION.md)
+- [User Testing Plan & Informed Consent Materials (Pending)](docs/capstone/USER_TESTING_AND_CONSENT.md)
+- [Thesis / Viva Presentation Outline & Examiner Q&A](docs/capstone/VIVA_PRESENTATION_OUTLINE.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
 

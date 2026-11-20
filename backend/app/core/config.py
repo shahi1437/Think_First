@@ -64,6 +64,32 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = 2_097_152
     slow_request_threshold_ms: float = 2500.0
 
+    def validate_production_readiness(self) -> list[str]:
+        """Return configuration gap keys in production without exposing secret values."""
+        issues: list[str] = []
+        if self.app_env != "production":
+            return issues
+
+        db_lower = self.database_url.lower()
+        if "localhost" in db_lower or "127.0.0.1" in db_lower or "codementor_dev" in db_lower:
+            issues.append("DATABASE_URL points to local or dev defaults")
+
+        supa = (self.supabase_url or "").strip().lower()
+        if not supa or "127.0.0.1" in supa or "localhost" in supa or "your-project-ref" in supa:
+            issues.append("SUPABASE_URL missing or points to local/placeholder host")
+
+        if any(
+            origin.strip() == "*" or "localhost" in origin.lower() or "127.0.0.1" in origin.lower()
+            for origin in self.cors_origins
+        ):
+            issues.append("CORS_ORIGINS allows wildcard or localhost in production")
+
+        j0 = self.judge0_base_url.strip().lower()
+        if not j0 or "127.0.0.1" in j0 or "localhost" in j0:
+            issues.append("JUDGE0_BASE_URL points to local loopback in production")
+
+        return issues
+
 
 @lru_cache
 def get_settings() -> Settings:
