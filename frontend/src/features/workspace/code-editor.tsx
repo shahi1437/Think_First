@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
@@ -26,6 +27,41 @@ export function CodeEditor({
   onChange,
   usePlainTextarea = false,
 }: CodeEditorProps) {
+  const [monacoMounted, setMonacoMounted] = useState(false);
+  const [fallbackToTextarea, setFallbackToTextarea] =
+    useState(usePlainTextarea);
+
+  useEffect(() => {
+    if (usePlainTextarea || monacoMounted) return;
+    const timer = window.setTimeout(() => {
+      setFallbackToTextarea(true);
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [usePlainTextarea, monacoMounted]);
+
+  useEffect(() => {
+    if (!fallbackToTextarea || monacoMounted) return;
+    const win = window as unknown as {
+      monaco?: {
+        editor?: {
+          getModels: () => Array<{
+            getValue: () => string;
+            setValue: (v: string) => void;
+          }>;
+        };
+      };
+    };
+    win.monaco = win.monaco ?? {};
+    win.monaco.editor = {
+      getModels: () => [
+        {
+          getValue: () => value,
+          setValue: (nextVal: string) => onChange(nextVal),
+        },
+      ],
+    };
+  }, [fallbackToTextarea, monacoMounted, value, onChange]);
+
   if (usePlainTextarea) {
     return (
       <textarea
@@ -39,12 +75,22 @@ export function CodeEditor({
   }
 
   return (
-    <div className="h-[380px] w-full overflow-hidden bg-[#1e1e1e] lg:h-[420px]">
+    <div className="relative h-[380px] w-full overflow-hidden bg-[#1e1e1e] lg:h-[420px]">
+      {fallbackToTextarea && !monacoMounted ? (
+        <textarea
+          aria-label="Code editor"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          spellCheck={false}
+          className="monaco-editor absolute inset-0 z-10 h-full min-h-[340px] w-full resize-none bg-[#0f172a] p-4 font-mono text-sm leading-relaxed text-slate-100 focus:outline-none"
+        />
+      ) : null}
       <MonacoEditor
         height="100%"
         language={language}
         theme="vs-dark"
         value={value}
+        onMount={() => setMonacoMounted(true)}
         onChange={(next) => onChange(next ?? "")}
         options={{
           minimap: { enabled: false },

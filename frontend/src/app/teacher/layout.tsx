@@ -19,7 +19,9 @@ export default async function TeacherLayout({
       user={user}
       activeRole="teacher"
       navLinks={[
-        { href: "/teacher", label: "Teacher Dashboard" },
+        { href: "/teacher", label: "Dashboard" },
+        { href: "/teacher/classes", label: "My Classes" },
+        { href: "/teacher/assignments", label: "Assignments" },
         { href: "/student", label: "Student View" },
       ]}
     >

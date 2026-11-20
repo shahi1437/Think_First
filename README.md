@@ -143,6 +143,29 @@ python -m pytest -v ml/tests
 | `GET /api/v1/growth/retention` | Authenticated | Sync 24-hour spaced retention schedules & list upcoming/due checks + attempt history |
 | `POST /api/v1/growth/retention/{schedule_id}/attempts` | Owner / Admin | Execute real Judge0 retention check enforcing `>=24h` spacing before promoting Skill Graph to `retained` |
 
+## Phase 7 API Endpoints (Teacher Dashboard, Classrooms, Assignments, Judge0 Submissions & Grading)
+
+| Method & Path | Role | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/teacher/dashboard` | Teacher / Admin | Real aggregated Teacher Dashboard (classes, enrolled students, active assignments, pending grading, Judge0 verdicts, ML misconceptions, skill gaps, support flags) |
+| `GET/POST /api/v1/teacher/classes` | Teacher / Admin | List or create courses with auto-generated high-entropy invitation codes |
+| `GET/PATCH /api/v1/teacher/classes/{course_id}` | Course Owner / Admin | Inspect or edit class metadata, invitations, student roster, assignments, and class analytics |
+| `POST /api/v1/teacher/classes/{course_id}/archive` | Course Owner / Admin | Archive or restore a class without losing historical submissions or grades |
+| `POST /api/v1/teacher/classes/{course_id}/invitations` | Course Owner / Admin | Generate new high-entropy SHA-256 hashed class invitation codes |
+| `POST /api/v1/teacher/classes/{course_id}/invitations/{id}/revoke` | Course Owner / Admin | Revoke an invitation code |
+| `PATCH /api/v1/teacher/classes/{course_id}/memberships/{id}` | Course Owner / Admin | Approve pending student membership or remove student from class roster |
+| `GET/POST /api/v1/teacher/assignments` | Teacher / Admin | List or create draft/published assignments pinned to Admin-approved problem versions |
+| `GET/PATCH /api/v1/teacher/assignments/{id}` | Assignment Owner / Admin | Inspect assignment submissions, code, Judge0 verdicts, grades, and immutable audit trail |
+| `POST /api/v1/teacher/assignments/{id}/publish` | Assignment Owner / Admin | Publish a draft assignment to enrolled students |
+| `POST /api/v1/teacher/assignments/{id}/archive` | Assignment Owner / Admin | Archive an assignment safely |
+| `POST /api/v1/teacher/submissions/{id}/grade` | Assignment Owner / Admin | Save draft grade, request revision, or publish grade & written feedback with audit logging |
+| `GET /api/v1/student/classes` | Authenticated | List student's active/pending enrolled classes |
+| `POST /api/v1/student/classes/join` | Authenticated | Redeem a rate-limited class invitation code (`CM-XXXXX-XXXXX`) |
+| `POST /api/v1/student/classes/{course_id}/leave` | Enrolled Student | Leave an enrolled class when permitted by class policy |
+| `GET /api/v1/student/assignments` | Enrolled Student | Filter assignments (`all`, `pending`, `submitted`, `revision_requested`, `graded`, `overdue`) |
+| `GET /api/v1/student/assignments/{id}` | Enrolled Student | Fetch assignment details, pinned problems, attempts, released grade, and feedback |
+| `POST /api/v1/student/assignments/{id}/submit` | Enrolled Student | Evaluate code on real Judge0 and record an assignment attempt with server-enforced deadline, attempt, and hint limits |
+
 ## Documentation
 
 - [ADR-001: Modular Monolith Architecture](docs/architecture/ADR-001-modular-monolith.md)
@@ -152,6 +175,7 @@ python -m pytest -v ml/tests
 - [ADR-005: Hybrid ML, Verified pgvector RAG, Socratic Mentor & Transfer Verification](docs/architecture/ADR-005-hybrid-ml-rag-socratic-mentor.md)
 - [ADR-006: Adaptive Learning Tracks, Bilingual Lessons, 8-Domain Diagnostics & Skill Graph](docs/architecture/ADR-006-adaptive-learning-diagnostics-skill-graph.md)
 - [ADR-007: Live Gemini Socratic Tutor, Learning DNA, Daily Plan, History & Spaced Retention](docs/architecture/ADR-007-learning-dna-daily-plan-history-retention.md)
+- [ADR-008: Teacher Dashboard, Classroom Management, Assignments, Judge0 Evaluation & Auditable Grading](docs/architecture/ADR-008-teacher-dashboard-classrooms-assignments-grading.md)
 - [ML Error Classifier Evaluation Report](docs/ai/ml-evaluation-report.md)
 - [Verified RAG Retrieval Evaluation Report](docs/ai/rag-evaluation-report.md)
 

@@ -12,12 +12,17 @@ from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.integrations.llm.client import SocraticLLMClient
+from app.repositories.classroom import ClassroomRepository
 from app.repositories.growth import GrowthRepository
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
+from app.services.classroom.analytics_service import TeacherAnalyticsService
+from app.services.classroom.assignment_service import AssignmentService
+from app.services.classroom.course_service import ClassroomCourseService
+from app.services.classroom.grading_service import GradingService
 from app.services.execution.service import ExecutionService
 from app.services.growth.daily_plan_service import DailyPlanService
 from app.services.growth.dna_service import LearningDnaService
@@ -301,6 +306,49 @@ def get_learning_history_service(
     growth_repo: GrowthRepository = Depends(get_growth_repository),
 ) -> LearningHistoryService:
     return LearningHistoryService(growth_repo=growth_repo)
+
+
+def get_classroom_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> ClassroomRepository:
+    return ClassroomRepository(session)
+
+
+def get_classroom_course_service(
+    repo: ClassroomRepository = Depends(get_classroom_repository),
+) -> ClassroomCourseService:
+    return ClassroomCourseService(repo=repo)
+
+
+def get_assignment_service(
+    repo: ClassroomRepository = Depends(get_classroom_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    execution_service: ExecutionService = Depends(get_execution_service),
+) -> AssignmentService:
+    return AssignmentService(
+        repo=repo,
+        problem_repo=problem_repo,
+        execution_service=execution_service,
+    )
+
+
+def get_grading_service(
+    repo: ClassroomRepository = Depends(get_classroom_repository),
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+) -> GradingService:
+    return GradingService(repo=repo, assignment_service=assignment_service)
+
+
+def get_teacher_analytics_service(
+    repo: ClassroomRepository = Depends(get_classroom_repository),
+    course_service: ClassroomCourseService = Depends(get_classroom_course_service),
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+) -> TeacherAnalyticsService:
+    return TeacherAnalyticsService(
+        repo=repo,
+        course_service=course_service,
+        assignment_service=assignment_service,
+    )
 
 
 async def get_current_principal(

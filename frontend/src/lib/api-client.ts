@@ -72,6 +72,35 @@ import {
   type RetentionAttemptView,
   type RetentionOverviewView,
 } from "@/types/growth";
+import {
+  assignmentSummaryViewSchema,
+  classInvitationViewSchema,
+  courseSummaryViewSchema,
+  rosterMemberViewSchema,
+  studentAssignmentAttemptResponseSchema,
+  studentAssignmentDetailViewSchema,
+  studentAssignmentListItemViewSchema,
+  studentEnrolledCourseViewSchema,
+  teacherAssignmentDetailViewSchema,
+  teacherCourseDetailViewSchema,
+  teacherDashboardViewSchema,
+  teacherSubmissionReviewItemSchema,
+  type AssignmentSummaryView,
+  type ClassInvitationView,
+  type CourseSummaryView,
+  type EnrollmentPolicy,
+  type GradingPolicy,
+  type RosterMemberView,
+  type StudentAssignmentAttemptResponse,
+  type StudentAssignmentDetailView,
+  type StudentAssignmentFilter,
+  type StudentAssignmentListItemView,
+  type StudentEnrolledCourseView,
+  type TeacherAssignmentDetailView,
+  type TeacherCourseDetailView,
+  type TeacherDashboardView,
+  type TeacherSubmissionReviewItem,
+} from "@/types/classroom";
 
 export const apiMetaSchema = z.object({
   service: z.string(),
@@ -882,4 +911,383 @@ export async function submitRetentionAttempt(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return retentionAttemptViewSchema.parse(await response.json());
+}
+
+// =============================================================================
+// Phase 7: Teacher Dashboard, Classrooms, Assignments, Grading & Student Portal
+// =============================================================================
+
+export async function fetchTeacherDashboard(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherDashboardView> {
+  const response = await fetch(`${baseUrl}/api/v1/teacher/dashboard`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherDashboardViewSchema.parse(await response.json());
+}
+
+export async function fetchTeacherClasses(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<CourseSummaryView[]> {
+  const response = await fetch(`${baseUrl}/api/v1/teacher/classes`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(courseSummaryViewSchema).parse(await response.json());
+}
+
+export async function createTeacherClass(
+  accessToken: string,
+  payload: {
+    code: string;
+    title: string;
+    description?: string;
+    term?: string;
+    enrollment_policy?: EnrollmentPolicy;
+    allow_student_leave?: boolean;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<CourseSummaryView> {
+  const response = await fetch(`${baseUrl}/api/v1/teacher/classes`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return courseSummaryViewSchema.parse(await response.json());
+}
+
+export async function fetchTeacherClassDetail(
+  accessToken: string,
+  courseId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherCourseDetailView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherCourseDetailViewSchema.parse(await response.json());
+}
+
+export async function updateTeacherClass(
+  accessToken: string,
+  courseId: string,
+  payload: {
+    code?: string;
+    title?: string;
+    description?: string;
+    term?: string;
+    enrollment_policy?: EnrollmentPolicy;
+    allow_student_leave?: boolean;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<CourseSummaryView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return courseSummaryViewSchema.parse(await response.json());
+}
+
+export async function archiveTeacherClass(
+  accessToken: string,
+  courseId: string,
+  archive = true,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<CourseSummaryView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}/archive?archive=${archive}`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return courseSummaryViewSchema.parse(await response.json());
+}
+
+export async function createClassInvitation(
+  accessToken: string,
+  courseId: string,
+  payload: { max_uses?: number | null; expires_in_hours?: number | null } = {},
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<ClassInvitationView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}/invitations`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return classInvitationViewSchema.parse(await response.json());
+}
+
+export async function revokeClassInvitation(
+  accessToken: string,
+  courseId: string,
+  invitationId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<ClassInvitationView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}/invitations/${invitationId}/revoke`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return classInvitationViewSchema.parse(await response.json());
+}
+
+export async function manageClassMembership(
+  accessToken: string,
+  courseId: string,
+  membershipId: string,
+  action: "approve" | "remove",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<RosterMemberView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}/memberships/${membershipId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ action }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return rosterMemberViewSchema.parse(await response.json());
+}
+
+export async function fetchTeacherAssignments(
+  accessToken: string,
+  courseId?: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AssignmentSummaryView[]> {
+  const qs = courseId ? `?course_id=${encodeURIComponent(courseId)}` : "";
+  const response = await fetch(`${baseUrl}/api/v1/teacher/assignments${qs}`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(assignmentSummaryViewSchema).parse(await response.json());
+}
+
+export async function createTeacherAssignment(
+  accessToken: string,
+  payload: {
+    course_id: string;
+    title: string;
+    instructions_md?: string;
+    opens_at?: string | null;
+    due_at?: string | null;
+    max_marks?: number;
+    grading_policy?: GradingPolicy;
+    max_attempts?: number;
+    allow_ai_hints?: boolean;
+    hint_limit?: number;
+    allow_late_submissions?: boolean;
+    allow_resubmission_on_revision?: boolean;
+    publish_now?: boolean;
+    problems: Array<{ problem_id: string; points: number }>;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AssignmentSummaryView> {
+  const response = await fetch(`${baseUrl}/api/v1/teacher/assignments`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return assignmentSummaryViewSchema.parse(await response.json());
+}
+
+export async function fetchTeacherAssignmentDetail(
+  accessToken: string,
+  assignmentId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherAssignmentDetailView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/assignments/${assignmentId}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherAssignmentDetailViewSchema.parse(await response.json());
+}
+
+export async function publishTeacherAssignment(
+  accessToken: string,
+  assignmentId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AssignmentSummaryView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/assignments/${assignmentId}/publish`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return assignmentSummaryViewSchema.parse(await response.json());
+}
+
+export async function archiveTeacherAssignment(
+  accessToken: string,
+  assignmentId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<AssignmentSummaryView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/assignments/${assignmentId}/archive`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return assignmentSummaryViewSchema.parse(await response.json());
+}
+
+export async function gradeStudentSubmission(
+  accessToken: string,
+  submissionId: string,
+  payload: {
+    marks_awarded: number;
+    action: "save_draft" | "publish" | "request_revision";
+    feedback_md: string;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherSubmissionReviewItem> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/teacher/submissions/${submissionId}/grade`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherSubmissionReviewItemSchema.parse(await response.json());
+}
+
+export async function fetchStudentClasses(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentEnrolledCourseView[]> {
+  const response = await fetch(`${baseUrl}/api/v1/student/classes`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z.array(studentEnrolledCourseViewSchema).parse(await response.json());
+}
+
+export async function joinStudentClass(
+  accessToken: string,
+  inviteCode: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentEnrolledCourseView> {
+  const response = await fetch(`${baseUrl}/api/v1/student/classes/join`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify({ invite_code: inviteCode }),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return studentEnrolledCourseViewSchema.parse(await response.json());
+}
+
+export async function leaveStudentClass(
+  accessToken: string,
+  courseId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<void> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/student/classes/${courseId}/leave`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+}
+
+export async function fetchStudentAssignments(
+  accessToken: string,
+  statusFilter: StudentAssignmentFilter = "all",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentAssignmentListItemView[]> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/student/assignments?status=${encodeURIComponent(statusFilter)}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z
+    .array(studentAssignmentListItemViewSchema)
+    .parse(await response.json());
+}
+
+export async function fetchStudentAssignmentDetail(
+  accessToken: string,
+  assignmentId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentAssignmentDetailView> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/student/assignments/${assignmentId}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return studentAssignmentDetailViewSchema.parse(await response.json());
+}
+
+export async function submitStudentAssignment(
+  accessToken: string,
+  assignmentId: string,
+  payload: {
+    problem_id: string;
+    language_slug?: string;
+    source_code: string;
+    student_notes?: string;
+    hints_used?: number;
+  },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentAssignmentAttemptResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/student/assignments/${assignmentId}/submit`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({
+        problem_id: payload.problem_id,
+        language_slug: payload.language_slug ?? "python",
+        source_code: payload.source_code,
+        student_notes: payload.student_notes ?? "",
+        hints_used: payload.hints_used ?? 0,
+      }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return studentAssignmentAttemptResponseSchema.parse(await response.json());
 }

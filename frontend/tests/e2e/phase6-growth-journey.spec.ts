@@ -133,7 +133,9 @@ test.describe("Phase 6 Complete Adaptive Growth E2E (Learning DNA, Daily Plan, H
     // 6. Open Persistent Learning History -> verify persisted Lesson & Daily Plan events + search
     await page.getByRole("link", { name: /^History$/i }).first().click();
     await page.waitForURL("**/student/history");
-    await expect(page.getByText(/Your Complete Learning Timeline/i)).toBeVisible();
+    await expect(
+      page.getByText(/Your Complete Learning Timeline/i).first(),
+    ).toBeVisible();
     await expect(
       page.getByText(/Lesson: Introduction to Programming/i).first(),
     ).toBeVisible();

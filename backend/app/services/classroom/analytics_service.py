@@ -1,0 +1,202 @@
+"""Evidence-based Teacher Dashboard & Class Analytics Service.
+
+Strictly aggregates real database evidence from authorized classes:
+- Course enrollments & assignment submission counts
+- Real Judge0 assignment attempt verdicts
+- Own ML `error_diagnoses` misconception frequencies for enrolled students
+- Skill Graph (`student_skill_states`) gap distributions
+- Real AI Mentor hint usage & Phase 4 independent transfer counts
+- Students needing support (explicit factual criteria: >= 2 non-accepted attempts
+  or high hint reliance without accepted solve)
+
+Never fabricates percentages, completion estimates, or AI-generated insights.
+"""
+
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
+from uuid import UUID
+
+from fastapi import status
+
+from app.core.errors import AppError
+from app.repositories.classroom import ClassroomRepository
+from app.repositories.identity import UserRecord
+from app.schemas.classroom import (
+    ClassAnalyticsView,
+    MisconceptionCountItem,
+    SkillGapItem,
+    SupportStudentItem,
+    TeacherCourseDetailView,
+    TeacherDashboardView,
+    VerdictCountItem,
+)
+from app.services.classroom.assignment_service import AssignmentService
+from app.services.classroom.course_service import ClassroomCourseService, _invitation_to_view
+
+
+class TeacherAnalyticsService:
+    """Computes evidence-backed analytics for a teacher's authorized classes."""
+
+    def __init__(
+        self,
+        *,
+        repo: ClassroomRepository,
+        course_service: ClassroomCourseService,
+        assignment_service: AssignmentService,
+    ) -> None:
+        self._repo = repo
+        self._courses = course_service
+        self._assignments = assignment_service
+
+    async def compute_class_analytics(
+        self, *, course_ids: list[UUID], course_titles: dict[UUID, str]
+    ) -> ClassAnalyticsView:
+        student_ids = await self._repo.list_active_student_ids_for_courses(course_ids)
+        attempts = await self._repo.list_attempts_for_courses(course_ids)
+
+        verdict_counter: Counter[str] = Counter()
+        accepted_attempts = 0
+        failed_by_student: dict[UUID, int] = defaultdict(int)
+        accepted_by_student: dict[UUID, int] = defaultdict(int)
+        hints_by_student: dict[UUID, int] = defaultdict(int)
+        course_by_student: dict[UUID, UUID] = {}
+
+        for att in attempts:
+            verdict_counter[att.verdict] += 1
+            course_by_student.setdefault(att.student_id, att.course_id)
+            hints_by_student[att.student_id] += att.hints_used
+            if att.verdict == "accepted":
+                accepted_attempts += 1
+                accepted_by_student[att.student_id] += 1
+            else:
+                failed_by_student[att.student_id] += 1
+
+        verdict_breakdown = [
+            VerdictCountItem(verdict=v, count=c) for v, c in verdict_counter.most_common()
+        ]
+        misconceptions = [
+            MisconceptionCountItem(error_code=code, occurrences=cnt)
+            for code, cnt in await self._repo.count_misconceptions_for_students(student_ids)
+        ]
+        skill_gaps = [
+            SkillGapItem(
+                skill_slug=slug,
+                unobserved_or_guided_count=unobs,
+                verified_count=verif,
+            )
+            for slug, unobs, verif in await self._repo.aggregate_skill_gaps_for_students(
+                student_ids
+            )
+        ]
+        (
+            mentor_hints_total,
+            verified_transfers,
+        ) = await self._repo.count_hints_and_transfers_for_students(student_ids)
+        total_hints = mentor_hints_total + sum(hints_by_student.values())
+
+        support_ids = [
+            sid
+            for sid in student_ids
+            if (failed_by_student[sid] >= 2 and accepted_by_student[sid] == 0)
+            or (failed_by_student[sid] >= 1 and hints_by_student[sid] >= 2)
+        ]
+        profiles = await self._repo.get_profiles_map(support_ids)
+        support_items: list[SupportStudentItem] = []
+        for sid in support_ids[:10]:
+            prof = profiles.get(sid)
+            cid = course_by_student.get(sid)
+            reason = (
+                f"{failed_by_student[sid]} non-accepted Judge0 assignment attempt(s) "
+                f"with {accepted_by_student[sid]} accepted and {hints_by_student[sid]} hint(s)."
+            )
+            support_items.append(
+                SupportStudentItem(
+                    student_id=sid,
+                    full_name=prof.full_name if prof else "Student",
+                    email=prof.email if prof else "",
+                    course_title=course_titles.get(cid, "Class") if cid else "Class",
+                    reason=reason,
+                    failed_attempts=failed_by_student[sid],
+                    hints_used=hints_by_student[sid],
+                )
+            )
+
+        return ClassAnalyticsView(
+            active_students=len(student_ids),
+            total_attempts=len(attempts),
+            accepted_attempts=accepted_attempts,
+            verdict_breakdown=verdict_breakdown,
+            common_misconceptions=misconceptions,
+            skill_gaps=skill_gaps,
+            total_hints_used=total_hints,
+            verified_independent_transfers=verified_transfers,
+            students_needing_support=support_items,
+        )
+
+    async def get_teacher_course_detail(
+        self, *, teacher: UserRecord, course_id: UUID
+    ) -> TeacherCourseDetailView:
+        course = await self._repo.get_course_by_id(course_id)
+        if course is None:
+            raise AppError(
+                code="COURSE_NOT_FOUND",
+                message="Class was not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        if course.teacher_id != teacher.id and "admin" not in teacher.roles:
+            raise AppError(
+                code="FORBIDDEN",
+                message="You are not authorized to inspect this class.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+        summary = await self._courses._course_to_summary(course)
+        invs = await self._repo.list_course_invitations(course.id)
+        roster = await self._courses.list_course_roster(teacher=teacher, course_id=course.id)
+        asgs = await self._assignments.list_teacher_assignments(
+            teacher=teacher, course_id=course.id
+        )
+        analytics = await self.compute_class_analytics(
+            course_ids=[course.id], course_titles={course.id: course.title}
+        )
+        return TeacherCourseDetailView(
+            course=summary,
+            invitations=[_invitation_to_view(i) for i in invs],
+            roster=roster,
+            assignments=asgs,
+            analytics=analytics,
+        )
+
+    async def get_teacher_dashboard(self, teacher: UserRecord) -> TeacherDashboardView:
+        courses = await self._courses.list_teacher_courses(teacher)
+        course_ids = [c.id for c in courses]
+        course_titles = {c.id: c.title for c in courses}
+        all_assignments = await self._assignments.list_teacher_assignments(teacher=teacher)
+
+        now = datetime.now(UTC)
+        active_assignments = [a for a in all_assignments if a.status == "published"]
+        upcoming = [a for a in active_assignments if a.due_at is not None and a.due_at >= now][:6]
+
+        pending_grading = sum(a.pending_grading_count for a in all_assignments)
+        graded_count = sum(a.graded_count for a in all_assignments)
+        analytics = await self.compute_class_analytics(
+            course_ids=course_ids, course_titles=course_titles
+        )
+
+        return TeacherDashboardView(
+            courses_count=len(courses),
+            active_courses_count=sum(1 for c in courses if c.status == "active"),
+            total_enrolled_students=analytics.active_students,
+            active_assignments_count=len(active_assignments),
+            pending_grading_count=pending_grading,
+            graded_submissions_count=graded_count,
+            courses=courses,
+            upcoming_deadlines=upcoming,
+            analytics=analytics,
+            methodology_note=(
+                "All dashboard counts, Judge0 verdict distributions, ML misconceptions, Skill Graph gaps, "
+                "hint usage, and support flags are computed strictly from real database records scoped to "
+                "your authorized classes."
+            ),
+        )
