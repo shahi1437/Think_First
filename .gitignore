@@ -42,9 +42,11 @@ ml/artifacts/*.joblib
 ml/artifacts/*.pkl
 ml/datasets/raw/
 
-# Supabase local temp
+# Supabase local temp & Vercel CLI link
 supabase/.temp/
 supabase/.branches/
+.vercel/
+frontend/.vercel/
 
 # OS & Editors
 .DS_Store

@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_key: str | None = None
     llm_base_url: str | None = None
-    llm_timeout_seconds: float = 15.0
+    llm_timeout_seconds: float = 30.0
     mentor_rate_limit_per_minute: int = 15
 
     # Phase 9 security & observability settings
