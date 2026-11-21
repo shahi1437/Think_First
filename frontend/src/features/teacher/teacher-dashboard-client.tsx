@@ -34,10 +34,10 @@ export function TeacherDashboardClient({
 
   return (
     <div className="space-y-6" lang={lang}>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-teal-700">
+            <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-teal-300">
               <GraduationCap className="h-4 w-4" aria-hidden="true" />
               <span>
                 {isBn
@@ -45,28 +45,28 @@ export function TeacherDashboardClient({
                   : "Authorized Teacher Dashboard & Classroom Analytics"}
               </span>
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-[34px]">
               {isBn ? `স্বাগতম, ${teacherName}` : `Welcome, ${teacherName}`}
             </h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-600">
+            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-300">
               {initialDashboard.methodology_note}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <div
               role="group"
               aria-label="Teacher dashboard language"
-              className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs"
+              className="inline-flex rounded-xl border border-slate-700 bg-slate-900/90 p-1 text-sm"
             >
               <button
                 type="button"
                 onClick={() => setLang("en")}
                 aria-pressed={lang === "en"}
-                className={`rounded-md px-2.5 py-1 font-semibold ${
+                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
                   lang === "en"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-600 hover:bg-slate-200/70"
+                    ? "bg-teal-400 text-slate-950"
+                    : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
                 English
@@ -75,10 +75,10 @@ export function TeacherDashboardClient({
                 type="button"
                 onClick={() => setLang("bn")}
                 aria-pressed={lang === "bn"}
-                className={`rounded-md px-2.5 py-1 font-semibold ${
+                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
                   lang === "bn"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-600 hover:bg-slate-200/70"
+                    ? "bg-teal-400 text-slate-950"
+                    : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
                 বাংলা
@@ -87,66 +87,88 @@ export function TeacherDashboardClient({
 
             <Link
               href="/teacher/classes"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/70 px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-slate-800"
             >
-              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+              <Users className="h-4 w-4" aria-hidden="true" />
               <span>{isBn ? "ক্লাস পরিচালনা" : "Manage Classes"}</span>
             </Link>
             <Link
               href="/teacher/assignments"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+              className="inline-flex items-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-[15px] font-semibold text-slate-950 transition hover:bg-teal-300"
             >
-              <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
               <span>{isBn ? "অ্যাসাইনমেন্ট ও গ্রেডিং" : "Assignments & Grading"}</span>
             </Link>
           </div>
         </div>
 
         {/* Real Aggregated Stat Counters */}
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase text-slate-500">
+        <div className="mt-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-400">
               {isBn ? "সক্রিয় ক্লাস" : "Active Classes"}
             </p>
-            <p className="mt-1 text-xl font-bold text-slate-900">
+            <p className="mt-1.5 text-2xl font-bold text-white">
               {initialDashboard.active_courses_count} /{" "}
               {initialDashboard.courses_count}
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase text-slate-500">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-400">
               {isBn ? "ভর্তিকৃত শিক্ষার্থী" : "Enrolled Students"}
             </p>
-            <p className="mt-1 text-xl font-bold text-indigo-700">
+            <p className="mt-1.5 text-2xl font-bold text-teal-300">
               {initialDashboard.total_enrolled_students}
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase text-slate-500">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-400">
               {isBn ? "চলমান অ্যাসাইনমেন্ট" : "Active Assignments"}
             </p>
-            <p className="mt-1 text-xl font-bold text-slate-900">
+            <p className="mt-1.5 text-2xl font-bold text-white">
               {initialDashboard.active_assignments_count}
             </p>
           </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
-            <p className="text-[11px] font-semibold uppercase text-amber-800">
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
+            <p className="text-xs font-semibold uppercase text-amber-200">
               {isBn ? "গ্রেডিং বাকি" : "Pending Grading"}
             </p>
-            <p className="mt-1 text-xl font-bold text-amber-900">
+            <p className="mt-1.5 text-2xl font-bold text-amber-300">
               {initialDashboard.pending_grading_count}
             </p>
           </div>
-          <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3.5">
-            <p className="text-[11px] font-semibold uppercase text-teal-800">
+          <div className="rounded-xl border border-teal-400/30 bg-teal-500/10 p-4">
+            <p className="text-xs font-semibold uppercase text-teal-200">
               {isBn ? "গ্রেড প্রকাশিত" : "Graded Submissions"}
             </p>
-            <p className="mt-1 text-xl font-bold text-teal-900">
+            <p className="mt-1.5 text-2xl font-bold text-teal-300">
               {initialDashboard.graded_submissions_count}
             </p>
           </div>
         </div>
       </section>
+
+      {initialDashboard.pending_grading_count > 0 ? (
+        <section
+          aria-label="Submissions awaiting review"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950"
+        >
+          <div className="flex items-center gap-2.5">
+            <ClipboardList className="h-5 w-5 text-amber-700" aria-hidden="true" />
+            <span>
+              <strong>{initialDashboard.pending_grading_count}</strong> student
+              submission(s) awaiting review and grading.
+            </span>
+          </div>
+          <Link
+            href="/teacher/assignments"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-800"
+          >
+            <span>Review Submissions</span>
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </section>
+      ) : null}
 
       {/* Classes Taught & Upcoming Deadlines */}
       <section className="grid gap-6 lg:grid-cols-12">

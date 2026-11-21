@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ServiceUnavailableState } from "@/components/service-unavailable-state";
+import { BackendUnavailableError } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +11,22 @@ export default async function AdminLayout({
 }: {
   children: ReactNode;
 }) {
-  const { user } = await requireAuthenticatedUser({
-    allowedRoles: ["admin"],
-    currentPath: "/admin",
-  });
+  let user;
+  try {
+    ({ user } = await requireAuthenticatedUser({
+      allowedRoles: ["admin"],
+      currentPath: "/admin",
+    }));
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      return (
+        <main className="min-h-screen bg-slate-50">
+          <ServiceUnavailableState title="Admin Console Temporarily Unavailable" />
+        </main>
+      );
+    }
+    throw err;
+  }
 
   return (
     <AppShell
@@ -23,8 +37,7 @@ export default async function AdminLayout({
         { href: "/admin/problems", label: "Problem Studio" },
         { href: "/admin/curriculum", label: "Curriculum & Lessons" },
         { href: "/admin/diagnostics", label: "Diagnostics & RAG" },
-        { href: "/admin/audit", label: "Audit & Access" },
-        { href: "/student", label: "Student View" },
+        { href: "/admin/audit", label: "Users & Audit" },
       ]}
     >
       {children}

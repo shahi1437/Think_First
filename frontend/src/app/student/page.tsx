@@ -5,6 +5,8 @@ import {
   fetchLearningDashboard,
   fetchLearningDnaProfile,
   fetchRetentionOverview,
+  fetchStudentAssignments,
+  fetchStudentClasses,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
@@ -23,13 +25,21 @@ export default async function StudentDashboardPage({
     redirect("/student/onboarding");
   }
 
-  const [dashboard, dnaProfile, dailyPlanWorkspace, retentionOverview] =
-    await Promise.all([
-      fetchLearningDashboard(accessToken),
-      fetchLearningDnaProfile(accessToken),
-      fetchDailyPlanWorkspace(accessToken),
-      fetchRetentionOverview(accessToken),
-    ]);
+  const [
+    dashboard,
+    dnaProfile,
+    dailyPlanWorkspace,
+    retentionOverview,
+    enrolledClasses,
+    studentAssignments,
+  ] = await Promise.all([
+    fetchLearningDashboard(accessToken),
+    fetchLearningDnaProfile(accessToken),
+    fetchDailyPlanWorkspace(accessToken),
+    fetchRetentionOverview(accessToken),
+    fetchStudentClasses(accessToken).catch(() => []),
+    fetchStudentAssignments(accessToken).catch(() => []),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -48,29 +58,45 @@ export default async function StudentDashboardPage({
         </div>
       ) : null}
       <LearningDashboardClient
-      accessToken={accessToken}
-      studentName={user.full_name || user.email}
-      initialDashboard={dashboard}
-      initialLanguage={user.preferences?.preferred_explanation_language ?? "en"}
-      dnaSummary={{
-        verifiedCount: dnaProfile.dimensions.filter(
-          (d) => d.evidence_band === "verified",
-        ).length,
-        totalDimensions: dnaProfile.dimensions.length,
-        strengths: dnaProfile.strengths,
-      }}
-      dailyPlanSummary={{
-        completedTasks: dailyPlanWorkspace.active_plan.completed_tasks,
-        totalTasks: dailyPlanWorkspace.active_plan.total_tasks,
-        availableMinutes: dailyPlanWorkspace.active_plan.available_minutes,
-        versionNumber: dailyPlanWorkspace.active_plan.version_number,
-      }}
-      retentionSummary={{
-        dueCount: retentionOverview.due_count,
-        scheduledCount: retentionOverview.schedules.length,
-        retainedSkillsCount: retentionOverview.retained_skills_count,
-      }}
-    />
+        accessToken={accessToken}
+        studentName={user.full_name || user.email}
+        initialDashboard={dashboard}
+        initialLanguage={user.preferences?.preferred_explanation_language ?? "en"}
+        dnaSummary={{
+          verifiedCount: dnaProfile.dimensions.filter(
+            (d) => d.evidence_band === "verified",
+          ).length,
+          totalDimensions: dnaProfile.dimensions.length,
+          strengths: dnaProfile.strengths,
+        }}
+        dailyPlanSummary={{
+          completedTasks: dailyPlanWorkspace.active_plan.completed_tasks,
+          totalTasks: dailyPlanWorkspace.active_plan.total_tasks,
+          availableMinutes: dailyPlanWorkspace.active_plan.available_minutes,
+          versionNumber: dailyPlanWorkspace.active_plan.version_number,
+        }}
+        retentionSummary={{
+          dueCount: retentionOverview.due_count,
+          scheduledCount: retentionOverview.schedules.length,
+          retainedSkillsCount: retentionOverview.retained_skills_count,
+        }}
+        classroomSummary={{
+          enrolledCount: enrolledClasses.filter((c) => c.membership_status === "active")
+            .length,
+          pendingAssignmentsCount: studentAssignments.filter(
+            (a) =>
+              a.workflow_status !== "graded" &&
+              a.workflow_status !== "submitted",
+          ).length,
+          totalAssignmentsCount: studentAssignments.length,
+          recentClasses: enrolledClasses.slice(0, 3).map((c) => ({
+            courseId: c.course_id,
+            code: c.code,
+            title: c.title,
+            status: c.membership_status,
+          })),
+        }}
+      />
     </div>
   );
 }
