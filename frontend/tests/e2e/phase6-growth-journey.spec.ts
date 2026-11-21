@@ -40,7 +40,11 @@ test.describe("Phase 6 Complete Adaptive Growth E2E (Learning DNA, Daily Plan, H
 
     await page.waitForURL("**/student/onboarding");
     await page.getByLabel(/Full name/i).fill("Phase6 E2E Learner");
-    await page.getByRole("button", { name: /Complete onboarding/i }).click();
+    await page
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
+      .click();
     await page.waitForURL("**/student");
 
     // Verify Phase 6 Growth Hub cards are integrated directly into Student Dashboard

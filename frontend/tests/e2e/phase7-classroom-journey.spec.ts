@@ -118,7 +118,9 @@ test.describe("Phase 7 Complete Teacher Classroom, Assignment, Judge0 & Grading 
     await studentPage.waitForURL("**/student/onboarding");
     await studentPage.getByLabel(/Full name/i).fill("Phase7 Student");
     await studentPage
-      .getByRole("button", { name: /Complete onboarding/i })
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
       .click();
     await studentPage.waitForURL("**/student");
 

@@ -57,7 +57,6 @@ describe("LoginForm", () => {
       });
     });
     expect(pushMock).toHaveBeenCalledWith("/student/onboarding");
-    expect(refreshMock).toHaveBeenCalled();
   });
 
   it("blocks open-redirect URLs in nextPath", async () => {

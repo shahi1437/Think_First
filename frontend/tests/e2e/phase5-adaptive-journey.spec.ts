@@ -83,11 +83,15 @@ test.describe("Phase 5 Complete Adaptive Learning, Diagnostic, Lesson & Skill Gr
 
     await page.waitForURL("**/student/onboarding");
     await page.getByLabel(/Full name/i).fill("Phase5 E2E Learner");
-    await page.getByRole("button", { name: /Complete onboarding/i }).click();
+    await page
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
+      .click();
     await page.waitForURL("**/student");
 
     await expect(
-      page.getByText(/Adaptive Learning Dashboard/i),
+      page.getByText(/Student Learning Workspace|Adaptive Learning Dashboard/i),
     ).toBeVisible();
     await expect(
       page.getByText(/Prerequisite-Aware Skill Graph/i),

@@ -148,8 +148,23 @@ class InMemoryIdentityRepository:
         )
         return user
 
-    async def list_users(self, *, limit: int, offset: int) -> tuple[list[UserRecord], int]:
-        ordered = sorted(self.users.values(), key=lambda u: u.created_at, reverse=True)
+    async def list_users(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        role: RoleName | None = None,
+        q: str | None = None,
+    ) -> tuple[list[UserRecord], int]:
+        filtered = list(self.users.values())
+        if role is not None:
+            filtered = [u for u in filtered if role in u.roles]
+        if q and q.strip():
+            needle = q.strip().lower()
+            filtered = [
+                u for u in filtered if needle in u.email.lower() or needle in u.full_name.lower()
+            ]
+        ordered = sorted(filtered, key=lambda u: u.created_at, reverse=True)
         return ordered[offset : offset + limit], len(ordered)
 
     async def grant_role(
@@ -404,3 +419,84 @@ async def test_admin_can_grant_teacher_role_with_audit_log_and_last_admin_protec
     )
     assert revoke_last_admin.status_code == 409
     assert revoke_last_admin.json()["code"] == "LAST_ADMIN_PROTECTED"
+
+
+async def test_portal_verification_blocks_cross_role_login_and_audits_attempts(
+    auth_client: AsyncClient,
+    rsa_keys: EphemeralRSAKeys,
+    identity_repo: InMemoryIdentityRepository,
+) -> None:
+    student_id = uuid4()
+    teacher_id = uuid4()
+    admin_id = uuid4()
+    identity_repo.seed_user(
+        user_id=student_id, email="stu@example.edu", roles=["student"], full_name="Stu"
+    )
+    identity_repo.seed_user(
+        user_id=teacher_id, email="tch@example.edu", roles=["student", "teacher"], full_name="Tch"
+    )
+    identity_repo.seed_user(
+        user_id=admin_id, email="adm@example.edu", roles=["student", "admin"], full_name="Adm"
+    )
+
+    stu_tok = _sign_token(keys=rsa_keys, sub=student_id, email="stu@example.edu")
+    tch_tok = _sign_token(keys=rsa_keys, sub=teacher_id, email="tch@example.edu")
+    adm_tok = _sign_token(keys=rsa_keys, sub=admin_id, email="adm@example.edu")
+
+    # Matching portals succeed
+    assert (
+        await auth_client.post(
+            "/api/v1/users/me/verify-portal",
+            headers={"Authorization": f"Bearer {stu_tok}"},
+            json={"portal": "student"},
+        )
+    ).status_code == 200
+    assert (
+        await auth_client.post(
+            "/api/v1/users/me/verify-portal",
+            headers={"Authorization": f"Bearer {tch_tok}"},
+            json={"portal": "teacher"},
+        )
+    ).status_code == 200
+    assert (
+        await auth_client.post(
+            "/api/v1/users/me/verify-portal",
+            headers={"Authorization": f"Bearer {adm_tok}"},
+            json={"portal": "admin"},
+        )
+    ).status_code == 200
+
+    # Cross-role attempts denied with 403 and audited
+    for tok, wrong_portal in [
+        (stu_tok, "teacher"),
+        (stu_tok, "admin"),
+        (tch_tok, "student"),
+        (tch_tok, "admin"),
+        (adm_tok, "student"),
+        (adm_tok, "teacher"),
+    ]:
+        resp = await auth_client.post(
+            "/api/v1/users/me/verify-portal",
+            headers={"Authorization": f"Bearer {tok}"},
+            json={"portal": wrong_portal},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "PORTAL_ACCESS_DENIED"
+
+    denied_events = [a for a in identity_repo.audit_logs if a.action == "auth.portal_denied"]
+    assert len(denied_events) == 6
+
+    # Admin directory filtering by role & search query
+    teachers_res = await auth_client.get(
+        "/api/v1/admin/users?role=teacher",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert teachers_res.status_code == 200
+    assert [u["email"] for u in teachers_res.json()["items"]] == ["tch@example.edu"]
+
+    search_res = await auth_client.get(
+        "/api/v1/admin/users?q=stu@example",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert search_res.status_code == 200
+    assert [u["email"] for u in search_res.json()["items"]] == ["stu@example.edu"]

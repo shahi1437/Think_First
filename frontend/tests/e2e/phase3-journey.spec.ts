@@ -45,7 +45,11 @@ test.describe("Phase 3 Live Student Journey & Responsive UI", () => {
     // 4. First-time student redirected to Smart Onboarding -> Complete onboarding
     await page.waitForURL("**/student/onboarding");
     await page.getByLabel(/Full name/i).fill("E2E Learner");
-    await page.getByRole("button", { name: /Complete onboarding/i }).click();
+    await page
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
+      .click();
     await page.waitForURL("**/student");
 
     // 5. Navigate to Problem Bank & open Debugging challenge
