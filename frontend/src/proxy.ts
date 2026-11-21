@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { resolvePortalLoginPath } from "@/lib/auth/roles";
 
 const PROTECTED_PREFIXES = ["/student", "/teacher", "/admin"];
 
@@ -9,25 +10,36 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.value.length > 0);
+}
+
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Skip unnecessary Supabase auth network checks on public pages for faster navigation
+  if (!isProtectedPath(pathname)) {
+    return NextResponse.next({ request });
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-  let supabaseResponse = NextResponse.next({ request });
 
   if (
     !supabaseUrl.startsWith("http") ||
     supabaseAnonKey.length <= 10 ||
-    supabaseAnonKey.includes("replace-with")
+    supabaseAnonKey.includes("replace-with") ||
+    !hasSupabaseAuthCookie(request)
   ) {
-    if (isProtectedPath(request.nextUrl.pathname)) {
-      const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/login";
-      loginUrl.searchParams.set("next", request.nextUrl.pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-    return supabaseResponse;
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = resolvePortalLoginPath(pathname);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
   }
+
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -51,10 +63,10 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && isProtectedPath(request.nextUrl.pathname)) {
+  if (!user) {
     const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    loginUrl.pathname = resolvePortalLoginPath(pathname);
+    loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 

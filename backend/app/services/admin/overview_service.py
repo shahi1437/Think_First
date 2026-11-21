@@ -33,6 +33,7 @@ class AdminOverviewService:
         tracks = await self._repo.list_tracks()
         knowledge_approved, knowledge_total = await self._repo.list_knowledge_status_counts()
         skill_nodes_count = await self._repo.count_skill_nodes()
+        platform_counts = await self._repo.get_role_and_classroom_counts()
         audit_rows, _ = await self._repo.list_audit_logs(limit=15, offset=0)
 
         published = sum(
@@ -138,6 +139,13 @@ class AdminOverviewService:
             knowledge_approved=knowledge_approved,
             knowledge_total=knowledge_total,
             skill_nodes_count=skill_nodes_count,
+            students_count=platform_counts["students_count"],
+            teachers_count=platform_counts["teachers_count"],
+            admins_count=platform_counts["admins_count"],
+            courses_total=platform_counts["courses_total"],
+            courses_active=platform_counts["courses_active"],
+            enrollments_active=platform_counts["enrollments_active"],
+            assignments_published=platform_counts["assignments_published"],
             review_queue=review_queue,
             track_coverage=track_coverage,
             recent_audit_logs=recent_audits,

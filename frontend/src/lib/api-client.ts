@@ -162,6 +162,64 @@ export class ApiClientError extends Error {
   }
 }
 
+export class BackendUnavailableError extends Error {
+  readonly code = "BACKEND_UNAVAILABLE";
+
+  constructor(
+    message = "Unable to connect to the Think_First learning service right now. Please try again in a moment.",
+  ) {
+    super(message);
+    this.name = "BackendUnavailableError";
+  }
+}
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+const HEALTH_TIMEOUT_MS = 8_000;
+const EXECUTION_TIMEOUT_MS = 60_000;
+
+async function safeFetch(
+  input: string,
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const externalSignal = init?.signal;
+  const onExternalAbort = () => controller.abort(externalSignal?.reason);
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (timedOut) {
+      throw new BackendUnavailableError(
+        "The Think_First learning server took too long to respond. Please try again in a moment.",
+      );
+    }
+    if (externalSignal?.aborted) {
+      throw err;
+    }
+    throw new BackendUnavailableError();
+  } finally {
+    clearTimeout(timer);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    }
+  }
+}
+
 async function parseErrorResponse(response: Response): Promise<ApiClientError> {
   try {
     const data = (await response.json()) as {
@@ -194,14 +252,22 @@ export async function fetchBackendConnectivity(
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<BackendConnectivityStatus> {
   const [metaResponse, readyResponse] = await Promise.all([
-    fetch(`${baseUrl}/api/v1/meta`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    }),
-    fetch(`${baseUrl}/health/ready`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    }),
+    safeFetch(
+      `${baseUrl}/api/v1/meta`,
+      {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      },
+      HEALTH_TIMEOUT_MS,
+    ),
+    safeFetch(
+      `${baseUrl}/health/ready`,
+      {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      },
+      HEALTH_TIMEOUT_MS,
+    ),
   ]);
 
   if (!metaResponse.ok) {
@@ -226,8 +292,23 @@ export async function fetchCurrentUser(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<UserMeResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/users/me`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/users/me`, {
     headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return userMeResponseSchema.parse(await response.json());
+}
+
+export async function verifyLoginPortal(
+  accessToken: string,
+  portal: "student" | "teacher" | "admin",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<UserMeResponse> {
+  const response = await safeFetch(`${baseUrl}/api/v1/users/me/verify-portal`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify({ portal }),
     cache: "no-store",
   });
   if (!response.ok) throw await parseErrorResponse(response);
@@ -239,7 +320,7 @@ export async function submitOnboarding(
   values: OnboardingFormValues,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<UserMeResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/users/me/onboarding`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/users/me/onboarding`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(values),
@@ -253,7 +334,7 @@ export async function updateUserPreferences(
   values: Partial<Omit<OnboardingFormValues, "full_name">>,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<UserMeResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/users/me/preferences`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/users/me/preferences`, {
     method: "PATCH",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(values),
@@ -285,7 +366,7 @@ export async function fetchProblems(
   if (params?.offset) query.set("offset", String(params.offset));
   const qs = query.toString();
 
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/problems${qs ? `?${qs}` : ""}`,
     {
       headers: authHeaders(accessToken),
@@ -301,7 +382,7 @@ export async function fetchProblemDetail(
   problemId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentProblemDetail> {
-  const response = await fetch(`${baseUrl}/api/v1/problems/${problemId}`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/problems/${problemId}`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -321,11 +402,15 @@ export async function createSubmission(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<SubmissionResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/submissions`, {
-    method: "POST",
-    headers: authHeaders(accessToken, true),
-    body: JSON.stringify(payload),
-  });
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/submissions`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+    EXECUTION_TIMEOUT_MS,
+  );
   if (!response.ok) throw await parseErrorResponse(response);
   return submissionResponseSchema.parse(await response.json());
 }
@@ -336,7 +421,7 @@ export async function fetchMySubmissions(
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<{ items: SubmissionSummaryItem[]; total: number }> {
   const qs = problemId ? `?problem_id=${encodeURIComponent(problemId)}` : "";
-  const response = await fetch(`${baseUrl}/api/v1/submissions${qs}`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/submissions${qs}`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -349,7 +434,7 @@ export async function fetchSubmissionDetail(
   submissionId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<SubmissionResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/submissions/${submissionId}`,
     {
       headers: authHeaders(accessToken),
@@ -372,7 +457,7 @@ export async function saveWorkspaceRevision(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<RevisionResponse> {
-  const response = await fetch(`${baseUrl}/api/v1/workspace/revisions`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/workspace/revisions`, {
     method: "PUT",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -386,7 +471,7 @@ export async function fetchWorkspaceRevisions(
   problemVersionId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<RevisionResponse[]> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/workspace/revisions?problem_version_id=${encodeURIComponent(problemVersionId)}`,
     {
       headers: authHeaders(accessToken),
@@ -409,7 +494,7 @@ export async function fetchAdminProblems(
   if (params?.search) query.set("search", params.search);
   if (params?.limit) query.set("limit", String(params.limit));
   const qs = query.toString();
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems${qs ? `?${qs}` : ""}`,
     {
       headers: authHeaders(accessToken),
@@ -425,7 +510,7 @@ export async function fetchAdminProblemDetail(
   problemId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/problems/${problemId}`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/problems/${problemId}`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -438,7 +523,7 @@ export async function createAdminProblem(
   payload: Record<string, unknown>,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/problems`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/problems`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -453,7 +538,7 @@ export async function updateAdminProblem(
   payload: Record<string, unknown>,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/problems/${problemId}`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/problems/${problemId}`, {
     method: "PATCH",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -467,12 +552,13 @@ export async function validateAdminProblem(
   problemId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminValidationReport> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/validate`,
     {
       method: "POST",
       headers: authHeaders(accessToken),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return adminValidationReportSchema.parse(await response.json());
@@ -484,7 +570,7 @@ export async function approveAdminProblem(
   notes: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/approve`,
     {
       method: "POST",
@@ -502,7 +588,7 @@ export async function publishAdminProblem(
   notes: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/publish`,
     {
       method: "POST",
@@ -518,7 +604,7 @@ export async function syncAdminLanguages(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<{ synced_count: number; languages: z.infer<typeof languageItemSchema>[] }> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/languages/sync`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/languages/sync`, {
     method: "POST",
     headers: authHeaders(accessToken),
   });
@@ -542,11 +628,15 @@ export async function startOrResumeMentorSession(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<MentorSessionDetail> {
-  const response = await fetch(`${baseUrl}/api/v1/mentor/sessions`, {
-    method: "POST",
-    headers: authHeaders(accessToken, true),
-    body: JSON.stringify(payload),
-  });
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/mentor/sessions`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+    EXECUTION_TIMEOUT_MS,
+  );
   if (!response.ok) throw await parseErrorResponse(response);
   return mentorSessionDetailSchema.parse(await response.json());
 }
@@ -563,13 +653,14 @@ export async function sendMentorTurn(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<MentorSessionDetail> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/mentor/sessions/${sessionId}/turns`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
       body: JSON.stringify(payload),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return mentorSessionDetailSchema.parse(await response.json());
@@ -580,7 +671,7 @@ export async function diagnoseSubmission(
   submissionId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<MLDiagnosisResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/mentor/diagnose/${submissionId}`,
     {
       method: "POST",
@@ -596,7 +687,7 @@ export async function fetchTransferChallenge(
   sourceProblemId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<TransferChallengeSummary | null> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/verifications/problem/${sourceProblemId}`,
     {
       headers: authHeaders(accessToken),
@@ -620,13 +711,14 @@ export async function submitTransferVerificationAttempt(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<VerificationAttemptView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/verifications/${verificationLinkId}/attempts`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
       body: JSON.stringify(payload),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return verificationAttemptViewSchema.parse(await response.json());
@@ -637,7 +729,7 @@ export async function fetchMyLearningEvents(
   limit = 20,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LearningEventView[]> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/events?limit=${limit}`,
     {
       headers: authHeaders(accessToken),
@@ -654,7 +746,7 @@ export async function fetchLearningDashboard(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LearningDashboardView> {
-  const response = await fetch(`${baseUrl}/api/v1/learning/dashboard`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/dashboard`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -667,7 +759,7 @@ export async function selectLearningTrack(
   trackSlug: TrackSlug,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentTrackStatus> {
-  const response = await fetch(`${baseUrl}/api/v1/learning/tracks/select`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/tracks/select`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify({ track_slug: trackSlug }),
@@ -682,7 +774,7 @@ export async function fetchLessons(
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LessonSummaryView[]> {
   const qs = trackSlug ? `?track=${encodeURIComponent(trackSlug)}` : "";
-  const response = await fetch(`${baseUrl}/api/v1/learning/lessons${qs}`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/lessons${qs}`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -695,7 +787,7 @@ export async function fetchLessonDetail(
   slug: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LessonDetailView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/lessons/${encodeURIComponent(slug)}`,
     {
       headers: authHeaders(accessToken),
@@ -711,7 +803,7 @@ export async function markLessonReadingComplete(
   lessonId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LessonDetailView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/lessons/${lessonId}/reading`,
     {
       method: "POST",
@@ -729,13 +821,14 @@ export async function runLessonGuidedExercise(
   sourceCode: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LessonExerciseRunResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/lessons/${lessonId}/exercise/run`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
       body: JSON.stringify({ source_code: sourceCode }),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return lessonExerciseRunResponseSchema.parse(await response.json());
@@ -746,7 +839,7 @@ export async function startOrResumeDiagnosticSession(
   explanationLanguage: "en" | "bn" = "en",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<DiagnosticSessionView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/diagnostics/sessions`,
     {
       method: "POST",
@@ -762,7 +855,7 @@ export async function fetchMyDiagnosticSessions(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<DiagnosticSessionView[]> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/diagnostics/sessions`,
     {
       headers: authHeaders(accessToken),
@@ -784,13 +877,14 @@ export async function submitDiagnosticAnswer(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<DiagnosticSessionView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/learning/diagnostics/sessions/${sessionId}/answers`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
       body: JSON.stringify(payload),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return diagnosticSessionViewSchema.parse(await response.json());
@@ -800,7 +894,7 @@ export async function fetchStudentSkillGraph(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<SkillGraphView> {
-  const response = await fetch(`${baseUrl}/api/v1/learning/skill-graph`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/skill-graph`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -816,7 +910,7 @@ export async function fetchLearningDnaProfile(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LearningDnaProfileView> {
-  const response = await fetch(`${baseUrl}/api/v1/growth/learning-dna`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/growth/learning-dna`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -828,7 +922,7 @@ export async function fetchDailyPlanWorkspace(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<DailyPlanWorkspaceView> {
-  const response = await fetch(`${baseUrl}/api/v1/growth/daily-plan`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/growth/daily-plan`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -841,7 +935,7 @@ export async function regenerateDailyPlan(
   availableMinutes?: number,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<DailyPlanWorkspaceView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/growth/daily-plan/regenerate`,
     {
       method: "POST",
@@ -861,7 +955,7 @@ export async function updateDailyPlanTaskStatus(
   status: DailyTaskStatus,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<DailyLearningPlanView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/growth/daily-plan/tasks/${taskId}`,
     {
       method: "PATCH",
@@ -889,7 +983,7 @@ export async function fetchLearningHistory(
   if (params.limit) sp.set("limit", String(params.limit));
   if (params.offset) sp.set("offset", String(params.offset));
   const qs = sp.toString();
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/growth/history${qs ? `?${qs}` : ""}`,
     {
       headers: authHeaders(accessToken),
@@ -904,7 +998,7 @@ export async function fetchRetentionOverview(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<RetentionOverviewView> {
-  const response = await fetch(`${baseUrl}/api/v1/growth/retention`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/growth/retention`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -922,7 +1016,7 @@ export async function submitRetentionAttempt(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<RetentionAttemptView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/growth/retention/${scheduleId}/attempts`,
     {
       method: "POST",
@@ -933,6 +1027,7 @@ export async function submitRetentionAttempt(
         student_explanation: payload.student_explanation,
       }),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return retentionAttemptViewSchema.parse(await response.json());
@@ -946,7 +1041,7 @@ export async function fetchTeacherDashboard(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<TeacherDashboardView> {
-  const response = await fetch(`${baseUrl}/api/v1/teacher/dashboard`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/teacher/dashboard`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -958,7 +1053,7 @@ export async function fetchTeacherClasses(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<CourseSummaryView[]> {
-  const response = await fetch(`${baseUrl}/api/v1/teacher/classes`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/teacher/classes`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -978,7 +1073,7 @@ export async function createTeacherClass(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<CourseSummaryView> {
-  const response = await fetch(`${baseUrl}/api/v1/teacher/classes`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/teacher/classes`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -992,7 +1087,7 @@ export async function fetchTeacherClassDetail(
   courseId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<TeacherCourseDetailView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/classes/${courseId}`,
     {
       headers: authHeaders(accessToken),
@@ -1016,7 +1111,7 @@ export async function updateTeacherClass(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<CourseSummaryView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/classes/${courseId}`,
     {
       method: "PATCH",
@@ -1034,7 +1129,7 @@ export async function archiveTeacherClass(
   archive = true,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<CourseSummaryView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/classes/${courseId}/archive?archive=${archive}`,
     {
       method: "POST",
@@ -1051,7 +1146,7 @@ export async function createClassInvitation(
   payload: { max_uses?: number | null; expires_in_hours?: number | null } = {},
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<ClassInvitationView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/classes/${courseId}/invitations`,
     {
       method: "POST",
@@ -1069,7 +1164,7 @@ export async function revokeClassInvitation(
   invitationId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<ClassInvitationView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/classes/${courseId}/invitations/${invitationId}/revoke`,
     {
       method: "POST",
@@ -1087,7 +1182,7 @@ export async function manageClassMembership(
   action: "approve" | "remove",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<RosterMemberView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/classes/${courseId}/memberships/${membershipId}`,
     {
       method: "PATCH",
@@ -1105,7 +1200,7 @@ export async function fetchTeacherAssignments(
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AssignmentSummaryView[]> {
   const qs = courseId ? `?course_id=${encodeURIComponent(courseId)}` : "";
-  const response = await fetch(`${baseUrl}/api/v1/teacher/assignments${qs}`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/teacher/assignments${qs}`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -1133,7 +1228,7 @@ export async function createTeacherAssignment(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AssignmentSummaryView> {
-  const response = await fetch(`${baseUrl}/api/v1/teacher/assignments`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/teacher/assignments`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -1147,7 +1242,7 @@ export async function fetchTeacherAssignmentDetail(
   assignmentId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<TeacherAssignmentDetailView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/assignments/${assignmentId}`,
     {
       headers: authHeaders(accessToken),
@@ -1163,7 +1258,7 @@ export async function publishTeacherAssignment(
   assignmentId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AssignmentSummaryView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/assignments/${assignmentId}/publish`,
     {
       method: "POST",
@@ -1179,7 +1274,7 @@ export async function archiveTeacherAssignment(
   assignmentId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AssignmentSummaryView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/assignments/${assignmentId}/archive`,
     {
       method: "POST",
@@ -1200,7 +1295,7 @@ export async function gradeStudentSubmission(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<TeacherSubmissionReviewItem> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/teacher/submissions/${submissionId}/grade`,
     {
       method: "POST",
@@ -1216,7 +1311,7 @@ export async function fetchStudentClasses(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentEnrolledCourseView[]> {
-  const response = await fetch(`${baseUrl}/api/v1/student/classes`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/student/classes`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -1229,7 +1324,7 @@ export async function joinStudentClass(
   inviteCode: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentEnrolledCourseView> {
-  const response = await fetch(`${baseUrl}/api/v1/student/classes/join`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/student/classes/join`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify({ invite_code: inviteCode }),
@@ -1243,7 +1338,7 @@ export async function leaveStudentClass(
   courseId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/student/classes/${courseId}/leave`,
     {
       method: "POST",
@@ -1258,7 +1353,7 @@ export async function fetchStudentAssignments(
   statusFilter: StudentAssignmentFilter = "all",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentAssignmentListItemView[]> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/student/assignments?status=${encodeURIComponent(statusFilter)}`,
     {
       headers: authHeaders(accessToken),
@@ -1276,7 +1371,7 @@ export async function fetchStudentAssignmentDetail(
   assignmentId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentAssignmentDetailView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/student/assignments/${assignmentId}`,
     {
       headers: authHeaders(accessToken),
@@ -1299,7 +1394,7 @@ export async function submitStudentAssignment(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<StudentAssignmentAttemptResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/student/assignments/${assignmentId}/submit`,
     {
       method: "POST",
@@ -1312,6 +1407,7 @@ export async function submitStudentAssignment(
         hints_used: payload.hints_used ?? 0,
       }),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return studentAssignmentAttemptResponseSchema.parse(await response.json());
@@ -1325,7 +1421,7 @@ export async function fetchAdminOverview(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminDashboardOverview> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/overview`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/overview`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -1343,7 +1439,7 @@ export async function fetchAdminAuditLogs(
   if (params?.target_type) sp.set("target_type", params.target_type);
   if (params?.limit) sp.set("limit", String(params.limit));
   const qs = sp.toString();
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/audit-logs${qs ? `?${qs}` : ""}`,
     {
       headers: authHeaders(accessToken),
@@ -1365,7 +1461,7 @@ export async function submitAdminProblemForReview(
   notes: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/submit-review`,
     {
       method: "POST",
@@ -1383,7 +1479,7 @@ export async function rejectAdminProblem(
   notes: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemDetail> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/reject`,
     {
       method: "POST",
@@ -1401,7 +1497,7 @@ export async function archiveAdminProblem(
   notes: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemArchiveResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/archive`,
     {
       method: "POST",
@@ -1418,7 +1514,7 @@ export async function fetchAdminProblemVersions(
   problemId: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminProblemVersionsResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/problems/${problemId}/versions`,
     {
       headers: authHeaders(accessToken),
@@ -1433,7 +1529,7 @@ export async function fetchAdminTracks(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LearningTrackView[]> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/learning/tracks`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/learning/tracks`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -1453,7 +1549,7 @@ export async function updateAdminTrack(
   },
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LearningTrackView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/tracks/${trackSlug}`,
     {
       method: "PATCH",
@@ -1469,7 +1565,7 @@ export async function fetchAdminLessons(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminLessonDetailView[]> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/learning/lessons`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/learning/lessons`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -1482,7 +1578,7 @@ export async function upsertAdminLesson(
   payload: Record<string, unknown>,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<LessonSummaryView> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/learning/lessons`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/learning/lessons`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -1497,7 +1593,7 @@ export async function updateAdminLessonStatus(
   status: "draft" | "published" | "archived",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminLessonDetailView> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/lessons/${lessonId}/status`,
     {
       method: "PATCH",
@@ -1515,13 +1611,14 @@ export async function validateAdminLessonExercise(
   referenceSolution: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminCurriculumValidateResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/lessons/${lessonId}/validate-exercise`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
       body: JSON.stringify({ reference_solution: referenceSolution }),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return adminCurriculumValidateResponseSchema.parse(await response.json());
@@ -1531,7 +1628,7 @@ export async function fetchAdminDiagnostics(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminDiagnosticQuestionDetail[]> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/diagnostic-questions`,
     {
       headers: authHeaders(accessToken),
@@ -1549,7 +1646,7 @@ export async function createAdminDiagnostic(
   payload: Record<string, unknown>,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<unknown> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/diagnostic-questions`,
     {
       method: "POST",
@@ -1567,13 +1664,14 @@ export async function validateAdminDiagnostic(
   referenceSolution?: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminCurriculumValidateResponse> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/diagnostic-questions/${questionId}/validate`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
       body: JSON.stringify({ reference_solution: referenceSolution ?? null }),
     },
+    EXECUTION_TIMEOUT_MS,
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return adminCurriculumValidateResponseSchema.parse(await response.json());
@@ -1585,7 +1683,7 @@ export async function updateAdminDiagnosticStatus(
   status: "draft" | "approved" | "published" | "archived",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminDiagnosticQuestionDetail> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/learning/diagnostic-questions/${questionId}/status`,
     {
       method: "PATCH",
@@ -1601,7 +1699,7 @@ export async function fetchAdminKnowledgeDocs(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<KnowledgeDocumentItem[]> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/knowledge`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/knowledge`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });
@@ -1614,7 +1712,7 @@ export async function upsertAdminKnowledgeDoc(
   payload: Record<string, unknown>,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<KnowledgeDocumentItem> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/knowledge`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/knowledge`, {
     method: "POST",
     headers: authHeaders(accessToken, true),
     body: JSON.stringify(payload),
@@ -1629,7 +1727,7 @@ export async function updateAdminKnowledgeStatus(
   status: "draft" | "approved" | "archived",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<KnowledgeDocumentItem> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/knowledge/${docId}/status`,
     {
       method: "PATCH",
@@ -1643,13 +1741,28 @@ export async function updateAdminKnowledgeStatus(
 
 export async function fetchAdminUsers(
   accessToken: string,
-  limit = 50,
+  limitOrOptions:
+    | number
+    | { limit?: number; offset?: number; role?: "student" | "teacher" | "admin"; q?: string } = 50,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<{ items: AdminUserSummary[]; total: number }> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/users?limit=${limit}`, {
-    headers: authHeaders(accessToken),
-    cache: "no-store",
-  });
+  const opts =
+    typeof limitOrOptions === "number"
+      ? { limit: limitOrOptions }
+      : limitOrOptions;
+  const query = new URLSearchParams();
+  query.set("limit", String(opts.limit ?? 50));
+  if (opts.offset) query.set("offset", String(opts.offset));
+  if (opts.role) query.set("role", opts.role);
+  if (opts.q?.trim()) query.set("q", opts.q.trim());
+
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/admin/users?${query.toString()}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
   if (!response.ok) throw await parseErrorResponse(response);
   return z
     .object({
@@ -1665,7 +1778,7 @@ export async function grantAdminUserRole(
   role: "student" | "teacher" | "admin",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<unknown> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/users/${userId}/roles`,
     {
       method: "POST",
@@ -1683,7 +1796,7 @@ export async function revokeAdminUserRole(
   role: "student" | "teacher" | "admin",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<unknown> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${baseUrl}/api/v1/admin/users/${userId}/roles/${role}`,
     {
       method: "DELETE",
@@ -1698,7 +1811,7 @@ export async function fetchAdminOperationsHealth(
   accessToken: string,
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
 ): Promise<AdminOperationsHealth> {
-  const response = await fetch(`${baseUrl}/api/v1/admin/operations/health`, {
+  const response = await safeFetch(`${baseUrl}/api/v1/admin/operations/health`, {
     headers: authHeaders(accessToken),
     cache: "no-store",
   });

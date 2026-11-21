@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -78,7 +78,14 @@ class IdentityRepository(Protocol):
         mark_onboarding_completed: bool = False,
     ) -> UserRecord: ...
 
-    async def list_users(self, *, limit: int, offset: int) -> tuple[list[UserRecord], int]: ...
+    async def list_users(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        role: RoleName | None = None,
+        q: str | None = None,
+    ) -> tuple[list[UserRecord], int]: ...
 
     async def grant_role(
         self, *, user_id: UUID, role: RoleName, granted_by: UUID
@@ -218,13 +225,27 @@ class SQLAlchemyIdentityRepository:
             raise RuntimeError("Failed to reload updated profile")
         return _to_user_record(updated)
 
-    async def list_users(self, *, limit: int, offset: int) -> tuple[list[UserRecord], int]:
-        total_stmt = select(func.count()).select_from(Profile)
+    async def list_users(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        role: RoleName | None = None,
+        q: str | None = None,
+    ) -> tuple[list[UserRecord], int]:
+        base = select(Profile)
+        if role is not None:
+            role_user_ids = select(UserRole.user_id).where(UserRole.role == role)
+            base = base.where(Profile.id.in_(role_user_ids))
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            base = base.where(or_(Profile.email.ilike(term), Profile.full_name.ilike(term)))
+
+        total_stmt = select(func.count()).select_from(base.subquery())
         total = int((await self._session.execute(total_stmt)).scalar_one())
 
         rows_stmt = (
-            select(Profile)
-            .options(selectinload(Profile.roles), selectinload(Profile.preferences))
+            base.options(selectinload(Profile.roles), selectinload(Profile.preferences))
             .order_by(Profile.created_at.desc())
             .limit(limit)
             .offset(offset)

@@ -106,3 +106,11 @@ class TeacherScopeResponse(BaseModel):
     email: str
     roles: list[RoleName]
     authorized_scope: Literal["teacher_courses"] = "teacher_courses"
+
+
+class PortalVerifyRequest(BaseModel):
+    """Portal login verification request (extra fields forbidden)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    portal: RoleName

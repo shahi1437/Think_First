@@ -72,6 +72,13 @@ class AdminDashboardOverview(BaseModel):
     knowledge_approved: int
     knowledge_total: int
     skill_nodes_count: int
+    students_count: int = 0
+    teachers_count: int = 0
+    admins_count: int = 0
+    courses_total: int = 0
+    courses_active: int = 0
+    enrollments_active: int = 0
+    assignments_published: int = 0
     review_queue: list[AdminReviewQueueItem] = Field(default_factory=list)
     track_coverage: list[AdminTrackCoverageItem] = Field(default_factory=list)
     recent_audit_logs: list[AdminAuditLogItem] = Field(default_factory=list)

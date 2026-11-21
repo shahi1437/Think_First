@@ -1,30 +1,39 @@
-import Link from "next/link";
+import { KeyRound } from "lucide-react";
+import { AuthPortalShell } from "@/components/auth-portal-shell";
 import { ForgotPasswordForm } from "@/features/auth/forgot-password-form";
+import type { RoleName } from "@/types/identity";
 
-export default function ForgotPasswordPage() {
+interface ForgotPasswordPageProps {
+  searchParams: Promise<{ portal?: string }>;
+}
+
+function parsePortal(raw?: string): RoleName | undefined {
+  if (raw === "student" || raw === "teacher" || raw === "admin") {
+    return raw;
+  }
+  return undefined;
+}
+
+export default async function ForgotPasswordPage({
+  searchParams,
+}: ForgotPasswordPageProps) {
+  const params = await searchParams;
+  const portal = parsePortal(params.portal);
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900"
-          >
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#0b1221] text-xs font-bold text-teal-300">
-              CM
-            </span>
-            CodeMentor AI
-          </Link>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
-            Reset your password
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Enter your registered email address to receive a recovery link.
-          </p>
-        </div>
-
-        <ForgotPasswordForm />
-      </div>
-    </main>
+    <AuthPortalShell
+      badge="Account Recovery"
+      title="Reset your password"
+      subtitle="Enter your registered email address and we will send you a secure password recovery link."
+      icon={KeyRound}
+      accent="indigo"
+      footerLinks={[
+        { href: "/login/student", label: "Student Login" },
+        { href: "/login/teacher", label: "Teacher Login" },
+        { href: "/login/admin", label: "Admin Login" },
+      ]}
+    >
+      <ForgotPasswordForm portal={portal} />
+    </AuthPortalShell>
   );
 }

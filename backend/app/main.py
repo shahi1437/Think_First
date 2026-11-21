@@ -87,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     write_limiter = InMemorySlidingWindowRateLimiter(window_seconds=60.0)
     join_limiter = InMemorySlidingWindowRateLimiter(window_seconds=60.0)
+    portal_verify_limiter = InMemorySlidingWindowRateLimiter(window_seconds=60.0)
 
     @app.middleware("http")
     async def request_context_middleware(
@@ -131,6 +132,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 decision = join_limiter.check(
                     f"join:{client_ip}",
                     limit=resolved_settings.class_join_rate_limit_per_minute,
+                )
+            elif path.rstrip("/") == "/api/v1/users/me/verify-portal":
+                decision = portal_verify_limiter.check(
+                    f"portal_verify:{client_ip}",
+                    limit=resolved_settings.portal_verify_rate_limit_per_minute,
                 )
             else:
                 decision = write_limiter.check(

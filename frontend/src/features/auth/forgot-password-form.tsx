@@ -6,8 +6,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { PORTAL_LOGIN_PATHS } from "@/lib/auth/roles";
 import { publicEnv } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { RoleName } from "@/types/identity";
 
 const recoverySchema = z.object({
   email: z.email("Please enter a valid email address."),
@@ -15,9 +17,15 @@ const recoverySchema = z.object({
 
 type RecoveryValues = z.infer<typeof recoverySchema>;
 
-export function ForgotPasswordForm() {
+interface ForgotPasswordFormProps {
+  portal?: RoleName;
+}
+
+export function ForgotPasswordForm({ portal }: ForgotPasswordFormProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  const backLoginPath = portal ? PORTAL_LOGIN_PATHS[portal] : "/login";
 
   const {
     register,
@@ -32,10 +40,13 @@ export function ForgotPasswordForm() {
     setServerError(null);
     try {
       const supabase = createSupabaseBrowserClient();
+      const nextTarget = portal
+        ? `/reset-password?portal=${portal}`
+        : "/reset-password";
       const { error } = await supabase.auth.resetPasswordForEmail(
         values.email.trim().toLowerCase(),
         {
-          redirectTo: `${publicEnv.NEXT_PUBLIC_APP_URL}/auth/callback?next=/student/settings`,
+          redirectTo: `${publicEnv.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(nextTarget)}`,
         },
       );
       if (error) {
@@ -45,25 +56,31 @@ export function ForgotPasswordForm() {
       setSubmitted(true);
     } catch (err) {
       setServerError(
-        err instanceof Error ? err.message : "Unable to request password reset.",
+        err instanceof Error
+          ? err.message
+          : "Unable to request password reset.",
       );
     }
   }
 
   if (submitted) {
     return (
-      <div className="space-y-4 rounded-lg border border-teal-200 bg-teal-50 p-5 text-sm text-teal-950">
+      <div className="space-y-4 rounded-xl border border-teal-200 bg-teal-50 p-5 text-sm text-teal-950">
         <div className="flex items-center gap-2 font-semibold">
-          <CheckCircle2 className="h-5 w-5 text-teal-700" aria-hidden="true" />
-          <span>Recovery link requested</span>
+          <CheckCircle2
+            className="h-5 w-5 text-teal-700"
+            aria-hidden="true"
+          />
+          <span>Recovery link sent</span>
         </div>
-        <p>
+        <p className="leading-relaxed">
           If an account exists for that email address, a password recovery link
-          has been sent.
+          has been sent. Check your inbox and follow the link to reset your
+          password.
         </p>
         <Link
-          href="/login"
-          className="inline-flex rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
+          href={backLoginPath}
+          className="inline-flex rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800"
         >
           Back to sign in
         </Link>
@@ -82,15 +99,21 @@ export function ForgotPasswordForm() {
       {serverError ? (
         <div
           role="alert"
-          className="flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-900"
+          className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-900"
         >
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+          <AlertCircle
+            className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"
+            aria-hidden="true"
+          />
           <span>{serverError}</span>
         </div>
       ) : null}
 
       <div>
-        <label htmlFor="reset-email" className="block text-sm font-medium text-slate-800">
+        <label
+          htmlFor="reset-email"
+          className="block text-sm font-medium text-slate-800"
+        >
           Account email
         </label>
         <input
@@ -98,8 +121,8 @@ export function ForgotPasswordForm() {
           type="email"
           autoComplete="email"
           {...register("email")}
-          className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:border-indigo-600 focus:outline-none"
-          placeholder="student@university.edu"
+          className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:outline-none"
+          placeholder="you@university.edu"
         />
         {errors.email ? (
           <p className="mt-1 text-xs text-rose-600">{errors.email.message}</p>
@@ -109,7 +132,7 @@ export function ForgotPasswordForm() {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b1221] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isSubmitting ? (
           <>
@@ -123,7 +146,10 @@ export function ForgotPasswordForm() {
 
       <p className="text-center text-sm text-slate-600">
         Remembered your password?{" "}
-        <Link href="/login" className="font-medium text-indigo-700 hover:underline">
+        <Link
+          href={backLoginPath}
+          className="font-semibold text-indigo-700 hover:underline"
+        >
           Back to sign in
         </Link>
       </p>

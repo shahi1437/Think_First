@@ -12,6 +12,63 @@ export const PORTAL_LABELS: Record<RoleName, string> = {
   admin: "Admin",
 };
 
+export const PORTAL_LOGIN_PATHS: Record<RoleName, string> = {
+  student: "/login/student",
+  teacher: "/login/teacher",
+  admin: "/login/admin",
+};
+
+export function resolvePortalLoginPath(pathname?: string | null): string {
+  if (!pathname) return "/login";
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return "/login/admin";
+  }
+  if (pathname === "/teacher" || pathname.startsWith("/teacher/")) {
+    return "/login/teacher";
+  }
+  if (pathname === "/student" || pathname.startsWith("/student/")) {
+    return "/login/student";
+  }
+  return "/login";
+}
+
+export function getPrimaryRole(roles: readonly RoleName[]): RoleName {
+  if (roles.includes("admin")) return "admin";
+  if (roles.includes("teacher")) return "teacher";
+  return "student";
+}
+
+export function isAuthorizedForLoginPortal(
+  roles: readonly RoleName[],
+  portal: RoleName,
+): boolean {
+  if (portal === "admin") {
+    return roles.includes("admin");
+  }
+  if (portal === "teacher") {
+    return roles.includes("teacher");
+  }
+  // Student Login is strictly for Student accounts so Teachers/Admins are never silently treated as Students.
+  return (
+    roles.includes("student") &&
+    !roles.includes("teacher") &&
+    !roles.includes("admin")
+  );
+}
+
+export function getPortalMismatchMessage(
+  expectedPortal: RoleName,
+  actualRoles: readonly RoleName[],
+): string {
+  const expectedLabel = PORTAL_LABELS[expectedPortal];
+  if (expectedPortal === "student") {
+    const primary = getPrimaryRole(actualRoles);
+    const actualLabel = PORTAL_LABELS[primary];
+    return `This account is registered with ${actualLabel} access, not Student-only portal login. Please sign in through the ${actualLabel} Login page.`;
+  }
+  return `This account does not have ${expectedLabel} access. Please use your authorized portal.`;
+}
+
 export function canAccessPortal(
   roles: readonly RoleName[],
   portal: RoleName,
