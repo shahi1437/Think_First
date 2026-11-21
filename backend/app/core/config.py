@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://codementor:codementor_dev@localhost:5432/codementor"
     db_pool_size: int = 5
     db_max_overflow: int = 10
-    db_health_timeout_seconds: float = 2.0
+    db_health_timeout_seconds: float = 5.0
 
     # Phase 2+ Supabase settings (validated when auth endpoints are enabled)
     supabase_url: str | None = None

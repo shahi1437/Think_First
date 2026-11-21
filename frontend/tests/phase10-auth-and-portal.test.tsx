@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NavLinks } from "@/components/nav-links";
 import { LoginForm } from "@/features/auth/login-form";
+import { normalizeBaseUrl } from "@/lib/env";
 import {
   canAccessPortal,
   getAuthorizedPortals,
@@ -133,6 +134,21 @@ describe("Phase 10 Role-Aware Login & Portal Switcher", () => {
     expect(screen.getByRole("link", { name: "Admin" })).toHaveAttribute(
       "href",
       "/admin",
+    );
+  });
+
+  it("normalizes public API and app URLs without duplicate /api/v1 or trailing slashes", () => {
+    expect(
+      normalizeBaseUrl(
+        " https://codementor-ai-backend-6sbr.onrender.com/api/v1/ ",
+        true,
+      ),
+    ).toBe("https://codementor-ai-backend-6sbr.onrender.com");
+    expect(
+      normalizeBaseUrl("https://codementor-ai-backend-6sbr.onrender.com///", true),
+    ).toBe("https://codementor-ai-backend-6sbr.onrender.com");
+    expect(normalizeBaseUrl("https://think-first-pi.vercel.app/")).toBe(
+      "https://think-first-pi.vercel.app",
     );
   });
 });
