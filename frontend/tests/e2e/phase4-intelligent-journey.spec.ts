@@ -40,7 +40,11 @@ test.describe("Phase 4 Complete Live Intelligent Debugging & Transfer Verificati
 
     await page.waitForURL("**/student/onboarding");
     await page.getByLabel(/Full name/i).fill("Phase4 E2E Learner");
-    await page.getByRole("button", { name: /Complete onboarding/i }).click();
+    await page
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
+      .click();
     await page.waitForURL("**/student");
 
     // 3. Open Debugging Problem (`Debug: Inclusive Range Sum`)

@@ -17,8 +17,12 @@ from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.learning import (
+    DiagnosticSessionView,
     LearningDashboardView,
+    LessonSummaryView,
     RecommendationItemView,
+    SkillGraphView,
+    StudentTrackStatus,
 )
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
 from app.services.learning.lessons_service import LessonsAndTracksService
@@ -45,11 +49,23 @@ class AdaptiveRecommendationService:
         self._diagnostics = diagnostics_service
         self._skill_graph = skill_graph_service
 
-    async def compute_recommendations(self, user: UserRecord) -> list[RecommendationItemView]:
-        track_status = await self._lessons.get_track_status(user)
-        lessons = await self._lessons.list_lessons(user=user)
-        skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
-        diag_sessions = await self._diagnostics.list_my_sessions(user=user)
+    async def compute_recommendations(
+        self,
+        user: UserRecord,
+        *,
+        track_status: StudentTrackStatus | None = None,
+        lessons: list[LessonSummaryView] | None = None,
+        skill_graph: SkillGraphView | None = None,
+        diag_sessions: list[DiagnosticSessionView] | None = None,
+    ) -> list[RecommendationItemView]:
+        if track_status is None:
+            track_status = await self._lessons.get_track_status(user)
+        if lessons is None:
+            lessons = await self._lessons.list_lessons(user=user)
+        if skill_graph is None:
+            skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
+        if diag_sessions is None:
+            diag_sessions = await self._diagnostics.list_my_sessions(user=user)
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
         latest_diag = completed_diags[0] if completed_diags else None
 
@@ -255,7 +271,13 @@ class AdaptiveRecommendationService:
         skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
         diag_sessions = await self._diagnostics.list_my_sessions(user=user)
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
-        recommendations = await self.compute_recommendations(user)
+        recommendations = await self.compute_recommendations(
+            user,
+            track_status=track_status,
+            lessons=lessons,
+            skill_graph=skill_graph,
+            diag_sessions=diag_sessions,
+        )
 
         return LearningDashboardView(
             track_status=track_status,

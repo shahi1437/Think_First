@@ -45,6 +45,17 @@ interface LearningDashboardClientProps {
     scheduledCount: number;
     retainedSkillsCount: number;
   };
+  classroomSummary?: {
+    enrolledCount: number;
+    pendingAssignmentsCount: number;
+    totalAssignmentsCount: number;
+    recentClasses: Array<{
+      courseId: string;
+      code: string;
+      title: string;
+      status: string;
+    }>;
+  };
 }
 
 export function LearningDashboardClient({
@@ -55,6 +66,7 @@ export function LearningDashboardClient({
   dnaSummary,
   dailyPlanSummary,
   retentionSummary,
+  classroomSummary,
 }: LearningDashboardClientProps) {
   const [lang, setLang] = useState<"en" | "bn">(initialLanguage);
   const [trackStatus, setTrackStatus] = useState<StudentTrackStatus>(
@@ -89,36 +101,36 @@ export function LearningDashboardClient({
   return (
     <div className="space-y-6" lang={lang}>
       {/* Hero & Language Switcher */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-teal-700">
-              {isBn ? "অ্যাডাপ্টিভ লার্নিং ড্যাশবোর্ড" : "Adaptive Learning Dashboard"}
+            <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">
+              {isBn ? "অ্যাডাপ্টিভ লার্নিং ড্যাশবোর্ড" : "Student Learning Workspace"}
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-[34px]">
               {isBn ? `স্বাগতম, ${studentName}` : `Welcome back, ${studentName}`}
             </h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-600">
+            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-300">
               {isBn
-                ? "তোমার ডায়াগনস্টিক প্রমাণ, লেসন অগ্রগতি, Judge0 কোড এক্সিকিউশন এবং Skill Graph অনুযায়ী পরবর্তী ধাপ সাজানো হয়েছে।"
-                : "Your track, lessons, and Skill Graph are grounded strictly in real diagnostic, Judge0 execution, and transfer verification evidence."}
+                ? "তোমার ডায়াগনস্টিক ফলাফল, লেসন অগ্রগতি, বাস্তব কোড অনুশীলন এবং Skill Graph অনুযায়ী পরবর্তী ধাপ সাজানো হয়েছে।"
+                : "Your track, lessons, practice problems, and Skill Graph progress update directly from your real coding and diagnostic work."}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <div
               role="group"
               aria-label="Dashboard language"
-              className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs"
+              className="inline-flex rounded-xl border border-slate-700 bg-slate-900/90 p-1 text-sm"
             >
               <button
                 type="button"
                 onClick={() => setLang("en")}
                 aria-pressed={lang === "en"}
-                className={`rounded-md px-2.5 py-1 font-semibold ${
+                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
                   lang === "en"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-600 hover:bg-slate-200/70"
+                    ? "bg-teal-400 text-slate-950"
+                    : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
                 English
@@ -127,10 +139,10 @@ export function LearningDashboardClient({
                 type="button"
                 onClick={() => setLang("bn")}
                 aria-pressed={lang === "bn"}
-                className={`rounded-md px-2.5 py-1 font-semibold ${
+                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
                   lang === "bn"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-600 hover:bg-slate-200/70"
+                    ? "bg-teal-400 text-slate-950"
+                    : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
                 বাংলা
@@ -139,9 +151,9 @@ export function LearningDashboardClient({
 
             <Link
               href="/student/diagnostic"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500"
+              className="inline-flex items-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-[15px] font-semibold text-slate-950 shadow-sm transition hover:bg-teal-300"
             >
-              <ClipboardCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
               <span>
                 {trackStatus.diagnostic_completed
                   ? isBn
@@ -156,51 +168,51 @@ export function LearningDashboardClient({
         </div>
 
         {/* Factual Evidence Counters (Zero Fabricated Percentages) */}
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <div className="mt-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Active Track
             </p>
-            <p className="mt-1 text-sm font-bold capitalize text-indigo-900">
+            <p className="mt-1.5 text-lg font-bold capitalize text-teal-300">
               {trackStatus.selected_track_slug.replaceAll("_", " ")}
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
+            <p className="mt-1 text-xs text-slate-400">
               {trackStatus.recommendation_source === "diagnostic_evidence"
                 ? "Backed by diagnostic evidence"
                 : "Initial onboarding selection"}
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Guided Lessons Passed
             </p>
-            <p className="mt-1 text-lg font-bold text-slate-900">
+            <p className="mt-1.5 text-2xl font-bold text-white">
               {initialDashboard.lessons_completed} /{" "}
               {initialDashboard.lessons_total}
             </p>
-            <p className="text-[11px] text-slate-500">
-              Requires Judge0 exercise pass
+            <p className="mt-1 text-xs text-slate-400">
+              Requires exercise verification
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Diagnostics Completed
             </p>
-            <p className="mt-1 text-lg font-bold text-slate-900">
+            <p className="mt-1.5 text-2xl font-bold text-white">
               {initialDashboard.diagnostic_sessions_completed}
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="mt-1 text-xs text-slate-400">
               Across 8 Python skill domains
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Skill Nodes Observed
             </p>
-            <p className="mt-1 text-lg font-bold text-slate-900">
+            <p className="mt-1.5 text-2xl font-bold text-white">
               {observedSkills} / {initialDashboard.skill_graph.nodes.length}
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="mt-1 text-xs text-slate-400">
               {verifiedSkills} independently verified
             </p>
           </div>
@@ -210,12 +222,12 @@ export function LearningDashboardClient({
       {/* Recommended Next Steps (Explainable Prerequisite-Based Logic) */}
       <section
         aria-label="Recommended next steps"
-        className="space-y-3 rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm"
+        className="space-y-4 rounded-2xl border border-indigo-200 bg-white p-6 shadow-sm"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-indigo-600" aria-hidden="true" />
-            <h2 className="text-base font-bold text-slate-900">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="h-5 w-5 text-indigo-600" aria-hidden="true" />
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
               {isBn
                 ? "তোমার পরবর্তী প্রস্তাবিত ধাপ (Recommended Next)"
                 : "Recommended Next Steps"}
@@ -223,7 +235,7 @@ export function LearningDashboardClient({
           </div>
           <Link
             href="/student/lessons"
-            className="text-xs font-semibold text-indigo-700 hover:underline"
+            className="text-sm font-semibold text-indigo-700 hover:underline"
           >
             {isBn
               ? `সব ${initialDashboard.lessons_total}টি লেসন দেখো →`
@@ -231,11 +243,11 @@ export function LearningDashboardClient({
           </Link>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {initialDashboard.recommendations.map((rec) => (
             <article
               key={`${rec.recommendation_type}-${rec.target_id}`}
-              className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+              className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-5"
             >
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -252,22 +264,22 @@ export function LearningDashboardClient({
                       {rec.recommendation_type.replaceAll("_", " ")}
                     </span>
                   </Badge>
-                  <span className="text-[11px] font-medium text-slate-500">
+                  <span className="text-xs font-medium text-slate-500">
                     Priority #{rec.priority}
                   </span>
                 </div>
-                <h3 className="mt-2 text-sm font-bold text-slate-900">
+                <h3 className="mt-2.5 text-lg font-bold text-slate-900">
                   {rec.title}
                 </h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-700">
+                <p className="mt-1.5 text-[15px] leading-relaxed text-slate-700">
                   {isBn ? rec.reason_bn : rec.reason_en}
                 </p>
                 {rec.evidence_factors.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     {rec.evidence_factors.map((f) => (
                       <code
                         key={f}
-                        className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-200"
+                        className="rounded-md bg-white px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200"
                       >
                         {f}
                       </code>
@@ -276,13 +288,13 @@ export function LearningDashboardClient({
                 ) : null}
               </div>
 
-              <div className="mt-3 pt-2">
+              <div className="mt-4 pt-2">
                 <Link
                   href={rec.href}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#0b1221] px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-slate-800"
                 >
                   <span>{isBn ? "শুরু করো" : "Open Next Step"}</span>
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </div>
             </article>
@@ -548,14 +560,69 @@ export function LearningDashboardClient({
                   : "Problem Bank & Socratic AI Debugger"}
               </h3>
               <p className="text-xs text-slate-600">
-                Real Judge0 execution, ML diagnosis, RAG citations &amp;
-                transfer checks
+                Real code execution, error diagnosis &amp; transfer checks
               </p>
             </div>
           </div>
           <ArrowRight className="h-4 w-4 text-slate-400" aria-hidden="true" />
         </Link>
       </section>
+
+      {classroomSummary ? (
+        <section
+          aria-label="Classes and assignments overview"
+          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                {isBn ? "আমার ক্লাস ও অ্যাসাইনমেন্ট" : "My Classes & Assignments"}
+              </h2>
+              <p className="text-xs text-slate-600">
+                {classroomSummary.enrolledCount} active class(es) ·{" "}
+                {classroomSummary.totalAssignmentsCount} assignment(s) (
+                {classroomSummary.pendingAssignmentsCount} in progress)
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/student/classes"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                {isBn ? "ক্লাস দেখুন" : "View Classes"}
+              </Link>
+              <Link
+                href="/student/assignments"
+                className="rounded-lg bg-[#0b1221] px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                {isBn ? "অ্যাসাইনমেন্ট" : "Open Assignments"}
+              </Link>
+            </div>
+          </div>
+
+          {classroomSummary.recentClasses.length > 0 ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {classroomSummary.recentClasses.map((cls) => (
+                <Link
+                  key={cls.courseId}
+                  href="/student/classes"
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition hover:border-teal-300"
+                >
+                  <span className="font-mono text-xs font-bold text-indigo-700">
+                    {cls.code}
+                  </span>
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-900">
+                    {cls.title}
+                  </p>
+                  <p className="mt-0.5 text-[11px] capitalize text-slate-500">
+                    Status: {cls.status}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

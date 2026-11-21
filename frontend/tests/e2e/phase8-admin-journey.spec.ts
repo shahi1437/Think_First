@@ -144,7 +144,9 @@ test.describe("Phase 8 Complete Admin Studio, Validation, Curriculum & Student D
     await studentPage.waitForURL("**/student/onboarding");
     await studentPage.getByLabel(/Full name/i).fill("Phase8 Student");
     await studentPage
-      .getByRole("button", { name: /Complete onboarding/i })
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
       .click();
     await studentPage.waitForURL("**/student");
 

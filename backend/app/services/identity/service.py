@@ -111,6 +111,49 @@ class IdentityService:
     async def get_me(self, user: UserRecord) -> UserMeResponse:
         return _to_user_me_response(user)
 
+    async def verify_login_portal(
+        self,
+        *,
+        user: UserRecord,
+        portal: RoleName,
+        request_id: str | None,
+    ) -> UserMeResponse:
+        """Enforce strict portal separation against DB-backed roles and audit denials."""
+        authorized = False
+        if portal == "admin":
+            authorized = "admin" in user.roles
+        elif portal == "teacher":
+            authorized = "teacher" in user.roles
+        elif portal == "student":
+            authorized = (
+                "student" in user.roles
+                and "teacher" not in user.roles
+                and "admin" not in user.roles
+            )
+
+        if not authorized:
+            await self._repo.record_audit_log(
+                AuditRecord(
+                    actor_user_id=user.id,
+                    action="auth.portal_denied",
+                    target_type="portal",
+                    target_id=portal,
+                    metadata={"requested_portal": portal, "actual_roles": user.roles},
+                    request_id=request_id,
+                )
+            )
+            portal_label = portal.capitalize()
+            raise AppError(
+                code="PORTAL_ACCESS_DENIED",
+                message=(
+                    f"This account does not have {portal_label} portal access. "
+                    "Please use your authorized login portal."
+                ),
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        return _to_user_me_response(user)
+
     async def complete_onboarding(
         self,
         *,
@@ -187,9 +230,14 @@ class IdentityService:
         return _to_user_me_response(updated)
 
     async def list_users(
-        self, *, limit: int = 25, offset: int = 0
+        self,
+        *,
+        limit: int = 25,
+        offset: int = 0,
+        role: RoleName | None = None,
+        q: str | None = None,
     ) -> PaginatedResponse[AdminUserSummary]:
-        records, total = await self._repo.list_users(limit=limit, offset=offset)
+        records, total = await self._repo.list_users(limit=limit, offset=offset, role=role, q=q)
         items = [
             AdminUserSummary(
                 id=record.id,

@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.identity import AuditLog, Profile
+from app.models.classroom import Assignment, Course, CourseMembership
+from app.models.identity import AuditLog, Profile, UserRole
 from app.models.learning import (
     CurriculumValidation,
     DiagnosticQuestion,
@@ -199,6 +200,54 @@ class AdminRepository:
         return int(
             (await self._session.execute(select(func.count()).select_from(SkillNode))).scalar_one()
         )
+
+    async def get_role_and_classroom_counts(self) -> dict[str, int]:
+        role_rows = (
+            await self._session.execute(
+                select(UserRole.role, func.count(func.distinct(UserRole.user_id))).group_by(
+                    UserRole.role
+                )
+            )
+        ).all()
+        role_map = {str(role): int(cnt) for role, cnt in role_rows}
+
+        courses_total = int(
+            (await self._session.execute(select(func.count()).select_from(Course))).scalar_one()
+        )
+        courses_active = int(
+            (
+                await self._session.execute(
+                    select(func.count()).select_from(Course).where(Course.status == "active")
+                )
+            ).scalar_one()
+        )
+        enrollments_active = int(
+            (
+                await self._session.execute(
+                    select(func.count())
+                    .select_from(CourseMembership)
+                    .where(CourseMembership.status == "active")
+                )
+            ).scalar_one()
+        )
+        assignments_published = int(
+            (
+                await self._session.execute(
+                    select(func.count())
+                    .select_from(Assignment)
+                    .where(Assignment.status == "published")
+                )
+            ).scalar_one()
+        )
+        return {
+            "students_count": role_map.get("student", 0),
+            "teachers_count": role_map.get("teacher", 0),
+            "admins_count": role_map.get("admin", 0),
+            "courses_total": courses_total,
+            "courses_active": courses_active,
+            "enrollments_active": enrollments_active,
+            "assignments_published": assignments_published,
+        }
 
     async def list_tracks(self) -> list[LearningTrack]:
         stmt = select(LearningTrack).order_by(LearningTrack.display_order.asc())

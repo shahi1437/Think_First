@@ -1,3 +1,4 @@
+import { SystemStatusCard } from "@/components/system-status-card";
 import {
   fetchAdminOperationsHealth,
   fetchAdminOverview,
@@ -19,10 +20,13 @@ export default async function AdminDashboardPage() {
   ]);
 
   return (
-    <AdminDashboardClient
-      adminName={user.full_name || user.email}
-      overview={overview}
-      operationsHealth={operationsHealth}
-    />
+    <div className="space-y-6">
+      <AdminDashboardClient
+        adminName={user.full_name || user.email}
+        overview={overview}
+        operationsHealth={operationsHealth}
+      />
+      <SystemStatusCard />
+    </div>
   );
 }

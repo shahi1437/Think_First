@@ -38,7 +38,7 @@ describe("OnboardingForm", () => {
       target: { value: "5" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: /Complete onboarding/i }),
+      screen.getByRole("button", { name: /Start My Learning Journey/i }),
     );
 
     await waitFor(() => {
@@ -91,7 +91,7 @@ describe("OnboardingForm", () => {
       target: { value: "bn" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: /Complete onboarding/i }),
+      screen.getByRole("button", { name: /Start My Learning Journey/i }),
     );
 
     await waitFor(() => {

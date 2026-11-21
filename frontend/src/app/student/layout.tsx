@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ServiceUnavailableState } from "@/components/service-unavailable-state";
+import { BackendUnavailableError } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +11,22 @@ export default async function StudentLayout({
 }: {
   children: ReactNode;
 }) {
-  const { user } = await requireAuthenticatedUser({
-    allowedRoles: ["student", "teacher", "admin"],
-    currentPath: "/student",
-  });
+  let user;
+  try {
+    ({ user } = await requireAuthenticatedUser({
+      allowedRoles: ["student", "teacher", "admin"],
+      currentPath: "/student",
+    }));
+  } catch (err) {
+    if (err instanceof BackendUnavailableError) {
+      return (
+        <main className="min-h-screen bg-slate-50">
+          <ServiceUnavailableState />
+        </main>
+      );
+    }
+    throw err;
+  }
 
   return (
     <AppShell

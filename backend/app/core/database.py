@@ -17,9 +17,42 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def _extract_safe_db_error_context(exc: Exception) -> dict[str, Any]:
+    """Return non-sensitive DB error telemetry (class, SQLSTATE, safe hint; zero secrets)."""
+    orig = getattr(exc, "orig", None)
+    sqlstate = getattr(orig, "sqlstate", None) or getattr(exc, "sqlstate", None)
+    orig_type = type(orig).__name__ if orig is not None else type(exc).__name__
+    msg_lower = f"{type(exc).__name__} {orig_type} {orig or exc}".lower()
+
+    hint = "unknown"
+    if "tenant" in msg_lower or "enotfound" in msg_lower:
+        hint = "tenant_or_user_not_found"
+    elif "circuit breaker" in msg_lower:
+        hint = "circuit_breaker_open"
+    elif sqlstate == "28P01" or "password" in msg_lower or "authentication failed" in msg_lower:
+        hint = "authentication_failed"
+    elif "ssl" in msg_lower or "certificate" in msg_lower:
+        hint = "ssl_or_tls_error"
+    elif isinstance(exc, TimeoutError) or "timeout" in msg_lower:
+        hint = "timeout"
+    elif "network is unreachable" in msg_lower or "name or service not known" in msg_lower:
+        hint = "network_or_dns_error"
+    elif "closed" in msg_lower or "connectiondoesnotexist" in msg_lower or "reset" in msg_lower:
+        hint = "connection_closed"
+
+    return {
+        "error_type": type(exc).__name__,
+        "orig_type": orig_type,
+        "sqlstate": str(sqlstate) if sqlstate else None,
+        "hint": hint,
+    }
+
+
 def normalize_database_url_and_connect_args(raw_url: str) -> tuple[str, dict[str, Any]]:
     """Normalize PostgreSQL URLs for asyncpg + Supabase Session/Transaction poolers."""
     cleaned = raw_url.strip()
+    if "[your-password]" in cleaned.lower() or "[your-database-password]" in cleaned.lower():
+        raise ValueError("DATABASE_URL still contains the Supabase password placeholder brackets.")
     url = make_url(cleaned)
     if url.drivername in {"postgres", "postgresql"}:
         url = url.set(drivername="postgresql+asyncpg")
@@ -31,15 +64,16 @@ def normalize_database_url_and_connect_args(raw_url: str) -> tuple[str, dict[str
     raw_pgbouncer = str(query.pop("pgbouncer", "")).strip().lower()
 
     host = (url.host or "").lower()
-    is_supabase_cloud = host.endswith(".supabase.co") or host.endswith(".pooler.supabase.com")
+    is_supabase_pooler = host.endswith(".pooler.supabase.com")
+    is_supabase_cloud = host.endswith(".supabase.co") or is_supabase_pooler
 
     if raw_sslmode in {"require", "verify-ca", "verify-full"} or (
         is_supabase_cloud and raw_sslmode != "disable"
     ):
         connect_args["ssl"] = "require"
 
-    # Transaction pooler (port 6543 / pgbouncer=true) does not support asyncpg prepared cache
-    if url.port == 6543 or raw_pgbouncer == "true":
+    # Disable asyncpg prepared statement cache on Supavisor / PgBouncer poolers
+    if url.port == 6543 or raw_pgbouncer == "true" or is_supabase_pooler:
         connect_args["statement_cache_size"] = 0
 
     normalized_url = url.set(query=query).render_as_string(hide_password=False)
@@ -54,11 +88,13 @@ class DatabaseManager:
         normalized_url, connect_args = normalize_database_url_and_connect_args(
             settings.database_url
         )
+        connect_args.setdefault("timeout", max(settings.db_health_timeout_seconds, 5.0))
         self._engine: AsyncEngine = create_async_engine(
             normalized_url,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
             pool_pre_ping=True,
+            pool_recycle=300,
             connect_args=connect_args,
         )
         self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
@@ -83,7 +119,7 @@ class DatabaseManager:
                     await conn.execute(text("SELECT 1"))
             return True
         except Exception as exc:
-            logger.warning("database_health_check_failed", error_type=type(exc).__name__)
+            logger.warning("database_health_check_failed", **_extract_safe_db_error_context(exc))
             return False
 
     async def dispose(self) -> None:

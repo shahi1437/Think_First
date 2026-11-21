@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://codementor:codementor_dev@localhost:5432/codementor"
     db_pool_size: int = 5
     db_max_overflow: int = 10
-    db_health_timeout_seconds: float = 2.0
+    db_health_timeout_seconds: float = 5.0
 
     # Phase 2+ Supabase settings (validated when auth endpoints are enabled)
     supabase_url: str | None = None
@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     api_write_rate_limit_per_minute: int = 120
     class_join_rate_limit_per_minute: int = 15
+    portal_verify_rate_limit_per_minute: int = 20
     max_request_body_bytes: int = 2_097_152
     slow_request_threshold_ms: float = 2500.0
 

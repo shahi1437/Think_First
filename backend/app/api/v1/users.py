@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.api.v1.deps import get_current_user, get_identity_service, require_roles
 from app.repositories.identity import UserRecord
 from app.schemas.identity import (
     OnboardingSubmitRequest,
+    PortalVerifyRequest,
     TeacherScopeResponse,
     UserMeResponse,
     UserPreferencesUpdate,
@@ -21,6 +22,22 @@ async def get_users_me(
 ) -> UserMeResponse:
     """Return the authenticated user's profile, DB-backed roles, and preferences."""
     return await service.get_me(current_user)
+
+
+@users_router.post("/me/verify-portal", response_model=UserMeResponse)
+async def post_users_me_verify_portal(
+    payload: PortalVerifyRequest,
+    request: Request,
+    current_user: UserRecord = Depends(get_current_user),
+    service: IdentityService = Depends(get_identity_service),
+) -> UserMeResponse:
+    """Verify DB-backed role authorization for a specific login portal."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.verify_login_portal(
+        user=current_user,
+        portal=payload.portal,
+        request_id=request_id,
+    )
 
 
 @users_router.post("/me/onboarding", response_model=UserMeResponse)

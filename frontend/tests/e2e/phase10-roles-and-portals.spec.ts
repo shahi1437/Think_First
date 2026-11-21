@@ -52,7 +52,11 @@ test.describe("Phase 10 Role-Aware Login, Portal Switcher & Multi-Role Access", 
     await page.getByRole("button", { name: /Sign in/i }).click();
     await page.waitForURL("**/student/onboarding", { timeout: 25_000 });
     await page.getByLabel(/Full name/i).fill("P10 Student");
-    await page.getByRole("button", { name: /Complete onboarding/i }).click();
+    await page
+      .getByRole("button", {
+        name: /Start My Learning Journey|Complete onboarding/i,
+      })
+      .click();
     await page.waitForURL("**/student", { timeout: 25_000 });
     await expect(page.getByRole("group", { name: "Portal switcher" })).toHaveCount(0);
 

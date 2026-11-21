@@ -20,11 +20,13 @@ admin_users_router = APIRouter(prefix="/admin/users", tags=["Admin Users & Roles
 async def list_admin_users(
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    role: RoleName | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=120),
     _admin_user: UserRecord = Depends(require_roles("admin")),
     service: IdentityService = Depends(get_identity_service),
 ) -> PaginatedResponse[AdminUserSummary]:
     """List users and their DB-backed roles (Admin only)."""
-    return await service.list_users(limit=limit, offset=offset)
+    return await service.list_users(limit=limit, offset=offset, role=role, q=q)
 
 
 @admin_users_router.post("/{user_id}/roles", response_model=AdminRoleMutationResponse)

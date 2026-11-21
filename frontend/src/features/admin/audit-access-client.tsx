@@ -30,14 +30,25 @@ export function AuditAccessClient({
 }: AuditAccessClientProps) {
   const [users, setUsers] = useState<AdminUserSummary[]>(initialUsers);
   const [logs, setLogs] = useState<AdminAuditLogItem[]>(initialLogs);
+  const [roleFilter, setRoleFilter] = useState<
+    "all" | "student" | "teacher" | "admin"
+  >("all");
+  const [userSearch, setUserSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  async function refreshUsersAndLogs() {
+  async function refreshUsersAndLogs(
+    nextRole: "all" | "student" | "teacher" | "admin" = roleFilter,
+    nextSearch: string = userSearch,
+  ) {
     const [uRes, lRes] = await Promise.all([
-      fetchAdminUsers(accessToken, 50),
+      fetchAdminUsers(accessToken, {
+        limit: 50,
+        role: nextRole === "all" ? undefined : nextRole,
+        q: nextSearch.trim() || undefined,
+      }),
       fetchAdminAuditLogs(accessToken, {
         action_prefix: actionFilter.trim() || undefined,
         limit: 50,
@@ -45,6 +56,28 @@ export function AuditAccessClient({
     ]);
     setUsers(uRes.items);
     setLogs(lRes.items);
+  }
+
+  async function handleFilterUsers(
+    nextRole: "all" | "student" | "teacher" | "admin" = roleFilter,
+    nextSearch: string = userSearch,
+  ) {
+    setBusy("filter-users");
+    setErrorMsg(null);
+    try {
+      const uRes = await fetchAdminUsers(accessToken, {
+        limit: 50,
+        role: nextRole === "all" ? undefined : nextRole,
+        q: nextSearch.trim() || undefined,
+      });
+      setUsers(uRes.items);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to filter users.",
+      );
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function handleGrant(userId: string, role: "teacher" | "admin") {
@@ -138,10 +171,56 @@ export function AuditAccessClient({
 
       {/* Role Management Table */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
-          <Users className="h-4 w-4 text-indigo-600" />
-          <span>Platform Users &amp; DB-Backed Roles ({users.length})</span>
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
+              <Users className="h-4 w-4 text-indigo-600" />
+              <span>Platform Users &amp; DB-Backed Roles ({users.length})</span>
+            </h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Teacher provisioning: verify the instructor has registered an
+              account, search their email below, and grant the{" "}
+              <strong>teacher</strong> role.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <select
+              aria-label="Filter users by role"
+              value={roleFilter}
+              onChange={(e) => {
+                const next = e.target.value as
+                  | "all"
+                  | "student"
+                  | "teacher"
+                  | "admin";
+                setRoleFilter(next);
+                void handleFilterUsers(next, userSearch);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-800"
+            >
+              <option value="all">All Roles</option>
+              <option value="student">Students</option>
+              <option value="teacher">Teachers</option>
+              <option value="admin">Admins</option>
+            </select>
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Search name or email..."
+              className="rounded-lg border border-slate-300 px-3 py-1.5"
+            />
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void handleFilterUsers(roleFilter, userSearch)}
+              className="rounded-lg bg-[#0b1221] px-3 py-1.5 font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              Search
+            </button>
+          </div>
+        </div>
 
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs">

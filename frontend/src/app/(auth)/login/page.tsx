@@ -1,5 +1,7 @@
+import { GraduationCap, KeyRound, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AuthPortalShell } from "@/components/auth-portal-shell";
 import { LoginForm } from "@/features/auth/login-form";
 import { fetchCurrentUser } from "@/lib/api-client";
 import { resolvePostLoginRedirect } from "@/lib/auth/roles";
@@ -15,8 +17,11 @@ function mapLoginError(errorCode?: string): string | undefined {
   if (errorCode === "auth_callback_failed") {
     return "Authentication link verification failed or expired. Please sign in again.";
   }
+  if (errorCode === "verification_unavailable") {
+    return "Unable to verify your account permissions right now. Please sign in again.";
+  }
   if (errorCode === "supabase_unconfigured") {
-    return "Supabase authentication is not configured for this environment yet.";
+    return "Authentication service is not configured for this environment yet.";
   }
   return undefined;
 }
@@ -49,31 +54,45 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900"
-          >
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#0b1221] text-xs font-bold text-teal-300">
-              CM
-            </span>
-            CodeMentor AI
-          </Link>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
-            Sign in to your account
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Think First. Code Better.
-          </p>
-        </div>
-
-        <LoginForm
-          nextPath={params.next}
-          initialError={mapLoginError(params.error)}
-        />
+    <AuthPortalShell
+      badge="Portal Sign In"
+      title="Choose your login portal"
+      subtitle="Select your dedicated role portal below, or sign in directly to be routed to your authorized workspace."
+      icon={KeyRound}
+      accent="indigo"
+      footerLinks={[
+        { href: "/register", label: "Create Student Account" },
+        { href: "/", label: "Back to Home" },
+      ]}
+    >
+      <div className="mb-6 grid grid-cols-3 gap-2">
+        <Link
+          href="/login/student"
+          className="flex flex-col items-center gap-1 rounded-xl border border-teal-200 bg-teal-50/70 px-2 py-2.5 text-center text-xs font-semibold text-teal-900 transition hover:bg-teal-100"
+        >
+          <GraduationCap className="h-4 w-4 text-teal-700" aria-hidden="true" />
+          <span>Student</span>
+        </Link>
+        <Link
+          href="/login/teacher"
+          className="flex flex-col items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50/70 px-2 py-2.5 text-center text-xs font-semibold text-indigo-900 transition hover:bg-indigo-100"
+        >
+          <Users className="h-4 w-4 text-indigo-700" aria-hidden="true" />
+          <span>Teacher</span>
+        </Link>
+        <Link
+          href="/login/admin"
+          className="flex flex-col items-center gap-1 rounded-xl border border-slate-300 bg-slate-100 px-2 py-2.5 text-center text-xs font-semibold text-slate-900 transition hover:bg-slate-200"
+        >
+          <ShieldCheck className="h-4 w-4 text-slate-700" aria-hidden="true" />
+          <span>Admin</span>
+        </Link>
       </div>
-    </main>
+
+      <LoginForm
+        nextPath={params.next}
+        initialError={mapLoginError(params.error)}
+      />
+    </AuthPortalShell>
   );
 }

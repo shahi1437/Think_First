@@ -438,7 +438,12 @@ def test_database_url_normalization_and_cors_env_parsing(
         "postgresql+asyncpg://postgres.vsmrwfoqqjvomtjpypyv:myPass@"
         "aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
     )
-    assert session_args == {"ssl": "require"}
+    assert session_args == {"ssl": "require", "statement_cache_size": 0}
+
+    with pytest.raises(ValueError, match="placeholder"):
+        normalize_database_url_and_connect_args(
+            "postgresql://postgres.vsmrwfoqqjvomtjpypyv:[YOUR-PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres"
+        )
 
     tx_url, tx_args = normalize_database_url_and_connect_args(
         "postgres://postgres.vsmrwfoqqjvomtjpypyv:myPass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"

@@ -6,8 +6,11 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Database,
+  GraduationCap,
   Layers,
   ShieldAlert,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -30,33 +33,89 @@ export function AdminDashboardClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
+            <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">
               Authorized Admin Studio
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-[34px]">
               Curriculum &amp; Assessment Control Center — {adminName}
             </h1>
-            <p className="mt-1.5 text-sm text-slate-600">
-              All metrics below are queried live from PostgreSQL with strict
-              Admin RBAC &amp; immutable audit logging.
+            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-300">
+              All user counts, course oversight metrics, and system health probes
+              below are queried live from PostgreSQL with strict Admin RBAC.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2.5">
+            <Link
+              href="/admin/audit"
+              className="rounded-xl bg-teal-400 px-4 py-2.5 text-[15px] font-semibold text-slate-950 transition hover:bg-teal-300"
+            >
+              Manage Users &amp; Roles
+            </Link>
             <Link
               href="/admin/problems"
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-indigo-500"
             >
               Open Problem Studio
             </Link>
             <Link
               href="/admin/curriculum"
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+              className="rounded-xl border border-slate-600 bg-slate-900/70 px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-slate-800"
             >
               Manage Lessons &amp; Tracks
             </Link>
+          </div>
+        </div>
+
+        {/* Real Platform Users & Course Oversight Counters */}
+        <div className="mt-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+              <span>Students</span>
+              <GraduationCap className="h-4 w-4 text-teal-300" aria-hidden="true" />
+            </div>
+            <p className="mt-1.5 text-3xl font-bold text-white">
+              {overview.students_count ?? 0}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">DB-backed student role</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+              <span>Teachers</span>
+              <Users className="h-4 w-4 text-indigo-300" aria-hidden="true" />
+            </div>
+            <p className="mt-1.5 text-3xl font-bold text-white">
+              {overview.teachers_count ?? 0}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">Approved instructors</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+              <span>Admins</span>
+              <ShieldCheck className="h-4 w-4 text-amber-300" aria-hidden="true" />
+            </div>
+            <p className="mt-1.5 text-3xl font-bold text-white">
+              {overview.admins_count ?? 0}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">Authorized governors</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+              <span>Courses &amp; Enrollments</span>
+              <BookOpen className="h-4 w-4 text-teal-300" aria-hidden="true" />
+            </div>
+            <p className="mt-1.5 text-3xl font-bold text-white">
+              {overview.courses_active ?? 0}
+              <span className="ml-1.5 text-sm font-normal text-slate-400">
+                / {overview.courses_total ?? 0} active
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {overview.enrollments_active ?? 0} enrollments ·{" "}
+              {overview.assignments_published ?? 0} published assignments
+            </p>
           </div>
         </div>
       </section>
