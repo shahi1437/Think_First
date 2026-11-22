@@ -538,3 +538,89 @@ async def test_execution_service_fails_before_db_write_when_judge0_disabled() ->
     assert exc_info.value.status_code == 503
     assert exc_info.value.code == "EXECUTION_SERVICE_UNAVAILABLE"
     repo.create_submission.assert_not_awaited()
+
+
+async def test_http_judge0_client_clamps_java_and_js_limits_on_422_for_external_providers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify Java (62) and JS (63) request VM headroom and clamp cleanly on provider HTTP 422."""
+    posted_payloads: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/submissions":
+            body = json.loads(request.content.decode("utf-8"))
+            posted_payloads.append(body)
+            # Simulate managed RapidAPI Judge0 CE capping memory<=512000 and threads<=60
+            mem = body.get("memory_limit")
+            procs = body.get("max_processes_and_or_threads")
+            if (isinstance(mem, int) and mem > 512000) or (isinstance(procs, int) and procs > 60):
+                return httpx.Response(
+                    422,
+                    json={"memory_limit": ["must be less than or equal to 512000"]},
+                )
+            return httpx.Response(201, json={"token": f"tok-lang-{body['language_id']}"})
+        if request.method == "GET" and request.url.path.startswith("/submissions/tok-lang-"):
+            return httpx.Response(
+                200,
+                json={
+                    "token": request.url.path.rsplit("/", 1)[-1],
+                    "status": {"id": 3, "description": "Accepted"},
+                    "stdout": _b64("42\n"),
+                    "stderr": None,
+                    "compile_output": None,
+                    "time": "0.120",
+                    "memory": 32000,
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    real_async_client = httpx.AsyncClient
+
+    def mock_client(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = transport
+        return real_async_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_client)
+
+    settings = Settings(
+        judge0_base_url="https://judge0-ce.p.rapidapi.com",
+        judge0_auth_mode="rapidapi",
+        judge0_rapidapi_key="rapid-test-key-422",
+        judge0_poll_interval_seconds=0.1,
+    )
+    client = HttpJudge0Client(settings)
+
+    for lang_id, expected_min_cpu, expected_min_wall in [(63, 2.5, 6.0), (62, 3.0, 8.0)]:
+        posted_payloads.clear()
+        outcome = await client.execute_test_case(
+            source_code="code",
+            judge0_language_id=lang_id,
+            stdin="",
+            expected_output="42",
+            cpu_time_limit_seconds=1.5,
+            memory_limit_kb=131072,
+        )
+        assert outcome.verdict == "accepted"
+        assert len(posted_payloads) == 2
+        # First attempt requests full RLIMIT_AS headroom; second clamps to managed limits
+        assert posted_payloads[0]["cpu_time_limit"] == expected_min_cpu
+        assert float(posted_payloads[0]["wall_time_limit"]) >= expected_min_wall  # type: ignore[arg-type]
+        assert posted_payloads[1]["memory_limit"] == 512000
+        assert posted_payloads[1]["max_processes_and_or_threads"] == 60
+        assert posted_payloads[1]["enable_network"] is False
+
+
+def test_database_safe_error_context_classifies_supavisor_xx000_internal_error() -> None:
+    from app.core.database import _extract_safe_db_error_context
+
+    class _FakeInternalServerError(Exception):
+        sqlstate = "XX000"
+
+    class _WrappedDBError(Exception):
+        def __init__(self) -> None:
+            self.orig = _FakeInternalServerError("internal error")
+
+    ctx = _extract_safe_db_error_context(_WrappedDBError())
+    assert ctx["sqlstate"] == "XX000"
+    assert ctx["hint"] == "supavisor_internal_or_circuit_breaker"

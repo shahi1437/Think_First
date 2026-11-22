@@ -6,7 +6,7 @@ services:
     dockerContext: .
     plan: free
     region: singapore
-    branch: feat/phase4-adaptive-learning-flow-premium-ui
+    branch: develop
     healthCheckPath: /health/ready
     envVars:
       - key: APP_ENV
@@ -22,10 +22,10 @@ services:
       - key: CORS_ORIGINS
         sync: false
       # Production code execution (Judge0 CE via dedicated VPS `auth_token` or RapidAPI `rapidapi`)
-      # Set JUDGE0_BASE_URL + JUDGE0_AUTH_TOKEN (or JUDGE0_RAPIDAPI_KEY) in Render Dashboard -> Environment.
+      # Set JUDGE0_AUTH_MODE + JUDGE0_BASE_URL + JUDGE0_AUTH_TOKEN (or JUDGE0_RAPIDAPI_KEY) in Render Dashboard -> Environment.
       # To boot temporarily without Judge0 while keeping auth/lessons/diagnostics active, set JUDGE0_AUTH_MODE=disabled.
       - key: JUDGE0_AUTH_MODE
-        value: auto
+        sync: false
       - key: JUDGE0_BASE_URL
         sync: false
       - key: JUDGE0_AUTH_TOKEN

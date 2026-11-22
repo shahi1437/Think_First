@@ -31,6 +31,8 @@ def _extract_safe_db_error_context(exc: Exception) -> dict[str, Any]:
         hint = "circuit_breaker_open"
     elif sqlstate == "28P01" or "password" in msg_lower or "authentication failed" in msg_lower:
         hint = "authentication_failed"
+    elif sqlstate == "XX000" and "internal" in msg_lower:
+        hint = "supavisor_internal_or_circuit_breaker"
     elif "ssl" in msg_lower or "certificate" in msg_lower:
         hint = "ssl_or_tls_error"
     elif isinstance(exc, TimeoutError) or "timeout" in msg_lower:

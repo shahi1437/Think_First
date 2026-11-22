@@ -91,7 +91,12 @@ services:
       ENABLE_NETWORK: "false"
       ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
       ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+      CPU_TIME_LIMIT: "5"
+      WALL_TIME_LIMIT: "10"
+      MEMORY_LIMIT: "4194304"
       MAX_MEMORY_LIMIT: "4194304"
+      MAX_PROCESSES_AND_OR_THREADS: "64"
+      MAX_MAX_PROCESSES_AND_OR_THREADS: "120"
     depends_on:
       - judge0-redis
       - judge0-db
@@ -112,7 +117,12 @@ services:
       ENABLE_NETWORK: "false"
       ENABLE_PER_PROCESS_AND_THREAD_TIME_LIMIT: "true"
       ENABLE_PER_PROCESS_AND_THREAD_MEMORY_LIMIT: "true"
+      CPU_TIME_LIMIT: "5"
+      WALL_TIME_LIMIT: "10"
+      MEMORY_LIMIT: "4194304"
       MAX_MEMORY_LIMIT: "4194304"
+      MAX_PROCESSES_AND_OR_THREADS: "64"
+      MAX_MAX_PROCESSES_AND_OR_THREADS: "120"
     depends_on:
       - judge0-redis
       - judge0-db
