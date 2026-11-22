@@ -288,7 +288,7 @@ async def test_live_five_languages_execution_isolation_and_piston_fallback() -> 
                 )
                 assert ce_body["execution_provider"] == "judge0"
 
-            # 4. Verify honest ML vs Rule-Based diagnosis + language-scoped RAG
+            # 4. Verify honest ML vs Rule-Based diagnosis + Socratic AI Mentor + language-scoped RAG
             assert py_wrong_sub_id is not None and c_wrong_sub_id is not None
             py_diag = (
                 await api.post(f"/api/v1/mentor/diagnose/{py_wrong_sub_id}", headers=hdr_a)
@@ -303,36 +303,99 @@ async def test_live_five_languages_execution_isolation_and_piston_fallback() -> 
             assert c_diag["language_slug"] == "c"
             assert c_diag["model_version"] == "rule-multilang-v1"
 
-            # 5. Per-language progress & Skill Graph isolation
-            sel_js = await api.post(
-                "/api/v1/learning/languages/select",
+            # Verify Socratic AI Mentor session + hint turn on a C submission (no Python leakage)
+            c_mentor_sess = await api.post(
+                "/api/v1/mentor/sessions",
                 headers=hdr_a,
-                json={"language_slug": "javascript"},
+                json={"problem_id": prob_id, "explanation_language": "en"},
             )
-            assert sel_js.status_code == 200
-            assert sel_js.json()["active_language_slug"] == "javascript"
-
-            js_lessons = (await api.get("/api/v1/learning/lessons", headers=hdr_a)).json()
-            assert len(js_lessons) == 10
-            assert all(lsn["language_slug"] == "javascript" for lsn in js_lessons)
-            first_js = js_lessons[0]
-
-            # Complete first JS lesson (`js-01-hello-output`)
-            run_js = await api.post(
-                f"/api/v1/learning/lessons/{first_js['lesson_id']}/exercise/run",
+            assert c_mentor_sess.status_code in (200, 201), c_mentor_sess.text
+            c_sess_id = c_mentor_sess.json()["id"]
+            c_mentor_turn = await api.post(
+                f"/api/v1/mentor/sessions/{c_sess_id}/turns",
                 headers=hdr_a,
-                json={"source_code": "console.log('Hello JavaScript');\nconsole.log(5 * 5);\n"},
+                json={
+                    "action": "diagnose",
+                    "submission_id": c_wrong_sub_id,
+                    "student_message": "Why does my C loop sum odd numbers instead of even ones?",
+                },
             )
-            assert run_js.status_code == 200, run_js.text
-            assert run_js.json()["exercise_passed"] is True
-            assert run_js.json()["progress_status"] == "completed"
+            assert c_mentor_turn.status_code == 200, c_mentor_turn.text
+            c_turn_data = c_mentor_turn.json()
+            assert len(c_turn_data["turns"]) >= 1
+            mentor_reply_text = " ".join(
+                (t.get("content") or "") + " " + (t.get("hint_text") or "")
+                for t in c_turn_data["turns"]
+                if t.get("role") == "mentor"
+            )
+            assert "range(" not in mentor_reply_text.lower()
 
-            # Confirm JS dashboard shows 1/10 while Python STILL shows 0/24!
-            js_dash = (await api.get("/api/v1/learning/dashboard", headers=hdr_a)).json()
-            assert js_dash["language_slug"] == "javascript"
-            assert js_dash["lessons_completed"] == 1
-            assert js_dash["lessons_total"] == 10
+            # 5. Per-language guided lessons, diagnostics & Skill Graph isolation across ALL 5 languages
+            lesson_solutions: dict[str, str] = {
+                "python": "print('CodeMentor')\nprint(6 * 7)\n",
+                "javascript": "console.log('Hello JavaScript');\nconsole.log(5 * 5);\n",
+                "c": '#include <stdio.h>\nint main(void){ printf("Hello C\\n%d\\n", 7*7); return 0; }\n',
+                "cpp": '#include <iostream>\nint main(){ std::cout << "Hello C++\\n" << (8*8) << "\\n"; return 0; }\n',
+                "java": 'public class Main { public static void main(String[] a){ System.out.println("Hello Java"); System.out.println(9*9); } }\n',
+            }
 
+            # First complete Python lesson #1 -> Python becomes 1/24
+            py_lessons = (
+                await api.get("/api/v1/learning/lessons?language=python", headers=hdr_a)
+            ).json()
+            assert len(py_lessons) >= 24
+            py_run = await api.post(
+                f"/api/v1/learning/lessons/{py_lessons[0]['lesson_id']}/exercise/run",
+                headers=hdr_a,
+                json={"source_code": lesson_solutions["python"]},
+            )
+            assert py_run.status_code == 200, py_run.text
+            assert py_run.json()["exercise_passed"] is True
+            assert py_run.json()["progress_status"] == "completed"
+
+            # Now switch to JS, C, C++, Java in turn: run guided lesson #1 + verify language-specific diagnostic
+            for slug in ("javascript", "c", "cpp", "java"):
+                sel_resp = await api.post(
+                    "/api/v1/learning/languages/select",
+                    headers=hdr_a,
+                    json={"language_slug": slug},
+                )
+                assert sel_resp.status_code == 200, sel_resp.text
+                assert sel_resp.json()["active_language_slug"] == slug
+
+                lang_lessons = (await api.get("/api/v1/learning/lessons", headers=hdr_a)).json()
+                assert len(lang_lessons) == 10
+                assert all(lsn["language_slug"] == slug for lsn in lang_lessons)
+
+                run_lsn = await api.post(
+                    f"/api/v1/learning/lessons/{lang_lessons[0]['lesson_id']}/exercise/run",
+                    headers=hdr_a,
+                    json={"source_code": lesson_solutions[slug]},
+                )
+                assert run_lsn.status_code == 200, f"{slug} lesson run failed: {run_lsn.text}"
+                assert run_lsn.json()["exercise_passed"] is True
+                assert run_lsn.json()["progress_status"] == "completed"
+
+                lang_dash = (await api.get("/api/v1/learning/dashboard", headers=hdr_a)).json()
+                assert lang_dash["language_slug"] == slug
+                assert lang_dash["lessons_completed"] == 1
+                assert lang_dash["lessons_total"] == 10
+
+                # Start language-specific diagnostic session & confirm question belongs to this language
+                diag_start = await api.post(
+                    "/api/v1/learning/diagnostics/sessions",
+                    headers=hdr_a,
+                    json={"explanation_language": "en", "language_slug": slug},
+                )
+                assert diag_start.status_code in (200, 201), (
+                    f"{slug} diag failed: {diag_start.text}"
+                )
+                diag_body = diag_start.json()
+                assert diag_body["language_slug"] == slug
+                assert diag_body["current_question"] is not None
+                assert diag_body["current_question"]["language_slug"] == slug
+
+            # Switch back to Python -> confirm Python progress remained 1/24 (uncorrupted) AND diag works
             sel_py = await api.post(
                 "/api/v1/learning/languages/select",
                 headers=hdr_a,
@@ -341,19 +404,26 @@ async def test_live_five_languages_execution_isolation_and_piston_fallback() -> 
             assert sel_py.status_code == 200
             py_dash = (await api.get("/api/v1/learning/dashboard", headers=hdr_a)).json()
             assert py_dash["language_slug"] == "python"
-            assert py_dash["lessons_completed"] == 0
+            assert py_dash["lessons_completed"] == 1
             assert py_dash["lessons_total"] >= 24
 
-            # Switch back to JS -> persisted 1/10 remains intact
-            await api.post(
-                "/api/v1/learning/languages/select",
+            py_diag_start = await api.post(
+                "/api/v1/learning/diagnostics/sessions",
                 headers=hdr_a,
-                json={"language_slug": "javascript"},
+                json={"explanation_language": "en", "language_slug": "python"},
             )
+            assert py_diag_start.status_code in (200, 201), py_diag_start.text
+            assert py_diag_start.json()["language_slug"] == "python"
+
+            # Verify overview reports all 5 independent progress counters accurately
             overview_after = (await api.get("/api/v1/learning/languages", headers=hdr_a)).json()
             after_map = {x["slug"]: x for x in overview_after["languages"]}
-            assert after_map["javascript"]["lessons_completed"] == 1
-            assert after_map["python"]["lessons_completed"] == 0
+            assert after_map["python"]["lessons_completed"] == 1
+            assert after_map["python"]["lessons_total"] >= 24
+            for slug in ("javascript", "c", "cpp", "java"):
+                assert after_map[slug]["lessons_completed"] == 1
+                assert after_map[slug]["lessons_total"] == 10
+                assert after_map[slug]["submissions_count"] >= 3
 
             # 6. Security: Cross-student isolation & RBAC preserved
             assert first_sub_id is not None
