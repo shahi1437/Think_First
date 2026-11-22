@@ -113,4 +113,68 @@ describe("OnboardingForm", () => {
     });
     expect(pushMock).toHaveBeenCalledWith("/student");
   });
+
+  it("redirects experienced learners choosing diagnostic_assessment directly to full diagnostic", async () => {
+    pushMock.mockClear();
+    const updatedUser: UserMeResponse = {
+      ...baseUser,
+      full_name: "Tariq Hasan",
+      onboarding_completed: true,
+      preferences: {
+        programming_experience: "intermediate",
+        preferred_language: "javascript",
+        learning_goal: "competitive_programming",
+        daily_practice_minutes: 45,
+        preferred_explanation_language: "en",
+        starting_preference: "diagnostic_assessment",
+        recommended_entry_track: "diagnostic_assessment",
+        recommendation_rationale:
+          "You already have programming experience — starting directly with the 8-domain adaptive diagnostic.",
+        entry_redirect_path: "/student/diagnostic?mode=full&entry=onboarding",
+      },
+    };
+
+    const submitSpy = vi.fn().mockResolvedValue(updatedUser);
+    render(
+      <OnboardingForm
+        mode="onboarding"
+        accessToken="token-123"
+        initialUser={baseUser}
+        onSubmitValues={submitSpy}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Full name/i), {
+      target: { value: "Tariq Hasan" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Programming experience$/i), {
+      target: { value: "intermediate" },
+    });
+    fireEvent.change(
+      screen.getByLabelText(/Preferred programming language/i),
+      { target: { value: "javascript" } },
+    );
+    fireEvent.change(screen.getByLabelText(/Preferred starting path/i), {
+      target: { value: "diagnostic_assessment" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Start My Learning Journey/i }),
+    );
+
+    await waitFor(() => {
+      expect(submitSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          programming_experience: "intermediate",
+          preferred_language: "javascript",
+          starting_preference: "diagnostic_assessment",
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith(
+        "/student/diagnostic?mode=full&entry=onboarding",
+      );
+    });
+  });
 });
