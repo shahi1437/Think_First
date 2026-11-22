@@ -18,20 +18,15 @@ type SessionResolution =
   | { status: "unconfigured" }
   | { status: "unauthenticated" };
 
-// Deduplicate Supabase + FastAPI identity verification within a single RSC request
+// Deduplicate identity verification within a single RSC request
 // (prevents duplicate round-trips across layout.tsx and page.tsx without caching across requests/users).
+// Note: proxy.ts already refreshes Supabase Auth cookies via supabase.auth.getUser(), and
+// fetchCurrentUser() cryptographically verifies the Supabase JWT signature/audience/expiry via JWKS
+// and enforces DB-backed roles on FastAPI — avoiding a redundant second Supabase HTTP round-trip here.
 const resolveVerifiedSession = cache(async (): Promise<SessionResolution> => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { status: "unconfigured" };
-  }
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    return { status: "unauthenticated" };
   }
 
   const {

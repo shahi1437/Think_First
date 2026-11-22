@@ -618,6 +618,14 @@ class ProblemRepository:
         )
         return rows, total
 
+    async def count_student_submissions_by_language(self, student_id: UUID) -> dict[str, int]:
+        stmt = (
+            select(Submission.language_slug, func.count(Submission.id))
+            .where(Submission.student_id == student_id)
+            .group_by(Submission.language_slug)
+        )
+        return {str(row[0]): int(row[1]) for row in (await self._session.execute(stmt)).all()}
+
     async def save_revision(
         self,
         *,

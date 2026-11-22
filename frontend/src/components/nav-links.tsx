@@ -208,11 +208,31 @@ export function NavLinks({
         </div>
 
         {/* Mobile Compact Bar & Collapsible Drawer */}
-        <div className="border-b border-slate-200 bg-white px-4 py-2.5 md:hidden">
+        <div className="relative border-b border-slate-200 bg-white px-4 py-2.5 md:hidden">
+          {pendingHref ? (
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-teal-500"
+            />
+          ) : null}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold capitalize text-slate-700">
-              {PORTAL_LABELS[activeRole]} Navigation
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold capitalize text-slate-700">
+                {PORTAL_LABELS[activeRole]} Navigation
+              </span>
+              {pendingHref ? (
+                <span
+                  role="status"
+                  className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-800"
+                >
+                  <Loader2
+                    className="h-3 w-3 animate-spin text-teal-600"
+                    aria-hidden="true"
+                  />
+                  <span>Loading…</span>
+                </span>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => setMobileOpen((prev) => !prev)}

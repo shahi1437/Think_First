@@ -189,17 +189,23 @@ class AdaptiveRecommendationService:
         )
         if not problems:
             problems, _ = await self._problem_repo.list_published_problems(limit=20, offset=0)
-        for prob, ver in problems:
+        candidate_problems = [
+            (prob, ver) for prob, ver in problems if not prob.slug.startswith("transfer-")
+        ]
+        candidate_ids = [prob.id for prob, _ in candidate_problems]
+        accepted_ids = await self._mentor_repo.list_accepted_submit_problem_ids(
+            student_id=user.id, problem_ids=candidate_ids
+        )
+        links_by_source = await self._mentor_repo.list_active_verification_links_by_source(
+            candidate_ids
+        )
+        for prob, ver in candidate_problems:
             if len(recommendations) >= 4:
                 break
-            if prob.slug.startswith("transfer-"):
-                continue
-            accepted = await self._mentor_repo.has_accepted_submit(
-                student_id=user.id, problem_id=prob.id
-            )
-            link_tuple = await self._mentor_repo.get_verification_link_for_source_problem(prob.id)
+            is_accepted = prob.id in accepted_ids
+            link_tuple = links_by_source.get(prob.id)
 
-            if accepted is not None and link_tuple is not None:
+            if is_accepted and link_tuple is not None:
                 link, _, transfer_ver = link_tuple
                 latest_att = await self._mentor_repo.get_latest_verification_attempt(
                     student_id=user.id, verification_link_id=link.id
@@ -231,7 +237,7 @@ class AdaptiveRecommendationService:
                     continue
 
             # Recommend debugging problem if loops/variables are at least introduced or track >= basic
-            if accepted is None and ver.mode == "debugging":
+            if not is_accepted and ver.mode == "debugging":
                 loops_rank = STATE_RANK.get(skill_state_map.get("loops", "unobserved"), 0)
                 if loops_rank >= 1 or track_status.selected_track_slug != "absolute_beginner":
                     recommendations.append(

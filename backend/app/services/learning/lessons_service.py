@@ -99,16 +99,12 @@ class LessonsAndTracksService:
     ) -> LanguageProgressOverview:
         active_lang = resolve_user_language(user, active_override)
         languages = await self._problem_repo.list_languages(enabled_only=True)
-        all_lessons = await self._learning_repo.list_published_lessons()
-        progress_map = await self._learning_repo.list_student_lesson_progress(user.id)
-        diag_sessions = await self._learning_repo.list_student_diagnostic_sessions(
-            student_id=user.id, limit=50
-        )
+        lesson_totals = await self._learning_repo.count_published_lessons_by_language()
+        completed_counts = await self._learning_repo.count_completed_lessons_by_language(user.id)
+        diag_counts = await self._learning_repo.count_completed_diagnostics_by_language(user.id)
         enrollments = await self._learning_repo.list_track_enrollments(user.id)
         enrollment_by_lang = {e.language_slug: e.selected_track_slug for e in enrollments}
-        subs, _ = await self._problem_repo.list_student_submissions(
-            student_id=user.id, limit=250, offset=0
-        )
+        sub_counts = await self._problem_repo.count_student_submissions_by_language(user.id)
 
         # Canonical display order: python, javascript, c, cpp, java
         order_map = {"python": 0, "javascript": 1, "c": 2, "cpp": 3, "java": 4}
@@ -116,18 +112,6 @@ class LessonsAndTracksService:
 
         items: list[LanguageProgressItem] = []
         for lang in ordered_langs:
-            lang_lessons = [lsn for lsn, _ in all_lessons if lsn.language_slug == lang.slug]
-            completed_cnt = sum(
-                1
-                for lsn in lang_lessons
-                if lsn.id in progress_map and progress_map[lsn.id].status == "completed"
-            )
-            diag_cnt = sum(
-                1
-                for ds in diag_sessions
-                if ds.language_slug == lang.slug and ds.status == "completed"
-            )
-            sub_cnt = sum(1 for s in subs if s.language_slug == lang.slug)
             track_val = enrollment_by_lang.get(lang.slug)
             items.append(
                 LanguageProgressItem(
@@ -137,10 +121,10 @@ class LessonsAndTracksService:
                     version_label=lang.version_label,
                     is_enabled=lang.is_enabled,
                     is_active=lang.slug == active_lang,
-                    lessons_completed=completed_cnt,
-                    lessons_total=len(lang_lessons),
-                    diagnostic_sessions_completed=diag_cnt,
-                    submissions_count=sub_cnt,
+                    lessons_completed=completed_counts.get(lang.slug, 0),
+                    lessons_total=lesson_totals.get(lang.slug, 0),
+                    diagnostic_sessions_completed=diag_counts.get(lang.slug, 0),
+                    submissions_count=sub_counts.get(lang.slug, 0),
                     selected_track_slug=track_val,
                 )
             )
@@ -279,7 +263,9 @@ class LessonsAndTracksService:
         language_slug: str | None = None,
     ) -> list[LessonSummaryView]:
         lang = resolve_user_language(user, language_slug)
-        rows = await self._learning_repo.list_published_lessons(language_slug=lang)
+        rows = await self._learning_repo.list_published_lessons(
+            language_slug=lang, include_content=False
+        )
         progress_map = await self._learning_repo.list_student_lesson_progress(user.id)
         completed_slugs = {
             lesson.slug
@@ -303,15 +289,10 @@ class LessonsAndTracksService:
                 status_code=status.HTTP_404_NOT_FOUND,
             )
         lesson, version = found
-        all_rows = await self._learning_repo.list_published_lessons(
-            language_slug=lesson.language_slug
-        )
         progress_map = await self._learning_repo.list_student_lesson_progress(user.id)
-        completed_slugs = {
-            lsn.slug
-            for lsn, _ in all_rows
-            if lsn.id in progress_map and progress_map[lsn.id].status == "completed"
-        }
+        completed_slugs = await self._learning_repo.list_completed_lesson_slugs(
+            student_id=user.id, language_slug=lesson.language_slug
+        )
         summary = self._to_summary(lesson, version, progress_map, completed_slugs)
         prog = progress_map.get(lesson.id)
 

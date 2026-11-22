@@ -357,19 +357,29 @@ class LearningDnaService:
             "retention_attempts": len(retention_attempts),
         }
 
-        snap = await self._growth_repo.create_dna_snapshot(
-            student_id=user.id,
-            language_slug=lang,
-            selected_track_slug=track_status.selected_track_slug,
-            dimensions_json=[d.model_dump() for d in dimensions],
-            skill_state_summary=skill_state_summary,
-            strengths=strengths,
-            growth_areas=growth_areas,
-            source_counts=source_counts,
-        )
         recent = await self._growth_repo.list_dna_snapshots(
             student_id=user.id, limit=6, language_slug=lang
         )
+        latest_snap = recent[0] if recent else None
+        if (
+            latest_snap is not None
+            and latest_snap.selected_track_slug == track_status.selected_track_slug
+            and dict(latest_snap.source_counts or {}) == source_counts
+            and dict(latest_snap.skill_state_summary or {}) == skill_state_summary
+        ):
+            snap = latest_snap
+        else:
+            snap = await self._growth_repo.create_dna_snapshot(
+                student_id=user.id,
+                language_slug=lang,
+                selected_track_slug=track_status.selected_track_slug,
+                dimensions_json=[d.model_dump() for d in dimensions],
+                skill_state_summary=skill_state_summary,
+                strengths=strengths,
+                growth_areas=growth_areas,
+                source_counts=source_counts,
+            )
+            recent = [snap, *recent[:5]]
 
         return LearningDnaProfileView(
             snapshot_id=snap.id,

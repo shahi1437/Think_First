@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import defer, selectinload
 
 from app.models.learning import (
     DiagnosticQuestion,
@@ -220,7 +220,7 @@ class LearningRepository:
     # --- Beginner Lessons ---
 
     async def list_published_lessons(
-        self, *, language_slug: str | None = None
+        self, *, language_slug: str | None = None, include_content: bool = True
     ) -> list[tuple[Lesson, LessonVersion]]:
         stmt = (
             select(Lesson, LessonVersion)
@@ -228,10 +228,66 @@ class LearningRepository:
             .where(LessonVersion.status == "published")
             .order_by(Lesson.language_slug.asc(), Lesson.display_order.asc())
         )
+        if not include_content:
+            stmt = stmt.options(
+                defer(LessonVersion.content_en_md),
+                defer(LessonVersion.content_bn_md),
+                defer(LessonVersion.interactive_examples),
+                defer(LessonVersion.guided_exercise),
+                defer(LessonVersion.learning_objectives),
+            )
         if language_slug is not None:
             stmt = stmt.where(Lesson.language_slug == language_slug)
         rows = (await self._session.execute(stmt)).all()
         return [(row[0], row[1]) for row in rows]
+
+    async def count_published_lessons_by_language(self) -> dict[str, int]:
+        stmt = (
+            select(Lesson.language_slug, func.count(Lesson.id))
+            .join(LessonVersion, Lesson.current_published_version_id == LessonVersion.id)
+            .where(LessonVersion.status == "published")
+            .group_by(Lesson.language_slug)
+        )
+        return {str(row[0]): int(row[1]) for row in (await self._session.execute(stmt)).all()}
+
+    async def count_completed_lessons_by_language(self, student_id: UUID) -> dict[str, int]:
+        stmt = (
+            select(Lesson.language_slug, func.count(LessonProgress.id))
+            .join(Lesson, LessonProgress.lesson_id == Lesson.id)
+            .join(LessonVersion, Lesson.current_published_version_id == LessonVersion.id)
+            .where(
+                LessonProgress.student_id == student_id,
+                LessonProgress.status == "completed",
+                LessonVersion.status == "published",
+            )
+            .group_by(Lesson.language_slug)
+        )
+        return {str(row[0]): int(row[1]) for row in (await self._session.execute(stmt)).all()}
+
+    async def count_completed_diagnostics_by_language(self, student_id: UUID) -> dict[str, int]:
+        stmt = (
+            select(DiagnosticSession.language_slug, func.count(DiagnosticSession.id))
+            .where(
+                DiagnosticSession.student_id == student_id,
+                DiagnosticSession.status == "completed",
+            )
+            .group_by(DiagnosticSession.language_slug)
+        )
+        return {str(row[0]): int(row[1]) for row in (await self._session.execute(stmt)).all()}
+
+    async def list_completed_lesson_slugs(
+        self, *, student_id: UUID, language_slug: str
+    ) -> set[str]:
+        stmt = (
+            select(Lesson.slug)
+            .join(LessonProgress, LessonProgress.lesson_id == Lesson.id)
+            .where(
+                LessonProgress.student_id == student_id,
+                LessonProgress.status == "completed",
+                Lesson.language_slug == language_slug,
+            )
+        )
+        return {str(row[0]) for row in (await self._session.execute(stmt)).all()}
 
     async def get_published_lesson_by_slug(self, slug: str) -> tuple[Lesson, LessonVersion] | None:
         stmt = (
@@ -547,6 +603,37 @@ class LearningRepository:
         items: list[dict[str, Any]],
         language_slug: str = "python",
     ) -> list[StudentRecommendation]:
+        existing = list(
+            (
+                await self._session.execute(
+                    select(StudentRecommendation)
+                    .where(
+                        StudentRecommendation.student_id == student_id,
+                        StudentRecommendation.language_slug == language_slug,
+                    )
+                    .order_by(StudentRecommendation.priority.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        existing_sig = [
+            (r.recommendation_type, r.target_id, r.target_slug, r.priority, r.reason_en)
+            for r in existing
+        ]
+        next_sig = [
+            (
+                item["recommendation_type"],
+                item["target_id"],
+                item["target_slug"],
+                item["priority"],
+                item["reason_en"],
+            )
+            for item in items
+        ]
+        if existing_sig == next_sig:
+            return existing
+
         await self._session.execute(
             delete(StudentRecommendation).where(
                 StudentRecommendation.student_id == student_id,
