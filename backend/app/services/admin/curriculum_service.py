@@ -48,6 +48,7 @@ def _to_admin_lesson_detail(lesson: Lesson, version: LessonVersion) -> AdminLess
         version_id=version.id,
         version_number=version.version_number,
         slug=lesson.slug,
+        language_slug=lesson.language_slug,
         skill_slug=lesson.skill_slug,
         display_order=lesson.display_order,
         status=version.status,
@@ -246,10 +247,11 @@ class AdminCurriculumService:
         errors: list[str] = []
         warnings: list[str] = []
 
-        try:
-            ast.parse(reference_solution)
-        except SyntaxError as exc:
-            errors.append(f"Reference syntax error at line {exc.lineno or '?'}: {exc.msg}")
+        if exercise.language_slug == "python":
+            try:
+                ast.parse(reference_solution)
+            except SyntaxError as exc:
+                errors.append(f"Reference syntax error at line {exc.lineno or '?'}: {exc.msg}")
 
         lang_row = await self._problem_repo.get_language_by_slug(exercise.language_slug)
         j0_id = lang_row.judge0_language_id if lang_row else DEFAULT_PYTHON_JUDGE0_ID
@@ -426,10 +428,11 @@ class AdminCurriculumService:
             elif not tests:
                 errors.append("No evaluation tests configured.")
             else:
-                try:
-                    ast.parse(ref)
-                except SyntaxError as exc:
-                    errors.append(f"Syntax error line {exc.lineno or '?'}: {exc.msg}")
+                if q.language_slug == "python":
+                    try:
+                        ast.parse(ref)
+                    except SyntaxError as exc:
+                        errors.append(f"Syntax error line {exc.lineno or '?'}: {exc.msg}")
                 lang_row = await self._problem_repo.get_language_by_slug(q.language_slug)
                 j0_id = lang_row.judge0_language_id if lang_row else DEFAULT_PYTHON_JUDGE0_ID
                 for idx, tc in enumerate(tests, start=1):
@@ -503,6 +506,7 @@ class AdminCurriculumService:
             lesson, _ver = await self._learning_repo.create_admin_lesson(
                 actor_id=actor.id,
                 slug=l_item.slug,
+                language_slug=l_item.language_slug,
                 skill_slug=l_item.skill_slug,
                 display_order=l_item.display_order,
                 version_data={
@@ -594,6 +598,7 @@ class AdminCurriculumService:
                     actor_id=actor.id,
                     question_data={
                         "slug": d_item.slug,
+                        "language_slug": d_item.language_slug,
                         "domain_slug": d_item.domain_slug,
                         "skill_slug": d_item.skill_slug,
                         "difficulty": d_item.difficulty,

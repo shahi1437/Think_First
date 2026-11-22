@@ -1,5 +1,9 @@
+import { LanguageSelector } from "@/components/language-selector";
 import { LearningHistoryClient } from "@/features/growth/learning-history-client";
-import { fetchLearningHistory } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchLearningHistory,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
 export const dynamic = "force-dynamic";
@@ -10,15 +14,28 @@ export default async function StudentLearningHistoryPage() {
     currentPath: "/student/history",
   });
 
-  const history = await fetchLearningHistory(accessToken, { limit: 50 });
+  const [languageOverview, history] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchLearningHistory(accessToken, { limit: 50 }),
+  ]);
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
 
   return (
-    <LearningHistoryClient
-      accessToken={accessToken}
-      initialHistory={history}
-      initialLanguage={
-        user.preferences?.preferred_explanation_language ?? "en"
-      }
-    />
+    <div className="space-y-6">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+      <LearningHistoryClient
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialHistory={history}
+        initialLanguage={explanationLang}
+      />
+    </div>
   );
 }

@@ -29,6 +29,7 @@ class PreferencesRecord:
     preferred_explanation_language: ExplanationLanguage
     starting_preference: StartingPreference
     recommended_entry_track: RecommendedEntryTrack
+    active_language_slug: PreferredLanguage = "python"
 
 
 @dataclass(slots=True)
@@ -74,8 +75,16 @@ class IdentityRepository(Protocol):
         preferred_explanation_language: ExplanationLanguage,
         starting_preference: StartingPreference,
         recommended_entry_track: RecommendedEntryTrack,
+        active_language_slug: PreferredLanguage | None = None,
         full_name: str | None = None,
         mark_onboarding_completed: bool = False,
+    ) -> UserRecord: ...
+
+    async def set_active_language(
+        self,
+        *,
+        user_id: UUID,
+        language_slug: PreferredLanguage,
     ) -> UserRecord: ...
 
     async def list_users(
@@ -110,6 +119,7 @@ def _to_user_record(profile: Profile) -> UserRecord:
             user_id=p.user_id,
             programming_experience=p.programming_experience,  # type: ignore[arg-type]
             preferred_language=p.preferred_language,  # type: ignore[arg-type]
+            active_language_slug=(p.active_language_slug or p.preferred_language or "python"),  # type: ignore[arg-type]
             learning_goal=p.learning_goal,  # type: ignore[arg-type]
             daily_practice_minutes=p.daily_practice_minutes,
             preferred_explanation_language=p.preferred_explanation_language,  # type: ignore[arg-type]
@@ -182,6 +192,7 @@ class SQLAlchemyIdentityRepository:
         preferred_explanation_language: ExplanationLanguage,
         starting_preference: StartingPreference,
         recommended_entry_track: RecommendedEntryTrack,
+        active_language_slug: PreferredLanguage | None = None,
         full_name: str | None = None,
         mark_onboarding_completed: bool = False,
     ) -> UserRecord:
@@ -196,11 +207,14 @@ class SQLAlchemyIdentityRepository:
             profile.onboarding_completed = True
             profile.onboarding_completed_at = datetime.now(UTC)
 
+        effective_active = active_language_slug or preferred_language
+
         if profile.preferences is None:
             pref = UserPreference(
                 user_id=user_id,
                 programming_experience=programming_experience,
                 preferred_language=preferred_language,
+                active_language_slug=effective_active,
                 learning_goal=learning_goal,
                 daily_practice_minutes=daily_practice_minutes,
                 preferred_explanation_language=preferred_explanation_language,
@@ -213,12 +227,42 @@ class SQLAlchemyIdentityRepository:
             pref = profile.preferences
             pref.programming_experience = programming_experience
             pref.preferred_language = preferred_language
+            if active_language_slug is not None:
+                pref.active_language_slug = active_language_slug
+            elif mark_onboarding_completed:
+                pref.active_language_slug = preferred_language
             pref.learning_goal = learning_goal
             pref.daily_practice_minutes = daily_practice_minutes
             pref.preferred_explanation_language = preferred_explanation_language
             pref.starting_preference = starting_preference
             pref.recommended_entry_track = recommended_entry_track
 
+        await self._session.commit()
+        updated = await self._load_profile(user_id)
+        if updated is None:
+            raise RuntimeError("Failed to reload updated profile")
+        return _to_user_record(updated)
+
+    async def set_active_language(
+        self,
+        *,
+        user_id: UUID,
+        language_slug: PreferredLanguage,
+    ) -> UserRecord:
+        profile = await self._load_profile(user_id)
+        if profile is None:
+            raise KeyError(f"Profile {user_id} not found")
+        if profile.preferences is None:
+            pref = UserPreference(
+                user_id=user_id,
+                preferred_language=language_slug,
+                active_language_slug=language_slug,
+            )
+            profile.preferences = pref
+            self._session.add(pref)
+        else:
+            profile.preferences.active_language_slug = language_slug
+            profile.preferences.preferred_language = language_slug
         await self._session.commit()
         updated = await self._load_profile(user_id)
         if updated is None:

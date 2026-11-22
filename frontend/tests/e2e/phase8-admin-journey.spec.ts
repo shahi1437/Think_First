@@ -73,7 +73,7 @@ test.describe("Phase 8 Complete Admin Studio, Validation, Curriculum & Student D
     await adminPage.getByRole("link", { name: /Curriculum & Lessons|Manage Lessons & Tracks/i }).first().click();
     await adminPage.waitForURL("**/admin/curriculum");
     await expect(
-      adminPage.getByText(/Curriculum Lessons \(24\)/i),
+      adminPage.getByText(/Curriculum Lessons \(\d+\)/i),
     ).toBeVisible({ timeout: 15_000 });
 
     // 2. Admin authors a new Intermediate Problem -> Judge0 Validate -> Submit Review -> Approve -> Publish

@@ -33,8 +33,19 @@ def test_backend_dockerfile_bundles_ml_and_dynamic_port() -> None:
         encoding="utf-8"
     )
     assert "COPY ml /app/ml" in dockerfile
+    assert "PYTHONPATH=/app" in dockerfile
     assert "ML_MODEL_ARTIFACT_PATH=/app/ml/artifacts/error_classifier_v1.joblib" in dockerfile
     assert "${PORT:-8000}" in dockerfile
+
+
+def test_render_blueprint_enforces_root_docker_context_and_safe_defaults() -> None:
+    render_yaml = (_REPO_ROOT / "render.yaml").read_text(encoding="utf-8")
+    assert "dockerfilePath: ./infrastructure/docker/backend.Dockerfile" in render_yaml
+    assert "dockerContext: ." in render_yaml
+    assert "healthCheckPath: /health/ready" in render_yaml
+    assert "value: production" in render_yaml
+    assert "key: PISTON_ENABLED" in render_yaml
+    assert 'value: "false"' in render_yaml
 
 
 def test_ci_workflow_enforces_npm_audit_without_fail_open() -> None:

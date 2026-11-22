@@ -1,9 +1,21 @@
 import { redirect } from "next/navigation";
+import { LanguageSelector } from "@/components/language-selector";
 import { DiagnosticWorkspace } from "@/features/learning/diagnostic-workspace";
-import { fetchMyDiagnosticSessions } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchMyDiagnosticSessions,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
+import type { AssessmentMode } from "@/types/learning";
 
-export default async function StudentDiagnosticPage() {
+export const dynamic = "force-dynamic";
+
+export default async function StudentDiagnosticPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ mode?: string; entry?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const { user, accessToken } = await requireAuthenticatedUser({
     allowedRoles: ["student", "teacher", "admin"],
     currentPath: "/student/diagnostic",
@@ -13,13 +25,34 @@ export default async function StudentDiagnosticPage() {
     redirect("/student/onboarding");
   }
 
-  const history = await fetchMyDiagnosticSessions(accessToken);
+  const [languageOverview, history] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchMyDiagnosticSessions(accessToken),
+  ]);
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
+  const initialMode: AssessmentMode =
+    params.mode === "readiness" ? "readiness" : "full";
+  const fromOnboarding = params.entry === "onboarding";
 
   return (
-    <DiagnosticWorkspace
-      accessToken={accessToken}
-      initialHistory={history}
-      initialLanguage={user.preferences?.preferred_explanation_language ?? "en"}
-    />
+    <div className="tf-animate-enter space-y-6">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+      <DiagnosticWorkspace
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialHistory={history}
+        activeLanguageSlug={languageOverview.active_language_slug}
+        initialLanguage={explanationLang}
+        recommendedMode={initialMode}
+        fromOnboarding={fromOnboarding}
+      />
+    </div>
   );
 }

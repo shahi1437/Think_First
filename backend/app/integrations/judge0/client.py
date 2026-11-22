@@ -24,6 +24,9 @@ Verdict = Literal[
 ]
 
 
+ExecutionProvider = Literal["judge0", "piston"]
+
+
 @dataclass(frozen=True, slots=True)
 class Judge0Language:
     id: int
@@ -41,6 +44,7 @@ class Judge0ExecutionOutcome:
     compile_output: str | None
     runtime_ms: int | None
     memory_kb: int | None
+    execution_provider: ExecutionProvider = "judge0"
 
 
 class Judge0Client(Protocol):
@@ -153,6 +157,10 @@ def build_judge0_auth_headers(settings: Settings) -> dict[str, str]:
     return {}
 
 
+class _Judge0ValidationError(Exception):
+    """Internal signal that Judge0 rejected submission limit overrides with HTTP 422."""
+
+
 class HttpJudge0Client:
     """Async HTTP client for Judge0 CE with base64 safety, bounded retries, and polling."""
 
@@ -216,12 +224,14 @@ class HttpJudge0Client:
                         message="Code execution service authentication failed.",
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     )
+                if response.status_code == 422:
+                    raise _Judge0ValidationError("Judge0 rejected submission resource limits.")
                 if response.status_code >= 500 and attempt < self._max_retries:
                     await asyncio.sleep(0.3 * (attempt + 1))
                     continue
                 response.raise_for_status()
                 return response
-            except AppError:
+            except (AppError, _Judge0ValidationError):
                 raise
             except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
                 last_exc = exc
@@ -272,25 +282,79 @@ class HttpJudge0Client:
         memory_limit_kb: int,
     ) -> Judge0ExecutionOutcome:
         self._ensure_configured()
-        payload = {
+        # V8 (Node.js id=63) and OpenJDK (Java id=62) reserve >1GB virtual address space
+        # under RLIMIT_AS on cgroups-v2 hosts even while using <64MB resident RAM, and need
+        # bounded startup headroom for JIT/GC threads to avoid spurious TLEs.
+        effective_memory_kb = min(max(memory_limit_kb, 16384), 524288)
+        effective_procs = 32
+        min_cpu_seconds = 0.5
+        min_wall_seconds = 2.0
+        if judge0_language_id == 63:
+            effective_memory_kb = max(effective_memory_kb, 2097152)
+            effective_procs = 64
+            min_cpu_seconds = 2.5
+            min_wall_seconds = 6.0
+        elif judge0_language_id == 62:
+            effective_memory_kb = max(effective_memory_kb, 4194304)
+            effective_procs = 64
+            min_cpu_seconds = 3.0
+            min_wall_seconds = 8.0
+
+        effective_cpu = min(max(cpu_time_limit_seconds, min_cpu_seconds), 10.0)
+        effective_wall = min(max(effective_cpu * 3.0, min_wall_seconds), 15.0)
+
+        payload: dict[str, Any] = {
             "source_code": _b64_encode(source_code),
             "language_id": judge0_language_id,
             "stdin": _b64_encode(stdin),
             "expected_output": _b64_encode(expected_output),
-            "cpu_time_limit": min(max(cpu_time_limit_seconds, 0.5), 10.0),
-            "wall_time_limit": min(max(cpu_time_limit_seconds * 2.5, 2.0), 15.0),
-            "memory_limit": min(max(memory_limit_kb, 16384), 524288),
-            "max_processes_and_or_threads": 32,
+            "cpu_time_limit": effective_cpu,
+            "wall_time_limit": effective_wall,
+            "memory_limit": effective_memory_kb,
+            "max_processes_and_or_threads": effective_procs,
             "enable_network": False,
         }
 
         async with httpx.AsyncClient(timeout=self._http_timeout) as client:
-            create_resp = await self._request_with_retry(
-                client,
-                "POST",
-                f"{self._base_url}/submissions?base64_encoded=true&wait=false",
-                json=payload,
-            )
+            submit_url = f"{self._base_url}/submissions?base64_encoded=true&wait=false"
+            try:
+                create_resp = await self._request_with_retry(
+                    client, "POST", submit_url, json=payload
+                )
+            except _Judge0ValidationError:
+                # Managed providers (e.g. RapidAPI Judge0 CE) & cgroup-v1 Linux hosts cap
+                # RSS memory at 512000 KB and threads at 60; retry with compatible bounds.
+                clamped_payload = {
+                    **payload,
+                    "memory_limit": min(effective_memory_kb, 512000),
+                    "max_processes_and_or_threads": min(effective_procs, 60),
+                }
+                try:
+                    create_resp = await self._request_with_retry(
+                        client, "POST", submit_url, json=clamped_payload
+                    )
+                except _Judge0ValidationError as exc:
+                    # Final safe fallback: omit optional overrides so server-side caps apply
+                    minimal_payload = {
+                        k: v
+                        for k, v in payload.items()
+                        if k not in {"memory_limit", "max_processes_and_or_threads"}
+                    }
+                    try:
+                        create_resp = await self._request_with_retry(
+                            client, "POST", submit_url, json=minimal_payload
+                        )
+                    except _Judge0ValidationError as final_exc:
+                        logger.error(
+                            "judge0_submission_rejected_422",
+                            language_id=judge0_language_id,
+                        )
+                        raise AppError(
+                            code="EXECUTION_SERVICE_UNAVAILABLE",
+                            message="Code execution service rejected submission limits.",
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        ) from final_exc
+                    _ = exc
             token = create_resp.json().get("token")
             if not isinstance(token, str) or not token:
                 raise AppError(

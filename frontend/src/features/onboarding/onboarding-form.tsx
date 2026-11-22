@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { submitOnboarding, updateUserPreferences } from "@/lib/api-client";
 import {
   onboardingFormSchema,
@@ -46,6 +46,7 @@ export function OnboardingForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingFormSchema),
@@ -60,6 +61,12 @@ export function OnboardingForm({
       starting_preference: prefs?.starting_preference ?? "guided_beginner",
     },
   });
+
+  const selectedExp = useWatch({ control, name: "programming_experience" });
+  const selectedStartPref = useWatch({ control, name: "starting_preference" });
+  const selectedLang = useWatch({ control, name: "preferred_language" });
+  const willRouteToDiagnostic =
+    selectedExp !== "none" && selectedStartPref === "diagnostic_assessment";
 
   async function handleFormSubmit(values: OnboardingFormValues) {
     setServerError(null);
@@ -84,7 +91,13 @@ export function OnboardingForm({
 
       setSavedUser(updated);
       if (mode === "onboarding") {
-        router.push("/student");
+        const nextRoute =
+          updated.preferences?.entry_redirect_path ||
+          (updated.preferences?.recommended_entry_track ===
+          "diagnostic_assessment"
+            ? "/student/diagnostic?mode=full&entry=onboarding"
+            : "/student");
+        router.push(nextRoute);
         router.refresh();
       } else {
         router.refresh();
@@ -230,10 +243,11 @@ export function OnboardingForm({
               {...register("preferred_language")}
               className={selectBaseClass}
             >
-              <option value="python">Python</option>
-              <option value="javascript">JavaScript</option>
-              <option value="cpp">C++</option>
-              <option value="java">Java</option>
+              <option value="python">Python 3</option>
+              <option value="javascript">JavaScript (Node.js)</option>
+              <option value="c">C (GCC)</option>
+              <option value="cpp">C++ (GCC)</option>
+              <option value="java">Java (OpenJDK)</option>
             </select>
             <ChevronDown
               className="pointer-events-none absolute right-3.5 top-1/2 mt-1 h-4 w-4 -translate-y-1/2 text-slate-500"
@@ -241,7 +255,8 @@ export function OnboardingForm({
             />
           </div>
           <p className="mt-1.5 text-[13px] text-slate-500">
-            Python is recommended for guided lessons.
+            Learn any of our 5 languages under one account with independent
+            progress per language.
           </p>
         </div>
 
@@ -367,11 +382,29 @@ export function OnboardingForm({
         </div>
       </div>
 
+      {mode === "onboarding" ? (
+        <div
+          aria-live="polite"
+          className="tf-scale-in rounded-2xl border border-indigo-200/80 bg-indigo-50/60 p-4 text-sm text-indigo-950"
+        >
+          <p className="font-semibold">
+            {willRouteToDiagnostic
+              ? "Adaptive Entry Path: Direct to 8-Domain Diagnostic"
+              : "Gentle Beginner Entry Path: Guided Foundation Lessons First"}
+          </p>
+          <p className="mt-1 leading-relaxed text-indigo-900">
+            {willRouteToDiagnostic
+              ? `Because you have prior experience (${selectedExp}) and chose the skill check, we will open your ${selectedLang.toUpperCase()} adaptive diagnostic right after setup to place you on an evidence-backed track.`
+              : `You will start smoothly with introductory ${selectedLang.toUpperCase()} foundation lessons before taking a short 4-question readiness check—no overwhelming advanced test upfront.`}
+          </p>
+        </div>
+      ) : null}
+
       <div className="border-t border-slate-100 pt-5">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0b1221] to-indigo-900 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:from-slate-800 hover:to-indigo-800 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[17px]"
+          className="tf-btn-press inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0b1221] to-indigo-900 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:from-slate-800 hover:to-indigo-800 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[17px]"
         >
           {isSubmitting ? (
             <>

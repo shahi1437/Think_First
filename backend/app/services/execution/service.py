@@ -5,11 +5,13 @@ from fastapi import status
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.integrations.execution.router import ResilientExecutionClient
 from app.integrations.judge0.client import (
     HttpJudge0Client,
     Judge0Client,
     is_judge0_configured,
 )
+from app.integrations.piston.client import is_piston_configured
 from app.models.problems import CodeRevision, ExecutionResult, Submission, TestCase
 from app.repositories.identity import UserRecord
 from app.repositories.problems import ProblemRepository
@@ -112,6 +114,7 @@ def _to_submission_response(
         total_tests=submission.total_tests,
         runtime_ms=submission.runtime_ms,
         memory_kb=submission.memory_kb,
+        execution_provider=submission.execution_provider,
         execution_evidence=dict(submission.execution_evidence or {}),
         results=_sanitize_results(list(submission.results), test_map, reveal_hidden=reveal_hidden),
         created_at=submission.created_at,
@@ -216,12 +219,23 @@ class ExecutionService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # 4b. Fail clearly before creating a submission row if Judge0 is intentionally disabled
+        # 4b. Fail clearly before creating a submission row if execution engine(s) are disabled
         if isinstance(self._judge0, HttpJudge0Client) and not is_judge0_configured(self._settings):
             raise AppError(
                 code="EXECUTION_SERVICE_UNAVAILABLE",
+                message=("Code execution is temporarily unavailable because Judge0 is disabled."),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if (
+            isinstance(self._judge0, ResilientExecutionClient)
+            and not is_judge0_configured(self._settings)
+            and not is_piston_configured(self._settings)
+        ):
+            raise AppError(
+                code="EXECUTION_SERVICE_UNAVAILABLE",
                 message=(
-                    "Code execution is temporarily unavailable because Judge0 is not configured."
+                    "Code execution is temporarily unavailable because no execution engine "
+                    "is configured."
                 ),
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
@@ -248,9 +262,10 @@ class ExecutionService:
             revision_type=payload.submission_kind,
         )
 
-        # 6. Execute each test case inside isolated Judge0 CE sandbox
+        # 6. Execute each test case inside isolated sandbox (Judge0 CE primary, Piston fallback)
         execution_rows: list[ExecutionResult] = []
         verdicts: list[Verdict] = []
+        providers_used: list[str] = []
         passed_count = 0
         public_passed = 0
         public_total = 0
@@ -273,6 +288,8 @@ class ExecutionService:
                     memory_limit_kb=version.memory_limit_kb,
                 )
                 verdicts.append(outcome.verdict)
+                provider_name = outcome.execution_provider
+                providers_used.append(provider_name)
 
                 if tc.is_hidden:
                     hidden_total += 1
@@ -310,6 +327,7 @@ class ExecutionService:
                         submission_id=submission.id,
                         test_case_id=tc.id,
                         is_hidden=tc.is_hidden,
+                        execution_provider=provider_name,
                         judge0_token=outcome.token,
                         judge0_status_id=outcome.status_id,
                         verdict=outcome.verdict,
@@ -329,17 +347,21 @@ class ExecutionService:
                 total_tests=len(selected_tests),
                 runtime_ms=max_runtime_ms,
                 memory_kb=max_memory_kb,
-                execution_evidence={"engine_error": "judge0_unavailable"},
+                execution_provider="piston" if "piston" in providers_used else "judge0",
+                execution_evidence={"engine_error": "execution_service_unavailable"},
                 results=execution_rows,
             )
             raise
 
         overall_verdict = _aggregate_verdict(verdicts)
-        # Structured objective execution evidence for Phase 4 ML & Socratic Mentor
+        effective_provider = "piston" if "piston" in providers_used else "judge0"
+        # Structured objective execution evidence for ML / Rule-based Diagnosis & Socratic Mentor
         evidence: dict[str, Any] = {
             "mode": version.mode,
             "submission_kind": payload.submission_kind,
             "language_slug": language.slug,
+            "execution_provider": effective_provider,
+            "fallback_used": effective_provider == "piston",
             "overall_verdict": overall_verdict,
             "public_passed": public_passed,
             "public_total": public_total,
@@ -363,6 +385,7 @@ class ExecutionService:
             total_tests=len(selected_tests),
             runtime_ms=max_runtime_ms,
             memory_kb=max_memory_kb,
+            execution_provider=effective_provider,
             execution_evidence=evidence,
             results=execution_rows,
         )
@@ -414,6 +437,7 @@ class ExecutionService:
                 total_tests=s.total_tests,
                 runtime_ms=s.runtime_ms,
                 memory_kb=s.memory_kb,
+                execution_provider=s.execution_provider,
                 created_at=s.created_at,
             )
             for s in rows

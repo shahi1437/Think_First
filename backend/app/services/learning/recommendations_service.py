@@ -12,6 +12,8 @@ Uses deterministic, auditable prerequisite rules — never fabricates AI persona
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.repositories.identity import UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
@@ -25,8 +27,14 @@ from app.schemas.learning import (
     StudentTrackStatus,
 )
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
-from app.services.learning.lessons_service import LessonsAndTracksService
+from app.services.learning.lessons_service import (
+    LessonsAndTracksService,
+    resolve_user_language,
+)
 from app.services.learning.skill_graph import STATE_RANK, SkillGraphService
+
+if TYPE_CHECKING:
+    from app.services.learning.journey_engine import LearningJourneyService
 
 
 class AdaptiveRecommendationService:
@@ -41,6 +49,7 @@ class AdaptiveRecommendationService:
         lessons_service: LessonsAndTracksService,
         diagnostics_service: DiagnosticAssessmentService,
         skill_graph_service: SkillGraphService,
+        journey_service: LearningJourneyService | None = None,
     ) -> None:
         self._learning_repo = learning_repo
         self._problem_repo = problem_repo
@@ -48,24 +57,29 @@ class AdaptiveRecommendationService:
         self._lessons = lessons_service
         self._diagnostics = diagnostics_service
         self._skill_graph = skill_graph_service
+        self._journey = journey_service
 
     async def compute_recommendations(
         self,
         user: UserRecord,
         *,
+        language_slug: str | None = None,
         track_status: StudentTrackStatus | None = None,
         lessons: list[LessonSummaryView] | None = None,
         skill_graph: SkillGraphView | None = None,
         diag_sessions: list[DiagnosticSessionView] | None = None,
     ) -> list[RecommendationItemView]:
+        lang = resolve_user_language(user, language_slug)
         if track_status is None:
-            track_status = await self._lessons.get_track_status(user)
+            track_status = await self._lessons.get_track_status(user, language_slug=lang)
         if lessons is None:
-            lessons = await self._lessons.list_lessons(user=user)
+            lessons = await self._lessons.list_lessons(user=user, language_slug=lang)
         if skill_graph is None:
-            skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
+            skill_graph = await self._skill_graph.get_student_skill_graph(
+                user.id, language_slug=lang
+            )
         if diag_sessions is None:
-            diag_sessions = await self._diagnostics.list_my_sessions(user=user)
+            diag_sessions = await self._diagnostics.list_my_sessions(user=user, language_slug=lang)
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
         latest_diag = completed_diags[0] if completed_diags else None
 
@@ -176,19 +190,29 @@ class AdaptiveRecommendationService:
             )
             priority += 1
 
-        # 3. Connect Phase 3 & Phase 4 Debugging + Transfer Verification problems
-        problems, _ = await self._problem_repo.list_published_problems(limit=20, offset=0)
-        for prob, ver in problems:
+        # 3. Connect Phase 3 & Phase 4 Debugging + Transfer Verification problems for this language
+        problems, _ = await self._problem_repo.list_published_problems(
+            language=lang, limit=20, offset=0
+        )
+        if not problems:
+            problems, _ = await self._problem_repo.list_published_problems(limit=20, offset=0)
+        candidate_problems = [
+            (prob, ver) for prob, ver in problems if not prob.slug.startswith("transfer-")
+        ]
+        candidate_ids = [prob.id for prob, _ in candidate_problems]
+        accepted_ids = await self._mentor_repo.list_accepted_submit_problem_ids(
+            student_id=user.id, problem_ids=candidate_ids
+        )
+        links_by_source = await self._mentor_repo.list_active_verification_links_by_source(
+            candidate_ids
+        )
+        for prob, ver in candidate_problems:
             if len(recommendations) >= 4:
                 break
-            if prob.slug.startswith("transfer-"):
-                continue
-            accepted = await self._mentor_repo.has_accepted_submit(
-                student_id=user.id, problem_id=prob.id
-            )
-            link_tuple = await self._mentor_repo.get_verification_link_for_source_problem(prob.id)
+            is_accepted = prob.id in accepted_ids
+            link_tuple = links_by_source.get(prob.id)
 
-            if accepted is not None and link_tuple is not None:
+            if is_accepted and link_tuple is not None:
                 link, _, transfer_ver = link_tuple
                 latest_att = await self._mentor_repo.get_latest_verification_attempt(
                     student_id=user.id, verification_link_id=link.id
@@ -220,7 +244,7 @@ class AdaptiveRecommendationService:
                     continue
 
             # Recommend debugging problem if loops/variables are at least introduced or track >= basic
-            if accepted is None and ver.mode == "debugging":
+            if not is_accepted and ver.mode == "debugging":
                 loops_rank = STATE_RANK.get(skill_state_map.get("loops", "unobserved"), 0)
                 if loops_rank >= 1 or track_status.selected_track_slug != "absolute_beginner":
                     recommendations.append(
@@ -249,6 +273,7 @@ class AdaptiveRecommendationService:
 
         await self._learning_repo.replace_student_recommendations(
             student_id=user.id,
+            language_slug=lang,
             items=[
                 {
                     "recommendation_type": r.recommendation_type,
@@ -265,21 +290,38 @@ class AdaptiveRecommendationService:
         )
         return recommendations
 
-    async def get_dashboard(self, user: UserRecord) -> LearningDashboardView:
-        track_status = await self._lessons.get_track_status(user)
-        lessons = await self._lessons.list_lessons(user=user)
-        skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
-        diag_sessions = await self._diagnostics.list_my_sessions(user=user)
+    async def get_dashboard(
+        self, user: UserRecord, *, language_slug: str | None = None
+    ) -> LearningDashboardView:
+        lang = resolve_user_language(user, language_slug)
+        track_status = await self._lessons.get_track_status(user, language_slug=lang)
+        lessons = await self._lessons.list_lessons(user=user, language_slug=lang)
+        skill_graph = await self._skill_graph.get_student_skill_graph(user.id, language_slug=lang)
+        diag_sessions = await self._diagnostics.list_my_sessions(user=user, language_slug=lang)
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
         recommendations = await self.compute_recommendations(
             user,
+            language_slug=lang,
             track_status=track_status,
             lessons=lessons,
             skill_graph=skill_graph,
             diag_sessions=diag_sessions,
         )
+        journey = (
+            await self._journey.evaluate(
+                user,
+                language_slug=lang,
+                track_status=track_status,
+                lessons=lessons,
+                skill_graph=skill_graph,
+                diag_sessions=diag_sessions,
+            )
+            if self._journey is not None
+            else None
+        )
 
         return LearningDashboardView(
+            language_slug=lang,
             track_status=track_status,
             lessons_completed=sum(1 for lsn in lessons if lsn.progress_status == "completed"),
             lessons_total=len(lessons),
@@ -287,4 +329,5 @@ class AdaptiveRecommendationService:
             latest_diagnostic=completed_diags[0] if completed_diags else None,
             skill_graph=skill_graph,
             recommendations=recommendations,
+            journey=journey,
         )

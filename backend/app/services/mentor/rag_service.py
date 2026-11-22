@@ -24,7 +24,7 @@ from app.schemas.mentor import (
 )
 from app.services.mentor.embeddings import LocalSemanticEmbedder
 from app.services.mentor.knowledge_corpus import (
-    APPROVED_PYTHON_KNOWLEDGE_DOCS,
+    ALL_APPROVED_KNOWLEDGE_DOCS,
     chunk_markdown_document,
 )
 
@@ -55,14 +55,14 @@ class RagKnowledgeService:
         self._embedder = LocalSemanticEmbedder(dimensions=settings.rag_embedding_dimensions)
 
     async def seed_approved_corpus(self, *, actor_id: UUID | None = None) -> int:
-        """Idempotently ingest & embed all 10 curated approved Python educational documents."""
+        """Idempotently ingest & embed all curated approved multi-language educational documents."""
         ingested = 0
-        for doc in APPROVED_PYTHON_KNOWLEDGE_DOCS:
+        for doc in ALL_APPROVED_KNOWLEDGE_DOCS:
             raw_chunks = chunk_markdown_document(doc.content_md)
             embedded_chunks: list[tuple[int, str, str, list[float]]] = []
             for idx, (heading, body) in enumerate(raw_chunks):
                 embed_input = (
-                    f"{doc.title}\nTopic: {doc.topic}\n"
+                    f"Language: {doc.language_slug}\n{doc.title}\nTopic: {doc.topic}\n"
                     f"Errors: {' '.join(doc.error_codes)}\n{heading}\n{body}"
                 )
                 embedded_chunks.append((idx, heading, body, self._embedder.embed(embed_input)))
@@ -70,7 +70,7 @@ class RagKnowledgeService:
             await self._repo.upsert_knowledge_document(
                 slug=doc.slug,
                 title=doc.title,
-                language_slug="python",
+                language_slug=doc.language_slug,
                 topic=doc.topic,
                 error_codes=list(doc.error_codes),
                 source_name=doc.source_name,
@@ -146,10 +146,13 @@ class RagKnowledgeService:
         query: str,
         topic: str | None = None,
         error_code: str | None = None,
+        language_slug: str | None = None,
         top_k: int = 3,
     ) -> RagSearchResponse:
         """Retrieve approved chunks via PostgreSQL pgvector cosine similarity + metadata boost."""
         enriched_query = query
+        if language_slug:
+            enriched_query += f" language:{language_slug}"
         if topic:
             enriched_query += f" topic:{topic}"
         if error_code:
@@ -160,6 +163,7 @@ class RagKnowledgeService:
             query_embedding=query_vec,
             limit=max(top_k * 4, 12),
             topic=topic,
+            language_slug=language_slug,
         )
 
         # If knowledge base is still empty in a fresh local DB, return explicit no-match fallback

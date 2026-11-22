@@ -142,10 +142,11 @@ class SkillGraphService:
         evidence_ref_id: str | None,
         reason: str,
         uncertainty_note: str,
+        language_slug: str = "python",
     ) -> SkillState:
         """Advance (never over-claim) a student's skill state using factual evidence."""
         existing = await self._learning_repo.get_student_skill_state(
-            student_id=student_id, skill_slug=skill_slug
+            student_id=student_id, skill_slug=skill_slug, language_slug=language_slug
         )
         current_state: SkillState = (
             existing.state if existing is not None else "unobserved"  # type: ignore[assignment]
@@ -180,6 +181,7 @@ class SkillGraphService:
 
         updated = await self._learning_repo.upsert_skill_state(
             student_id=student_id,
+            language_slug=language_slug,
             skill_slug=skill_slug,
             new_state=final_state,
             uncertainty_note=uncertainty_note,
@@ -191,11 +193,21 @@ class SkillGraphService:
         )
         return updated.state  # type: ignore[return-value]
 
-    async def sync_phase3_and_phase4_evidence(self, student_id: UUID) -> None:
+    async def sync_phase3_and_phase4_evidence(
+        self, student_id: UUID, *, language_slug: str = "python"
+    ) -> None:
         """Project existing Phase 3 Judge0 & Phase 4 Transfer Verification evidence into Skill Graph."""
         attempts = await self._mentor_repo.list_verification_attempts(student_id=student_id)
         for att in attempts:
             if att.outcome != "verified_independent":
+                continue
+            sub = (
+                await self._problem_repo.get_submission_by_id(att.transfer_submission_id)
+                if att.transfer_submission_id
+                else None
+            )
+            att_lang = sub.language_slug if sub is not None else "python"
+            if att_lang != language_slug:
                 continue
             link_tuple = await self._mentor_repo.get_verification_link_by_id(
                 att.verification_link_id
@@ -205,18 +217,19 @@ class SkillGraphService:
             link = link_tuple[0]
             node_slug = SKILL_FOCUS_TO_NODE.get(link.skill_focus, "mixed_problem_solving")
             existing = await self._learning_repo.get_student_skill_state(
-                student_id=student_id, skill_slug=node_slug
+                student_id=student_id, skill_slug=node_slug, language_slug=language_slug
             )
             if existing is None or STATE_RANK[existing.state] < STATE_RANK["transferred"]:
                 await self.record_evidence(
                     student_id=student_id,
+                    language_slug=language_slug,
                     skill_slug=node_slug,
                     target_state="transferred",
                     evidence_source="phase4_transfer_verification",
                     evidence_ref_id=str(att.id),
                     reason=(
                         f"Passed unseen Transfer Challenge ({att.passed_tests}/{att.total_tests} "
-                        f"Judge0 tests) with {att.hints_used} hints."
+                        f"sandbox tests) in {language_slug} with {att.hints_used} hints."
                     ),
                     uncertainty_note=(
                         "Transfer verified independently on an unseen challenge; "
@@ -224,14 +237,18 @@ class SkillGraphService:
                     ),
                 )
 
-    async def get_student_skill_graph(self, student_id: UUID) -> SkillGraphView:
-        await self.sync_phase3_and_phase4_evidence(student_id)
+    async def get_student_skill_graph(
+        self, student_id: UUID, *, language_slug: str = "python"
+    ) -> SkillGraphView:
+        await self.sync_phase3_and_phase4_evidence(student_id, language_slug=language_slug)
 
         nodes = await self._learning_repo.list_skill_nodes()
         prereq_rows = await self._learning_repo.list_skill_prerequisites()
-        states = await self._learning_repo.list_student_skill_states(student_id)
+        states = await self._learning_repo.list_student_skill_states(
+            student_id, language_slug=language_slug
+        )
         transitions = await self._learning_repo.list_skill_transitions(
-            student_id=student_id, limit=15
+            student_id=student_id, limit=15, language_slug=language_slug
         )
 
         prereq_map: dict[str, list[str]] = {}

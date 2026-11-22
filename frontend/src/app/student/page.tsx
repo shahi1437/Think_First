@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { LearningDashboardClient } from "@/features/learning/learning-dashboard-client";
 import {
   fetchDailyPlanWorkspace,
+  fetchLanguageProgressOverview,
   fetchLearningDashboard,
   fetchLearningDnaProfile,
   fetchRetentionOverview,
@@ -9,6 +10,8 @@ import {
   fetchStudentClasses,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
+
+export const dynamic = "force-dynamic";
 
 export default async function StudentDashboardPage({
   searchParams,
@@ -26,6 +29,7 @@ export default async function StudentDashboardPage({
   }
 
   const [
+    languageOverview,
     dashboard,
     dnaProfile,
     dailyPlanWorkspace,
@@ -33,6 +37,7 @@ export default async function StudentDashboardPage({
     enrolledClasses,
     studentAssignments,
   ] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
     fetchLearningDashboard(accessToken),
     fetchLearningDnaProfile(accessToken),
     fetchDailyPlanWorkspace(accessToken),
@@ -58,9 +63,11 @@ export default async function StudentDashboardPage({
         </div>
       ) : null}
       <LearningDashboardClient
+        key={dashboard.language_slug}
         accessToken={accessToken}
         studentName={user.full_name || user.email}
         initialDashboard={dashboard}
+        languageOverview={languageOverview}
         initialLanguage={user.preferences?.preferred_explanation_language ?? "en"}
         dnaSummary={{
           verifiedCount: dnaProfile.dimensions.filter(

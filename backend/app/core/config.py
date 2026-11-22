@@ -2,7 +2,7 @@ import json
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -44,8 +44,8 @@ class Settings(BaseSettings):
         raise ValueError("CORS_ORIGINS must be a JSON array or comma-separated list of origins.")
 
     database_url: str = "postgresql+asyncpg://codementor:codementor_dev@localhost:5432/codementor"
-    db_pool_size: int = 5
-    db_max_overflow: int = 10
+    db_pool_size: int = 12
+    db_max_overflow: int = 15
     db_health_timeout_seconds: float = 5.0
 
     # Phase 2+ Supabase settings (validated when auth endpoints are enabled)
@@ -64,6 +64,15 @@ class Settings(BaseSettings):
     judge0_poll_interval_seconds: float = 0.4
     judge0_poll_timeout_seconds: float = 20.0
     judge0_max_retries: int = 2
+    # Phase 3+ Self-hosted Piston secure fallback execution settings
+    execution_fallback_enabled: bool = True
+    piston_enabled: bool = True
+    piston_base_url: str = "http://127.0.0.1:2000"
+    piston_isolated_host_verified: bool = False
+    piston_http_timeout_seconds: float = 15.0
+    piston_compile_timeout_ms: int = 10000
+    piston_run_timeout_ms: int = 3000
+    piston_max_output_bytes: int = 65536
     max_source_code_bytes: int = 65536
     execution_rate_limit_per_minute: int = 20
     execution_daily_quota: int = 200
@@ -87,6 +96,13 @@ class Settings(BaseSettings):
     portal_verify_rate_limit_per_minute: int = 20
     max_request_body_bytes: int = 2_097_152
     slow_request_threshold_ms: float = 2500.0
+
+    @model_validator(mode="after")
+    def _enforce_production_piston_default(self) -> "Settings":
+        """Keep Piston fallback secure-by-default (disabled) in production unless explicitly set."""
+        if self.app_env == "production" and "piston_enabled" not in self.model_fields_set:
+            self.piston_enabled = False
+        return self
 
     def validate_production_readiness(self) -> list[str]:
         """Return configuration gap keys in production without exposing secret values."""
@@ -122,6 +138,19 @@ class Settings(BaseSettings):
                     issues.append("JUDGE0_RAPIDAPI_KEY is missing for RapidAPI Judge0 mode")
                 if j0 and not j0.startswith("https://"):
                     issues.append("JUDGE0_BASE_URL must use HTTPS for RapidAPI Judge0 mode")
+
+        if self.execution_fallback_enabled and self.piston_enabled:
+            piston_url = self.piston_base_url.strip().lower()
+            if not piston_url or "127.0.0.1" in piston_url or "localhost" in piston_url:
+                issues.append(
+                    "PISTON_BASE_URL points to local loopback in production; disable Piston "
+                    "(PISTON_ENABLED=false) or host Piston on a dedicated isolated VM"
+                )
+            if not self.piston_isolated_host_verified:
+                issues.append(
+                    "Piston fallback requires dedicated VM/microVM isolation in production "
+                    "(disable PISTON_ENABLED or set PISTON_ISOLATED_HOST_VERIFIED=true)"
+                )
 
         return issues
 

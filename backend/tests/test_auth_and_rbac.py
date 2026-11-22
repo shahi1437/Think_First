@@ -127,6 +127,7 @@ class InMemoryIdentityRepository:
         preferred_explanation_language: ExplanationLanguage,
         starting_preference: StartingPreference,
         recommended_entry_track: RecommendedEntryTrack,
+        active_language_slug: PreferredLanguage | None = None,
         full_name: str | None = None,
         mark_onboarding_completed: bool = False,
     ) -> UserRecord:
@@ -140,6 +141,7 @@ class InMemoryIdentityRepository:
             user_id=user_id,
             programming_experience=programming_experience,
             preferred_language=preferred_language,
+            active_language_slug=active_language_slug or preferred_language,
             learning_goal=learning_goal,
             daily_practice_minutes=daily_practice_minutes,
             preferred_explanation_language=preferred_explanation_language,

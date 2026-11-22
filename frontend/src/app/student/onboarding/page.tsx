@@ -19,13 +19,13 @@ const onboardingBenefits = [
     icon: Code2,
     title: "Practice with real coding challenges",
     description:
-      "Write Python code, test your solutions, and understand mistakes clearly.",
+      "Write Python, JavaScript, C, C++, or Java code, test your solutions, and understand mistakes clearly.",
   },
   {
     icon: TrendingUp,
     title: "Track your progress as you improve",
     description:
-      "See which Python skills you have mastered and what to practice next.",
+      "See which skills you have independently verified across each language and what to practice next.",
   },
 ];
 
@@ -68,8 +68,9 @@ export default async function StudentOnboardingPage() {
                 Let&apos;s Build Your Learning Journey
               </h1>
               <p className="mt-3 text-base leading-relaxed text-slate-300 sm:text-lg">
-                Tell us a little about yourself so we can help you start
-                learning Python at the right level.
+                Tell us a little about yourself so we can guide you at the right
+                level—starting with gentle foundation lessons or an adaptive
+                skill check.
               </p>
             </div>
 

@@ -76,6 +76,7 @@ export const adminLessonDetailViewSchema = z.object({
   version_id: z.string(),
   version_number: z.number().int(),
   slug: z.string(),
+  language_slug: z.string().optional(),
   skill_slug: z.string(),
   display_order: z.number().int(),
   status: z.string(),

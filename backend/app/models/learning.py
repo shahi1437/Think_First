@@ -47,6 +47,12 @@ class StudentTrackEnrollment(Base):
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        primary_key=True,
+        default="python",
+    )
     selected_track_slug: Mapped[str] = mapped_column(
         String(48),
         ForeignKey("public.learning_tracks.slug", ondelete="RESTRICT"),
@@ -112,6 +118,12 @@ class StudentSkillState(Base):
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
+    )
     skill_slug: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("public.skill_nodes.slug", ondelete="CASCADE"),
@@ -148,6 +160,12 @@ class SkillStateTransition(Base):
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
+    )
     skill_slug: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("public.skill_nodes.slug", ondelete="CASCADE"),
@@ -170,6 +188,12 @@ class Lesson(Base):
         PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
     slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
+    )
     skill_slug: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("public.skill_nodes.slug", ondelete="RESTRICT"),
@@ -362,6 +386,12 @@ class DiagnosticSession(Base):
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
+    )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="in_progress")
     explanation_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
     question_queue: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
@@ -441,6 +471,12 @@ class StudentRecommendation(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
     )
     recommendation_type: Mapped[str] = mapped_column(String(32), nullable=False)
     target_id: Mapped[str] = mapped_column(Text, nullable=False)

@@ -173,9 +173,11 @@ test.describe("Phase 5 Complete Adaptive Learning, Diagnostic, Lesson & Skill Gr
     ).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText(/Recommended Track:/i)).toBeVisible();
 
-    // 5. Navigate to Beginner Python Lessons -> Open Lesson 1 (`intro-to-programming`)
+    // 5. Navigate to Python Guided Lessons -> Open Lesson 1 (`intro-to-programming`)
     await page
-      .getByRole("link", { name: /Start Beginner Python Lessons/i })
+      .getByRole("link", {
+        name: /Start (Beginner Python|Python 3 Guided) Lessons/i,
+      })
       .click();
     await page.waitForURL("**/student/lessons");
     await expect(

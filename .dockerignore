@@ -1,0 +1,31 @@
+# Git & IDE metadata
+.git
+.gitignore
+.vscode
+.idea
+**/.DS_Store
+
+# Never copy local secrets or protected curriculum bundles into Docker contexts
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+backend/protected_content/*.local.json
+
+# Local caches, virtualenvs, and build outputs
+**/node_modules
+frontend/.next
+frontend/out
+frontend/playwright-report
+frontend/test-results
+backend/.venv
+.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+supabase/.temp

@@ -94,7 +94,7 @@ export function LearningHistoryClient({
 
   return (
     <div className="space-y-6" lang={lang}>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="tf-animate-enter rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-indigo-700">
@@ -103,13 +103,13 @@ export function LearningHistoryClient({
                 {isBn ? "দীর্ঘমেয়াদী শেখার ইতিহাস" : "Persistent Learning History"}
               </span>
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-slate-900">
               {isBn ? "তোমার সম্পূর্ণ টাইমলাইন" : "Your Complete Learning Timeline"}
             </h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-600">
+            <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-slate-600">
               {isBn
-                ? "লেসন, ডায়াগনস্টিক, Judge0 ফলাফল, কোড রিভিশন, AI মেন্টর, হিন্ট, ট্রান্সফার, স্কিল পরিবর্তন ও রিটেনশন ইভেন্ট খুঁজুন।"
-                : "Search and filter every persisted lesson, diagnostic, Judge0 verdict, code revision, AI Mentor turn, hint, transfer check, skill change, and retention verification."}
+                ? "লেসন, ডায়াগনস্টিক, স্যান্ডবক্স ফলাফল, কোড রিভিশন, AI মেন্টর, হিন্ট, ট্রান্সফার, স্কিল পরিবর্তন ও রিটেনশন ইভেন্ট খুঁজুন।"
+                : "Search and filter every persisted lesson, diagnostic, sandbox verdict, code revision, AI Mentor turn, hint, transfer check, skill change, and retention verification."}
             </p>
           </div>
 

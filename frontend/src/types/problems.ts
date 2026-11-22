@@ -130,6 +130,7 @@ export const submissionResponseSchema = z.object({
   total_tests: z.number().int(),
   runtime_ms: z.number().int().nullable().optional(),
   memory_kb: z.number().int().nullable().optional(),
+  execution_provider: z.string().optional(),
   execution_evidence: z.record(z.string(), z.unknown()),
   results: z.array(testCaseExecutionViewSchema),
   created_at: z.string(),
@@ -147,6 +148,7 @@ export const submissionSummaryItemSchema = z.object({
   total_tests: z.number().int(),
   runtime_ms: z.number().int().nullable().optional(),
   memory_kb: z.number().int().nullable().optional(),
+  execution_provider: z.string().optional(),
   created_at: z.string(),
 });
 

@@ -88,20 +88,20 @@ export function LearningDnaClient({
   }
 
   return (
-    <div className="space-y-6" lang={lang}>
+    <div className="tf-animate-enter space-y-6" lang={lang}>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-indigo-700">
-              <Dna className="h-3.5 w-3.5" aria-hidden="true" />
+              <Dna className="h-4 w-4" aria-hidden="true" />
               <span>{isBn ? "লার্নিং ডিএনএ প্রোফাইল" : "Evidence-Based Learning DNA"}</span>
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            <h1 className="mt-1.5 text-2xl font-bold text-slate-900 sm:text-3xl">
               {isBn
                 ? "তোমার বাস্তব প্রোগ্রামিং দক্ষতার প্রোফাইল"
                 : "Your Observed Programming Competency Profile"}
             </h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-600">
+            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">
               {isBn ? profile.methodology_note_bn : profile.methodology_note_en}
             </p>
           </div>

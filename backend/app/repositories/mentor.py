@@ -208,6 +208,7 @@ class MentorRepository:
         query_embedding: list[float],
         limit: int = 8,
         topic: str | None = None,
+        language_slug: str | None = None,
     ) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
         """Execute real PostgreSQL pgvector cosine similarity query on approved docs ONLY."""
         distance_expr = KnowledgeChunk.embedding.cosine_distance(query_embedding)
@@ -215,11 +216,11 @@ class MentorRepository:
             select(KnowledgeChunk, KnowledgeDocument, (1.0 - distance_expr).label("similarity"))
             .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
             .where(KnowledgeDocument.status == "approved")
-            .order_by(distance_expr.asc())
-            .limit(limit)
         )
+        if language_slug:
+            stmt = stmt.where(KnowledgeDocument.language_slug == language_slug)
+        stmt = stmt.order_by(distance_expr.asc()).limit(limit)
         if topic:
-            # Fetch broader candidates if topic filter is requested, or keep hybrid scoring
             _ = topic
         rows = (await self._session.execute(stmt)).all()
         return [(row[0], row[1], float(row[2])) for row in rows]
@@ -435,6 +436,26 @@ class MentorRepository:
             return None
         return row[0], row[1], row[2]
 
+    async def list_active_verification_links_by_source(
+        self, source_problem_ids: list[UUID]
+    ) -> dict[UUID, tuple[VerificationLink, Problem, ProblemVersion]]:
+        if not source_problem_ids:
+            return {}
+        stmt = (
+            select(VerificationLink, Problem, ProblemVersion)
+            .join(Problem, VerificationLink.transfer_problem_id == Problem.id)
+            .join(ProblemVersion, Problem.current_published_version_id == ProblemVersion.id)
+            .where(
+                VerificationLink.source_problem_id.in_(source_problem_ids),
+                VerificationLink.is_active.is_(True),
+            )
+        )
+        out: dict[UUID, tuple[VerificationLink, Problem, ProblemVersion]] = {}
+        for row in (await self._session.execute(stmt)).all():
+            if row[0].source_problem_id not in out:
+                out[row[0].source_problem_id] = (row[0], row[1], row[2])
+        return out
+
     async def get_verification_link_by_id(
         self, link_id: UUID
     ) -> tuple[VerificationLink, Problem, ProblemVersion] | None:
@@ -482,6 +503,23 @@ class MentorRepository:
             .limit(1)
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_accepted_submit_problem_ids(
+        self, *, student_id: UUID, problem_ids: list[UUID]
+    ) -> set[UUID]:
+        if not problem_ids:
+            return set()
+        stmt = (
+            select(Submission.problem_id)
+            .distinct()
+            .where(
+                Submission.student_id == student_id,
+                Submission.problem_id.in_(problem_ids),
+                Submission.submission_kind == "submit",
+                Submission.verdict == "accepted",
+            )
+        )
+        return set((await self._session.execute(stmt)).scalars().all())
 
     async def get_latest_verification_attempt(
         self, *, student_id: UUID, verification_link_id: UUID

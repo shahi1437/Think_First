@@ -138,8 +138,10 @@ async def test_skill_graph_blocks_premature_retained_and_tracks_honest_states() 
             self.states: dict[str, Any] = {}
             self.transitions: list[dict[str, Any]] = []
 
-        async def get_student_skill_state(self, *, student_id: UUID, skill_slug: str) -> Any | None:
-            _ = student_id
+        async def get_student_skill_state(
+            self, *, student_id: UUID, skill_slug: str, language_slug: str = "python"
+        ) -> Any | None:
+            _ = (student_id, language_slug)
             return self.states.get(skill_slug)
 
         async def upsert_skill_state(self, **kwargs: Any) -> Any:

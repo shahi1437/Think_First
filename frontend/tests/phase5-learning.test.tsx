@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { DiagnosticWorkspace } from "@/features/learning/diagnostic-workspace";
 import { LessonViewer } from "@/features/learning/lesson-viewer";
 import { SkillGraphPanel } from "@/features/learning/skill-graph-panel";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    refresh: vi.fn(),
+    push: vi.fn(),
+    replace: vi.fn(),
+  }),
+}));
 import type {
   DiagnosticSessionView,
   LessonDetailView,

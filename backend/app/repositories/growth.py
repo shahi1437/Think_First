@@ -55,9 +55,11 @@ class GrowthRepository:
         strengths: list[str],
         growth_areas: list[str],
         source_counts: dict[str, int],
+        language_slug: str = "python",
     ) -> LearningDnaSnapshot:
         snap = LearningDnaSnapshot(
             student_id=student_id,
+            language_slug=language_slug,
             selected_track_slug=selected_track_slug,
             dimensions_json=dimensions_json,
             skill_state_summary=skill_state_summary,
@@ -71,13 +73,13 @@ class GrowthRepository:
         return snap
 
     async def list_dna_snapshots(
-        self, *, student_id: UUID, limit: int = 10
+        self, *, student_id: UUID, limit: int = 10, language_slug: str | None = None
     ) -> list[LearningDnaSnapshot]:
+        stmt = select(LearningDnaSnapshot).where(LearningDnaSnapshot.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(LearningDnaSnapshot.language_slug == language_slug)
         res = await self._session.execute(
-            select(LearningDnaSnapshot)
-            .where(LearningDnaSnapshot.student_id == student_id)
-            .order_by(desc(LearningDnaSnapshot.computed_at))
-            .limit(limit)
+            stmt.order_by(desc(LearningDnaSnapshot.computed_at)).limit(limit)
         )
         return list(res.scalars().all())
 
@@ -86,13 +88,14 @@ class GrowthRepository:
     # ------------------------------------------------------------------
 
     async def get_active_daily_plan(
-        self, *, student_id: UUID, plan_date: date
+        self, *, student_id: UUID, plan_date: date, language_slug: str = "python"
     ) -> DailyLearningPlan | None:
         res = await self._session.execute(
             select(DailyLearningPlan)
             .options(selectinload(DailyLearningPlan.tasks))
             .where(
                 DailyLearningPlan.student_id == student_id,
+                DailyLearningPlan.language_slug == language_slug,
                 DailyLearningPlan.plan_date == plan_date,
                 DailyLearningPlan.is_active.is_(True),
             )
@@ -100,14 +103,19 @@ class GrowthRepository:
         return res.scalar_one_or_none()
 
     async def list_daily_plan_history(
-        self, *, student_id: UUID, limit: int = 14
+        self, *, student_id: UUID, limit: int = 14, language_slug: str | None = None
     ) -> list[DailyLearningPlan]:
-        res = await self._session.execute(
+        stmt = (
             select(DailyLearningPlan)
             .options(selectinload(DailyLearningPlan.tasks))
             .where(DailyLearningPlan.student_id == student_id)
-            .order_by(desc(DailyLearningPlan.plan_date), desc(DailyLearningPlan.version_number))
-            .limit(limit)
+        )
+        if language_slug is not None:
+            stmt = stmt.where(DailyLearningPlan.language_slug == language_slug)
+        res = await self._session.execute(
+            stmt.order_by(
+                desc(DailyLearningPlan.plan_date), desc(DailyLearningPlan.version_number)
+            ).limit(limit)
         )
         return list(res.scalars().all())
 
@@ -123,22 +131,26 @@ class GrowthRepository:
         evidence_snapshot: dict[str, Any],
         tasks_payload: list[dict[str, Any]],
         reuse_if_active_exists: bool = False,
+        language_slug: str = "python",
     ) -> DailyLearningPlan:
-        # Serialize concurrent plan creations per student (e.g. parallel Next.js RSC loads)
+        # Serialize concurrent plan creations per student+language (e.g. parallel Next.js RSC loads)
         await self._session.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-            {"lock_key": f"daily_plan:{student_id}:{plan_date.isoformat()}"},
+            {"lock_key": f"daily_plan:{student_id}:{language_slug}:{plan_date.isoformat()}"},
         )
         if reuse_if_active_exists:
-            existing = await self.get_active_daily_plan(student_id=student_id, plan_date=plan_date)
+            existing = await self.get_active_daily_plan(
+                student_id=student_id, plan_date=plan_date, language_slug=language_slug
+            )
             if existing is not None:
                 return existing
 
-        # Deactivate any currently active plan for this student & date
+        # Deactivate any currently active plan for this student, language & date
         await self._session.execute(
             update(DailyLearningPlan)
             .where(
                 DailyLearningPlan.student_id == student_id,
+                DailyLearningPlan.language_slug == language_slug,
                 DailyLearningPlan.plan_date == plan_date,
                 DailyLearningPlan.is_active.is_(True),
             )
@@ -147,6 +159,7 @@ class GrowthRepository:
         max_ver_res = await self._session.execute(
             select(func.coalesce(func.max(DailyLearningPlan.version_number), 0)).where(
                 DailyLearningPlan.student_id == student_id,
+                DailyLearningPlan.language_slug == language_slug,
                 DailyLearningPlan.plan_date == plan_date,
             )
         )
@@ -155,6 +168,7 @@ class GrowthRepository:
 
         plan = DailyLearningPlan(
             student_id=student_id,
+            language_slug=language_slug,
             plan_date=plan_date,
             version_number=next_version,
             is_active=True,
@@ -188,7 +202,9 @@ class GrowthRepository:
             self._session.add(task)
 
         await self._session.commit()
-        reloaded = await self.get_active_daily_plan(student_id=student_id, plan_date=plan_date)
+        reloaded = await self.get_active_daily_plan(
+            student_id=student_id, plan_date=plan_date, language_slug=language_slug
+        )
         assert reloaded is not None
         return reloaded
 
@@ -226,12 +242,13 @@ class GrowthRepository:
     # Retention Verification Schedules & Attempts
     # ------------------------------------------------------------------
 
-    async def list_retention_schedules(self, student_id: UUID) -> list[RetentionSchedule]:
-        res = await self._session.execute(
-            select(RetentionSchedule)
-            .where(RetentionSchedule.student_id == student_id)
-            .order_by(RetentionSchedule.due_at.asc())
-        )
+    async def list_retention_schedules(
+        self, student_id: UUID, *, language_slug: str | None = None
+    ) -> list[RetentionSchedule]:
+        stmt = select(RetentionSchedule).where(RetentionSchedule.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(RetentionSchedule.language_slug == language_slug)
+        res = await self._session.execute(stmt.order_by(RetentionSchedule.due_at.asc()))
         return list(res.scalars().all())
 
     async def get_retention_schedule_by_id(self, schedule_id: UUID) -> RetentionSchedule | None:
@@ -251,11 +268,13 @@ class GrowthRepository:
         source_verified_at: datetime,
         due_at: datetime,
         interval_hours: int = 24,
+        language_slug: str = "python",
     ) -> RetentionSchedule:
         now = datetime.now(UTC)
         initial_status = "due" if due_at <= now else "scheduled"
         sched = RetentionSchedule(
             student_id=student_id,
+            language_slug=language_slug,
             skill_slug=skill_slug,
             problem_id=problem_id,
             source_evidence_type=source_evidence_type,
@@ -330,13 +349,13 @@ class GrowthRepository:
         return attempt
 
     async def list_retention_attempts(
-        self, *, student_id: UUID, limit: int = 30
+        self, *, student_id: UUID, limit: int = 30, language_slug: str | None = None
     ) -> list[RetentionAttempt]:
+        stmt = select(RetentionAttempt).where(RetentionAttempt.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(RetentionAttempt.language_slug == language_slug)
         res = await self._session.execute(
-            select(RetentionAttempt)
-            .where(RetentionAttempt.student_id == student_id)
-            .order_by(desc(RetentionAttempt.created_at))
-            .limit(limit)
+            stmt.order_by(desc(RetentionAttempt.created_at)).limit(limit)
         )
         return list(res.scalars().all())
 
@@ -345,28 +364,30 @@ class GrowthRepository:
     # ------------------------------------------------------------------
 
     async def list_student_submissions_all(
-        self, *, student_id: UUID, limit: int = 120
+        self, *, student_id: UUID, limit: int = 120, language_slug: str | None = None
     ) -> list[tuple[Submission, Problem, ProblemVersion]]:
-        res = await self._session.execute(
+        stmt = (
             select(Submission, Problem, ProblemVersion)
             .join(Problem, Problem.id == Submission.problem_id)
             .join(ProblemVersion, ProblemVersion.id == Submission.problem_version_id)
             .where(Submission.student_id == student_id)
-            .order_by(desc(Submission.created_at))
-            .limit(limit)
         )
+        if language_slug is not None:
+            stmt = stmt.where(Submission.language_slug == language_slug)
+        res = await self._session.execute(stmt.order_by(desc(Submission.created_at)).limit(limit))
         return [(row[0], row[1], row[2]) for row in res.all()]
 
     async def list_student_revisions(
-        self, *, student_id: UUID, limit: int = 80
+        self, *, student_id: UUID, limit: int = 80, language_slug: str | None = None
     ) -> list[tuple[CodeRevision, ProblemVersion]]:
-        res = await self._session.execute(
+        stmt = (
             select(CodeRevision, ProblemVersion)
             .join(ProblemVersion, ProblemVersion.id == CodeRevision.problem_version_id)
             .where(CodeRevision.student_id == student_id)
-            .order_by(desc(CodeRevision.created_at))
-            .limit(limit)
         )
+        if language_slug is not None:
+            stmt = stmt.where(CodeRevision.language_slug == language_slug)
+        res = await self._session.execute(stmt.order_by(desc(CodeRevision.created_at)).limit(limit))
         return [(row[0], row[1]) for row in res.all()]
 
     async def list_student_diagnoses(
@@ -404,37 +425,41 @@ class GrowthRepository:
         return list(res.scalars().all())
 
     async def list_student_diagnostic_responses(
-        self, *, student_id: UUID, limit: int = 120
+        self, *, student_id: UUID, limit: int = 120, language_slug: str | None = None
     ) -> list[DiagnosticResponse]:
+        stmt = select(DiagnosticResponse).where(DiagnosticResponse.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.join(
+                DiagnosticSession, DiagnosticSession.id == DiagnosticResponse.session_id
+            ).where(DiagnosticSession.language_slug == language_slug)
         res = await self._session.execute(
-            select(DiagnosticResponse)
-            .where(DiagnosticResponse.student_id == student_id)
-            .order_by(desc(DiagnosticResponse.created_at))
-            .limit(limit)
+            stmt.order_by(desc(DiagnosticResponse.created_at)).limit(limit)
         )
         return list(res.scalars().all())
 
     async def list_student_diagnostic_sessions(
-        self, *, student_id: UUID, limit: int = 30
+        self, *, student_id: UUID, limit: int = 30, language_slug: str | None = None
     ) -> list[DiagnosticSession]:
+        stmt = select(DiagnosticSession).where(DiagnosticSession.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(DiagnosticSession.language_slug == language_slug)
         res = await self._session.execute(
-            select(DiagnosticSession)
-            .where(DiagnosticSession.student_id == student_id)
-            .order_by(desc(DiagnosticSession.started_at))
-            .limit(limit)
+            stmt.order_by(desc(DiagnosticSession.started_at)).limit(limit)
         )
         return list(res.scalars().all())
 
     async def list_student_lesson_progress_with_meta(
-        self, *, student_id: UUID
+        self, *, student_id: UUID, language_slug: str | None = None
     ) -> list[tuple[LessonProgress, Lesson, LessonVersion]]:
-        res = await self._session.execute(
+        stmt = (
             select(LessonProgress, Lesson, LessonVersion)
             .join(Lesson, Lesson.id == LessonProgress.lesson_id)
             .join(LessonVersion, LessonVersion.id == LessonProgress.lesson_version_id)
             .where(LessonProgress.student_id == student_id)
-            .order_by(desc(LessonProgress.updated_at))
         )
+        if language_slug is not None:
+            stmt = stmt.where(Lesson.language_slug == language_slug)
+        res = await self._session.execute(stmt.order_by(desc(LessonProgress.updated_at)))
         return [(row[0], row[1], row[2]) for row in res.all()]
 
     async def list_student_verification_attempts_all(
@@ -449,13 +474,13 @@ class GrowthRepository:
         return list(res.scalars().all())
 
     async def list_student_skill_transitions_all(
-        self, *, student_id: UUID, limit: int = 80
+        self, *, student_id: UUID, limit: int = 80, language_slug: str | None = None
     ) -> list[SkillStateTransition]:
+        stmt = select(SkillStateTransition).where(SkillStateTransition.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(SkillStateTransition.language_slug == language_slug)
         res = await self._session.execute(
-            select(SkillStateTransition)
-            .where(SkillStateTransition.student_id == student_id)
-            .order_by(desc(SkillStateTransition.created_at))
-            .limit(limit)
+            stmt.order_by(desc(SkillStateTransition.created_at)).limit(limit)
         )
         return list(res.scalars().all())
 

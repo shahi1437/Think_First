@@ -63,15 +63,21 @@ import {
 } from "@/types/mentor";
 import {
   diagnosticSessionViewSchema,
+  languageProgressOverviewSchema,
   learningDashboardViewSchema,
+  learningJourneyViewSchema,
   learningTrackViewSchema,
   lessonDetailViewSchema,
   lessonExerciseRunResponseSchema,
   lessonSummaryViewSchema,
   skillGraphViewSchema,
   studentTrackStatusSchema,
+  type AssessmentMode,
   type DiagnosticSessionView,
+  type LanguageProgressOverview,
+  type LanguageSlug,
   type LearningDashboardView,
+  type LearningJourneyView,
   type LearningTrackView,
   type LessonDetailView,
   type LessonExerciseRunResponse,
@@ -352,6 +358,7 @@ export async function fetchProblems(
     difficulty?: Difficulty | "";
     mode?: ProblemMode | "";
     topic?: string;
+    language?: string;
     limit?: number;
     offset?: number;
   },
@@ -362,6 +369,7 @@ export async function fetchProblems(
   if (params?.difficulty) query.set("difficulty", params.difficulty);
   if (params?.mode) query.set("mode", params.mode);
   if (params?.topic) query.set("topic", params.topic);
+  if (params?.language) query.set("language", params.language);
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.offset) query.set("offset", String(params.offset));
   const qs = query.toString();
@@ -740,7 +748,36 @@ export async function fetchMyLearningEvents(
   return z.array(learningEventViewSchema).parse(await response.json());
 }
 
-// --- Phase 5: Tracks, Bilingual Beginner Lessons, Adaptive Diagnostic & Skill Graph ---
+// --- Phase 5 + Multi-Language: Languages, Tracks, Bilingual Lessons, Diagnostics & Skill Graph ---
+
+export async function fetchLanguageProgressOverview(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LanguageProgressOverview> {
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/languages`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return languageProgressOverviewSchema.parse(await response.json());
+}
+
+export async function selectActiveLanguage(
+  accessToken: string,
+  languageSlug: LanguageSlug,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LanguageProgressOverview> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/learning/languages/select`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ language_slug: languageSlug }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return languageProgressOverviewSchema.parse(await response.json());
+}
 
 export async function fetchLearningDashboard(
   accessToken: string,
@@ -834,17 +871,35 @@ export async function runLessonGuidedExercise(
   return lessonExerciseRunResponseSchema.parse(await response.json());
 }
 
+export async function fetchLearningJourney(
+  accessToken: string,
+  language?: LanguageSlug,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningJourneyView> {
+  const qs = language ? `?language=${encodeURIComponent(language)}` : "";
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/journey${qs}`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return learningJourneyViewSchema.parse(await response.json());
+}
+
 export async function startOrResumeDiagnosticSession(
   accessToken: string,
   explanationLanguage: "en" | "bn" = "en",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+  assessmentMode: AssessmentMode = "full",
 ): Promise<DiagnosticSessionView> {
   const response = await safeFetch(
     `${baseUrl}/api/v1/learning/diagnostics/sessions`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
-      body: JSON.stringify({ explanation_language: explanationLanguage }),
+      body: JSON.stringify({
+        explanation_language: explanationLanguage,
+        assessment_mode: assessmentMode,
+      }),
     },
   );
   if (!response.ok) throw await parseErrorResponse(response);

@@ -98,20 +98,20 @@ export function SkillGraphPanel({
   return (
     <section
       aria-label="Prerequisite-aware Skill Graph"
-      className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="tf-animate-enter space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
       lang={language}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-indigo-600" aria-hidden="true" />
-            <h2 className="text-base font-bold text-slate-900">
+            <GitBranch className="h-5 w-5 text-indigo-600" aria-hidden="true" />
+            <h2 className="text-xl font-bold text-slate-900">
               {isBn
                 ? "দক্ষতা গ্রাফ (Prerequisite Skill Graph)"
                 : "Prerequisite-Aware Skill Graph"}
             </h2>
           </div>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
             {isBn
               ? "প্রতিটি ধাপ কেবল আসল Judge0 এক্সিকিউশন, ডায়াগনস্টিক ও ট্রান্সফার প্রমাণের ভিত্তিতে আপডেট হয়—কোনো বানানো শতাংশ নয়।"
               : "Every state reflects direct diagnostic, Judge0 execution, or transfer evidence—Introduced is not mastery, and Retained requires later re-verification."}

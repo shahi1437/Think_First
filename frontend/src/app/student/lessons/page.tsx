@@ -1,9 +1,16 @@
 import { ArrowRight, BookOpen, CheckCircle2, Clock } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LanguageSelector } from "@/components/language-selector";
 import { Badge } from "@/components/ui/badge";
-import { fetchLessons } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchLessons,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
+import { getLanguageDisplayName } from "@/lib/languages";
+
+export const dynamic = "force-dynamic";
 
 export default async function StudentLessonsPage() {
   const { user, accessToken } = await requireAuthenticatedUser({
@@ -15,25 +22,41 @@ export default async function StudentLessonsPage() {
     redirect("/student/onboarding");
   }
 
-  const lessons = await fetchLessons(accessToken);
+  const [languageOverview, lessons] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchLessons(accessToken),
+  ]);
   const completedCount = lessons.filter(
     (lsn) => lsn.progress_status === "completed",
   ).length;
+  const activeLanguageLabel = getLanguageDisplayName(
+    languageOverview.active_language_slug,
+  );
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+
+      <div className="tf-animate-enter rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
-              Guided Python Curriculum
+              Guided {activeLanguageLabel} Curriculum
             </p>
             <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-slate-900 sm:text-[34px]">
-              Beginner Python Lessons
+              {activeLanguageLabel} Guided Lessons
             </h1>
             <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">
-              Learn step-by-step in English or Bangla with interactive examples
-              and hands-on guided Python coding exercises.
+              Learn {activeLanguageLabel} step-by-step in English or Bangla with
+              interactive examples and real sandbox-executed guided exercises.
             </p>
           </div>
           <Badge variant="indigo">
@@ -43,13 +66,25 @@ export default async function StudentLessonsPage() {
             </span>
           </Badge>
         </div>
+        {lessons.length > 0 ? (
+          <div className="mt-4">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="tf-progress-fill h-full rounded-full bg-gradient-to-r from-indigo-500 to-teal-500"
+                style={{
+                  width: `${Math.round((completedCount / lessons.length) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
         {lessons.map((lesson) => (
           <article
             key={lesson.lesson_id}
-            className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+            className="tf-card-interactive flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:border-indigo-300"
           >
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">

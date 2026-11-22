@@ -26,10 +26,15 @@ class MLCandidateScore(BaseModel):
     probability: float = Field(..., ge=0.0, le=1.0)
 
 
+DiagnosisSource = Literal["ml_classifier", "rule_based"]
+
+
 class MLDiagnosisResponse(BaseModel):
     id: UUID | None = None
     submission_id: UUID | None = None
     model_version: str
+    diagnosis_source: DiagnosisSource = "ml_classifier"
+    language_slug: str = "python"
     predicted_error_code: str
     predicted_display_name: str
     confidence: float = Field(..., ge=0.0, le=1.0)
@@ -146,6 +151,7 @@ class RagSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(..., min_length=2, max_length=500)
+    language_slug: str | None = Field(default=None, max_length=32)
     topic: str | None = None
     error_code: str | None = None
     top_k: int = Field(default=3, ge=1, le=10)

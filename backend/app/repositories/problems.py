@@ -557,6 +557,7 @@ class ProblemRepository:
         memory_kb: int | None,
         execution_evidence: dict[str, Any],
         results: list[ExecutionResult],
+        execution_provider: str = "judge0",
     ) -> Submission:
         submission.status = status_value
         submission.verdict = verdict
@@ -564,6 +565,7 @@ class ProblemRepository:
         submission.total_tests = total_tests
         submission.runtime_ms = runtime_ms
         submission.memory_kb = memory_kb
+        submission.execution_provider = execution_provider
         submission.execution_evidence = execution_evidence
         for res in results:
             self._session.add(res)
@@ -615,6 +617,14 @@ class ProblemRepository:
             .all()
         )
         return rows, total
+
+    async def count_student_submissions_by_language(self, student_id: UUID) -> dict[str, int]:
+        stmt = (
+            select(Submission.language_slug, func.count(Submission.id))
+            .where(Submission.student_id == student_id)
+            .group_by(Submission.language_slug)
+        )
+        return {str(row[0]): int(row[1]) for row in (await self._session.execute(stmt)).all()}
 
     async def save_revision(
         self,

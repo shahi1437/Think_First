@@ -2,8 +2,10 @@ import { ProblemBankClient } from "@/features/problems/problem-bank-client";
 import { fetchProblems } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
+export const dynamic = "force-dynamic";
+
 export default async function StudentProblemsPage() {
-  const { accessToken } = await requireAuthenticatedUser({
+  const { user, accessToken } = await requireAuthenticatedUser({
     allowedRoles: ["student", "teacher", "admin"],
     currentPath: "/student/problems",
   });
@@ -15,6 +17,7 @@ export default async function StudentProblemsPage() {
       accessToken={accessToken}
       initialProblems={initialData.items}
       initialTotal={initialData.total}
+      activeLanguageSlug={user.preferences?.active_language_slug ?? "python"}
     />
   );
 }

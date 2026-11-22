@@ -21,15 +21,35 @@ services:
         value: authenticated
       - key: CORS_ORIGINS
         sync: false
+      # Production code execution (Judge0 CE via dedicated VPS `auth_token` or RapidAPI `rapidapi`)
+      # Set JUDGE0_AUTH_MODE + JUDGE0_BASE_URL + JUDGE0_AUTH_TOKEN (or JUDGE0_RAPIDAPI_KEY) in Render Dashboard -> Environment.
+      # To boot temporarily without Judge0 while keeping auth/lessons/diagnostics active, set JUDGE0_AUTH_MODE=disabled.
       - key: JUDGE0_AUTH_MODE
-        value: disabled
-      # Add Judge0 variables in Render Dashboard -> Environment once Judge0 is ready:
-      # JUDGE0_BASE_URL, JUDGE0_AUTH_TOKEN (self-hosted) OR JUDGE0_RAPIDAPI_KEY + JUDGE0_RAPIDAPI_HOST
+        sync: false
+      - key: JUDGE0_BASE_URL
+        sync: false
+      - key: JUDGE0_AUTH_TOKEN
+        sync: false
+      - key: JUDGE0_RAPIDAPI_KEY
+        sync: false
+      - key: JUDGE0_RAPIDAPI_HOST
+        value: judge0-ce.p.rapidapi.com
+      # Piston fallback MUST stay disabled in production unless hosted on a dedicated isolated VM/microVM
+      - key: EXECUTION_FALLBACK_ENABLED
+        value: "false"
+      - key: PISTON_ENABLED
+        value: "false"
+      - key: PISTON_ISOLATED_HOST_VERIFIED
+        value: "false"
+      # Bundled scikit-learn ML error classifier artifact
+      - key: ML_MODEL_ARTIFACT_PATH
+        value: /app/ml/artifacts/error_classifier_v1.joblib
+      # Socratic AI Mentor (Gemini API; falls back deterministically if LLM_API_KEY is omitted)
       - key: LLM_PROVIDER
         value: gemini
       - key: LLM_MODEL
         value: gemini-2.5-flash-lite
-      # Optional free Gemini key can be added in Render Dashboard -> Environment (LLM_API_KEY);
-      # without LLM_API_KEY, the Socratic mentor safely uses deterministic fallback mode.
+      - key: LLM_API_KEY
+        sync: false
       - key: RATE_LIMIT_ENABLED
         value: "true"

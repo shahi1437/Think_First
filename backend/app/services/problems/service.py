@@ -100,10 +100,20 @@ def _classify_buggy_failure(verdicts: list[str]) -> str | None:
 
 _LANGUAGE_MATCH_RULES: tuple[tuple[str, str, str, str, bool], ...] = (
     ("python", "Python 3", "python", "Python (3.", True),
-    ("javascript", "JavaScript (Node.js)", "javascript", "JavaScript (Node.js", False),
-    ("cpp", "C++ (GCC)", "cpp", "C++ (GCC", False),
-    ("java", "Java (OpenJDK)", "java", "Java (OpenJDK", False),
+    ("javascript", "JavaScript (Node.js)", "javascript", "JavaScript (Node.js", True),
+    ("c", "C (GCC)", "c", "C (GCC", True),
+    ("cpp", "C++ (GCC)", "cpp", "C++ (GCC", True),
+    ("java", "Java (OpenJDK)", "java", "Java (OpenJDK", True),
 )
+
+
+_LANGUAGE_ORDER: dict[str, int] = {
+    "python": 0,
+    "javascript": 1,
+    "c": 2,
+    "cpp": 3,
+    "java": 4,
+}
 
 
 def _to_language_item(lang: SupportedLanguage) -> LanguageItem:
@@ -199,7 +209,10 @@ class ProblemService:
                 mode=version.mode,
                 topics=list(version.topics),
                 skills=list(version.skills),
-                supported_languages=sorted({v.language_slug for v in version.variants}),
+                supported_languages=sorted(
+                    {v.language_slug for v in version.variants},
+                    key=lambda slug: (_LANGUAGE_ORDER.get(slug, 99), slug),
+                ),
                 published_at=version.published_at,
             )
             for problem, version in rows
@@ -236,7 +249,10 @@ class ProblemService:
                 buggy_starter_code=v.buggy_starter_code,
                 debugging_prompt=v.debugging_prompt,
             )
-            for v in sorted(version.variants, key=lambda item: item.language_slug)
+            for v in sorted(
+                version.variants,
+                key=lambda item: (_LANGUAGE_ORDER.get(item.language_slug, 99), item.language_slug),
+            )
         ]
 
         sorted_tests = sorted(version.test_cases, key=lambda tc: tc.ordinal)
@@ -354,7 +370,10 @@ class ProblemService:
                     v.reference_solution.expected_failure_category if v.reference_solution else None
                 ),
             )
-            for v in sorted(version.variants, key=lambda item: item.language_slug)
+            for v in sorted(
+                version.variants,
+                key=lambda item: (_LANGUAGE_ORDER.get(item.language_slug, 99), item.language_slug),
+            )
         ]
         test_cases = [
             AdminTestCaseDetail(

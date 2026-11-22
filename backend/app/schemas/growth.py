@@ -53,6 +53,7 @@ class LearningDnaSnapshotSummaryView(BaseModel):
 
 class LearningDnaProfileView(BaseModel):
     snapshot_id: UUID
+    language_slug: str = "python"
     computed_at: datetime
     selected_track_slug: str
     dimensions: list[LearningDnaDimensionView]
@@ -90,6 +91,7 @@ class DailyPlanTaskView(BaseModel):
 
 class DailyLearningPlanView(BaseModel):
     id: UUID
+    language_slug: str = "python"
     plan_date: date
     version_number: int
     is_active: bool
@@ -169,6 +171,7 @@ class LearningHistoryResponseView(BaseModel):
 
 class RetentionScheduleView(BaseModel):
     id: UUID
+    language_slug: str = "python"
     skill_slug: str
     skill_title_en: str
     skill_title_bn: str

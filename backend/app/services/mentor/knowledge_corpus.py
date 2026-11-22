@@ -19,6 +19,7 @@ class SeedKnowledgeDoc:
     source_name: str
     source_version: str
     content_md: str
+    language_slug: str = "python"
 
 
 APPROVED_PYTHON_KNOWLEDGE_DOCS: tuple[SeedKnowledgeDoc, ...] = (
@@ -207,6 +208,272 @@ APPROVED_PYTHON_KNOWLEDGE_DOCS: tuple[SeedKnowledgeDoc, ...] = (
             "4. Duplicate values and zero values."
         ),
     ),
+)
+
+APPROVED_MULTILANG_KNOWLEDGE_DOCS: tuple[SeedKnowledgeDoc, ...] = (
+    # --- JavaScript (Node.js) ---
+    SeedKnowledgeDoc(
+        slug="js-syntax-types-and-equality",
+        title="JavaScript Syntax, Types, `let`/`const` & Strict Equality",
+        topic="syntax",
+        error_codes=("syntax_error", "condition_error", "runtime_error"),
+        source_name="CodeMentor JavaScript Foundations Guide",
+        source_version="1.0",
+        language_slug="javascript",
+        content_md=(
+            "## Strict Equality (`===`) vs Loose Equality (`==`)\n"
+            "In JavaScript, `==` performs implicit type coercion (so `'5' == 5` is true), while "
+            "`===` checks both type and value. Always convert stdin strings with `Number(...)` "
+            "and prefer `===` and `!==` for predictable comparisons.\n\n"
+            "## Avoiding ReferenceError & TypeError\n"
+            "Declare every variable with `let` or `const` before using it. Reassigning a `const` "
+            "variable throws `TypeError: Assignment to constant variable`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="js-loops-and-boundaries",
+        title="JavaScript Loops, Off-By-One Bounds & Accumulators",
+        topic="loops",
+        error_codes=("loop_boundary_error", "initialization_error"),
+        source_name="CodeMentor JavaScript Foundations Guide",
+        source_version="1.0",
+        language_slug="javascript",
+        content_md=(
+            "## Inclusive vs Exclusive Loop Conditions\n"
+            "In JavaScript `for (let i = a; i <= b; i++)`, using `<` stops before `b` while `<=` "
+            "includes `b`. Trace the first and last value of `i` on a tiny range like `3..5`.\n\n"
+            "## Safe Accumulator & Maximum Initialization\n"
+            "Never initialize a maximum to `0` when inputs can be negative — start from `nums[0]`. "
+            "Also watch for string concatenation (`'3' + '4' === '34'`): parse numbers first."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="js-arrays-and-indexing",
+        title="JavaScript Arrays, `.length` Bounds & `undefined` Traps",
+        topic="lists",
+        error_codes=("indexing_error", "logic_error"),
+        source_name="CodeMentor JavaScript Foundations Guide",
+        source_version="1.0",
+        language_slug="javascript",
+        content_md=(
+            "## Out-of-Bounds Reads Return `undefined`\n"
+            "Unlike Python or Java, reading `arr[arr.length]` in JavaScript does not throw an "
+            "index error — it silently returns `undefined`, which turns arithmetic into `NaN`. "
+            "Keep loop indices strictly within `0 <= i < arr.length`.\n\n"
+            "## Adjacent Element Traversal\n"
+            "When reading `arr[i]` and `arr[i + 1]`, stop at `i < arr.length - 1`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="js-functions-and-returns",
+        title="JavaScript Functions, Explicit `return` & Debugging",
+        topic="functions",
+        error_codes=("function_return_error", "runtime_error", "logic_error"),
+        source_name="CodeMentor JavaScript Debugging Handbook",
+        source_version="1.0",
+        language_slug="javascript",
+        content_md=(
+            "## Missing `return` Evaluates to `undefined`\n"
+            "A JavaScript function without a `return` statement returns `undefined`. Check that "
+            "`return` is placed after your loop completes rather than inside the first iteration.\n\n"
+            "## Reading Node.js Stack Traces\n"
+            "Start with the error type (`SyntaxError`, `ReferenceError`, `TypeError`) and the line "
+            "number in `main.js` before tracing variable values."
+        ),
+    ),
+    # --- C (GCC) ---
+    SeedKnowledgeDoc(
+        slug="c-compiler-syntax-and-scanf",
+        title="C Compiler Diagnostics, Semicolons & Safe `scanf` Usage",
+        topic="syntax",
+        error_codes=("syntax_error", "runtime_error"),
+        source_name="CodeMentor C Foundations Guide",
+        source_version="1.0",
+        language_slug="c",
+        content_md=(
+            "## Reading GCC Compiler Errors First\n"
+            "Always fix the FIRST compiler error reported by GCC — missing `;`, unmatched `{}`, "
+            "or a missing `#include <stdio.h>` causes cascading errors on later lines.\n\n"
+            "## Passing Addresses to `scanf`\n"
+            'Scalar variables passed to `scanf("%d", &n)` require the `&` address-of operator. '
+            "Forgetting `&` causes undefined behavior or a segmentation fault (`SIGSEGV`)."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="c-loops-and-initialization",
+        title="C Loops, Boundaries & Uninitialized Local Variables",
+        topic="loops",
+        error_codes=("loop_boundary_error", "initialization_error"),
+        source_name="CodeMentor C Foundations Guide",
+        source_version="1.0",
+        language_slug="c",
+        content_md=(
+            "## Uninitialized Local Variables Hold Garbage\n"
+            "In C, `int sum;` without `= 0` contains indeterminate stack memory. Always initialize "
+            "accumulators explicitly (`int sum = 0;`) and start maximum/minimum searches from `arr[0]`.\n\n"
+            "## Loop Boundaries (`<` vs `<=`)\n"
+            "Verify whether an inclusive range from `a` to `b` uses `i <= b` while 0-based array "
+            "iteration over `n` items uses `i < n`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="c-arrays-and-bounds",
+        title="C Arrays, 0-Based Indexing & Preventing `SIGSEGV`",
+        topic="lists",
+        error_codes=("indexing_error", "runtime_error"),
+        source_name="CodeMentor C Foundations Guide",
+        source_version="1.0",
+        language_slug="c",
+        content_md=(
+            "## C Does Not Perform Automatic Bounds Checking\n"
+            "Valid indices for `int arr[N]` are `0` through `N - 1`. Accessing `arr[N]` or `arr[-1]` "
+            "corrupts memory or crashes with `SIGSEGV` (Segmentation Fault).\n\n"
+            "## Integer Division & Overflow Awareness\n"
+            "Dividing two `int` values truncates the fractional part, and dividing by `0` triggers `SIGFPE`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="c-functions-and-conditions",
+        title="C Functions, Return Types & Boolean Conditions",
+        topic="functions",
+        error_codes=("function_return_error", "condition_error", "logic_error"),
+        source_name="CodeMentor C Debugging Handbook",
+        source_version="1.0",
+        language_slug="c",
+        content_md=(
+            "## Return Values & `=` vs `==` Pitfall\n"
+            "In C, `if (x = 5)` assigns `5` instead of comparing! Always use `==` for equality and "
+            "ensure every non-`void` function returns a value along every control path, including `return 0;` in `main`."
+        ),
+    ),
+    # --- C++ (GCC) ---
+    SeedKnowledgeDoc(
+        slug="cpp-compiler-streams-and-types",
+        title="C++ Compiler Errors, `std::cin`/`std::cout` & Types",
+        topic="syntax",
+        error_codes=("syntax_error", "runtime_error"),
+        source_name="CodeMentor C++ Foundations Guide",
+        source_version="1.0",
+        language_slug="cpp",
+        content_md=(
+            "## Fixing the First `g++` Error\n"
+            "Check `#include <iostream>`, `#include <vector>`, missing semicolons `;`, and `std::` "
+            "namespace qualification when `g++` reports `was not declared in this scope`.\n\n"
+            "## Stream Reading in Loops\n"
+            "Use `while (cin >> x)` to safely read an unknown number of space-separated integers."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="cpp-loops-and-initialization",
+        title="C++ Loops, Boundaries & Safe Initialization",
+        topic="loops",
+        error_codes=("loop_boundary_error", "initialization_error"),
+        source_name="CodeMentor C++ Foundations Guide",
+        source_version="1.0",
+        language_slug="cpp",
+        content_md=(
+            "## Loop Boundaries & Signed/Unsigned Sizes\n"
+            "Compare inclusive math bounds (`for (int i = a; i <= b; ++i)`) against 0-based container "
+            "bounds (`for (size_t i = 0; i < v.size(); ++i)`). Avoid `v.size() - 1` when `v` could be empty "
+            "because unsigned `size_t` underflows to a huge number.\n\n"
+            "## Initializing Extremes & Sums\n"
+            "Initialize `long long total = 0;` for sums and `int best = nums[0];` for maximum/minimum."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="cpp-vectors-and-indexing",
+        title="C++ `std::vector`, Bounds Safety & `out_of_range`",
+        topic="lists",
+        error_codes=("indexing_error", "runtime_error"),
+        source_name="CodeMentor C++ Foundations Guide",
+        source_version="1.0",
+        language_slug="cpp",
+        content_md=(
+            "## Safe Vector Access\n"
+            "`v[i]` does not bounds-check and causes undefined behavior if `i >= v.size()`, while "
+            "`v.at(i)` throws `std::out_of_range`. Always check `i >= 0 && i < static_cast<int>(v.size())`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="cpp-functions-conditions-and-logic",
+        title="C++ Functions, References & Condition Boundaries",
+        topic="functions",
+        error_codes=("function_return_error", "condition_error", "logic_error"),
+        source_name="CodeMentor C++ Debugging Handbook",
+        source_version="1.0",
+        language_slug="cpp",
+        content_md=(
+            "## Missing Return & Early Return\n"
+            "Falling off the end of a non-void C++ function is undefined behavior. Verify your "
+            "`return` statement sits outside loops unless you are intentionally returning on an early match."
+        ),
+    ),
+    # --- Java (OpenJDK) ---
+    SeedKnowledgeDoc(
+        slug="java-javac-syntax-and-main-class",
+        title="Java `javac` Compilation, `public class Main` & Types",
+        topic="syntax",
+        error_codes=("syntax_error", "runtime_error"),
+        source_name="CodeMentor Java Foundations Guide",
+        source_version="1.0",
+        language_slug="java",
+        content_md=(
+            "## Entry Point & Class Name Requirement\n"
+            "In sandbox execution, the file is named `Main.java`, so your public entry class must be "
+            "`public class Main` containing `public static void main(String[] args)`.\n\n"
+            "## Common `javac` Errors\n"
+            "Check missing semicolons `;`, unmatched braces `{ }`, `import java.util.*;`, and "
+            "strict static typing (`int` vs `String`)."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="java-loops-and-initialization",
+        title="Java Loops, Off-By-One Bounds & Initialization",
+        topic="loops",
+        error_codes=("loop_boundary_error", "initialization_error"),
+        source_name="CodeMentor Java Foundations Guide",
+        source_version="1.0",
+        language_slug="java",
+        content_md=(
+            "## Loop Boundaries (`<` vs `<=`)\n"
+            "Use `i <= b` for inclusive numeric ranges `[a, b]` and `i < arr.length` for 0-based "
+            "arrays. Initialize local variables before use (Java refuses to compile uninitialized locals) "
+            "and initialize maximum/minimum searches from `nums[0]` instead of `0`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="java-arrays-indexing-and-strings",
+        title="Java Arrays, `ArrayIndexOutOfBoundsException` & `.equals()`",
+        topic="lists",
+        error_codes=("indexing_error", "condition_error"),
+        source_name="CodeMentor Java Foundations Guide",
+        source_version="1.0",
+        language_slug="java",
+        content_md=(
+            "## Array Bounds & String Comparison\n"
+            "Arrays have indices `0` through `arr.length - 1`; accessing `arr[arr.length]` throws "
+            "`ArrayIndexOutOfBoundsException`. For `String` equality, always use `s1.equals(s2)` instead of `==`."
+        ),
+    ),
+    SeedKnowledgeDoc(
+        slug="java-methods-returns-and-exceptions",
+        title="Java Methods, Missing Return & Runtime Exceptions",
+        topic="functions",
+        error_codes=("function_return_error", "runtime_error", "logic_error"),
+        source_name="CodeMentor Java Debugging Handbook",
+        source_version="1.0",
+        language_slug="java",
+        content_md=(
+            "## Return Paths & Null Safety\n"
+            "Every non-`void` Java method must return a matching type on all code paths. Guard "
+            "against `NullPointerException`, `ArithmeticException` (divide by zero), and `NoSuchElementException` "
+            "by checking `sc.hasNextInt()` before reading."
+        ),
+    ),
+)
+
+ALL_APPROVED_KNOWLEDGE_DOCS: tuple[SeedKnowledgeDoc, ...] = (
+    APPROVED_PYTHON_KNOWLEDGE_DOCS + APPROVED_MULTILANG_KNOWLEDGE_DOCS
 )
 
 

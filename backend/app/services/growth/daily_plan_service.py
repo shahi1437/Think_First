@@ -31,7 +31,10 @@ from app.schemas.growth import (
 )
 from app.services.growth.retention_service import RetentionVerificationService
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
-from app.services.learning.lessons_service import LessonsAndTracksService
+from app.services.learning.lessons_service import (
+    LessonsAndTracksService,
+    resolve_user_language,
+)
 from app.services.learning.skill_graph import SkillGraphService
 
 
@@ -60,6 +63,7 @@ def _plan_to_view(plan: DailyLearningPlan) -> DailyLearningPlanView:
     completed_count = sum(1 for t in task_views if t.status == "completed")
     return DailyLearningPlanView(
         id=plan.id,
+        language_slug=plan.language_slug,
         plan_date=plan.plan_date,
         version_number=plan.version_number,
         is_active=plan.is_active,
@@ -114,15 +118,21 @@ class DailyPlanService:
         self._retention = retention_service
 
     async def _build_tasks(
-        self, *, user: UserRecord, available_minutes: int
+        self, *, user: UserRecord, available_minutes: int, language_slug: str = "python"
     ) -> tuple[str, str, str, dict[str, Any], list[dict[str, Any]]]:
-        track_status = await self._lessons.get_track_status(user)
-        lessons = await self._lessons.list_lessons(user=user)
-        skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
-        diag_sessions = await self._diagnostics.list_my_sessions(user=user)
+        track_status = await self._lessons.get_track_status(user, language_slug=language_slug)
+        lessons = await self._lessons.list_lessons(user=user, language_slug=language_slug)
+        skill_graph = await self._skill_graph.get_student_skill_graph(
+            user.id, language_slug=language_slug
+        )
+        diag_sessions = await self._diagnostics.list_my_sessions(
+            user=user, language_slug=language_slug
+        )
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
         latest_diag = completed_diags[0] if completed_diags else None
-        retention_overview = await self._retention.get_retention_overview(user)
+        retention_overview = await self._retention.get_retention_overview(
+            user, language_slug=language_slug
+        )
 
         skill_state_map = {n.slug: n.state for n in skill_graph.nodes}
         tasks: list[dict[str, Any]] = []
@@ -159,28 +169,66 @@ class DailyPlanService:
             )
             used_minutes += est
 
-        # Priority 2: 8-Domain Diagnostic if not yet completed
+        # Priority 2: Adaptive Entry Diagnostic (for beginners, wait until >=2 foundation lessons done!)
+        completed_lessons_count = sum(1 for lsn in lessons if lsn.progress_status == "completed")
+        prefs = user.preferences
+        is_beginner_entry = bool(
+            (prefs.programming_experience if prefs else "none") in ("none", "beginner")
+            and (prefs.starting_preference if prefs else "guided_beginner") == "guided_beginner"
+        )
+        lang_labels = {
+            "python": "Python",
+            "javascript": "JavaScript",
+            "c": "C",
+            "cpp": "C++",
+            "java": "Java",
+        }
+        lang_name = lang_labels.get(language_slug, language_slug.capitalize())
+
         if latest_diag is None and can_fit(15):
-            tasks.append(
-                {
-                    "task_type": "diagnostic",
-                    "skill_slug": None,
-                    "target_id": "diagnostic-8-domain",
-                    "target_slug": "diagnostic-8-domain",
-                    "title_en": "Complete 8-Domain Adaptive Diagnostic",
-                    "title_bn": "৮-ডোমেইন অ্যাডাপ্টিভ ডায়াগনস্টিক সম্পন্ন করো",
-                    "reason_en": (
-                        "Establishes evidence-backed track placement across 8 Python domains "
-                        "instead of relying on self-reported experience."
-                    ),
-                    "reason_bn": (
-                        "নিজের অনুমানের বদলে ৮টি পাইথন ডোমেইনে বাস্তব প্রমাণের ভিত্তিতে সঠিক ট্র্যাক নির্ধারণ করবে।"
-                    ),
-                    "href": "/student/diagnostic",
-                    "estimated_minutes": 15,
-                }
-            )
-            used_minutes += 15
+            if not is_beginner_entry:
+                tasks.append(
+                    {
+                        "task_type": "diagnostic",
+                        "skill_slug": None,
+                        "target_id": f"diagnostic-8-domain-{language_slug}",
+                        "target_slug": "diagnostic-8-domain",
+                        "title_en": f"Complete 8-Domain {lang_name} Adaptive Diagnostic",
+                        "title_bn": f"৮-ডোমেইন {lang_name} অ্যাডাপ্টিভ ডায়াগনস্টিক সম্পন্ন করো",
+                        "reason_en": (
+                            f"Establishes evidence-backed track placement across 8 {lang_name} domains "
+                            "instead of relying on self-reported experience."
+                        ),
+                        "reason_bn": (
+                            f"নিজের অনুমানের বদলে ৮টি {lang_name} ডোমেইনে বাস্তব প্রমাণের ভিত্তিতে সঠিক ট্র্যাক নির্ধারণ করবে।"
+                        ),
+                        "href": "/student/diagnostic?mode=full",
+                        "estimated_minutes": 15,
+                    }
+                )
+                used_minutes += 15
+            elif completed_lessons_count >= 2:
+                tasks.append(
+                    {
+                        "task_type": "diagnostic",
+                        "skill_slug": None,
+                        "target_id": f"diagnostic-readiness-{language_slug}",
+                        "target_slug": "diagnostic-readiness",
+                        "title_en": f"Take Short {lang_name} Foundation Readiness Check",
+                        "title_bn": f"{lang_name} সংক্ষিপ্ত প্রস্তুতি যাচাই সম্পন্ন করো",
+                        "reason_en": (
+                            f"You finished {completed_lessons_count} foundation lessons — confirm your "
+                            f"{lang_name} track with a quick 4-question readiness check."
+                        ),
+                        "reason_bn": (
+                            f"তুমি {completed_lessons_count}টি প্রাথমিক লেসন সম্পন্ন করেছ — চারটি প্রশ্নের "
+                            f"সংক্ষিপ্ত যাচাই দিয়ে তোমার {lang_name} ট্র্যাক নিশ্চিত করো।"
+                        ),
+                        "href": "/student/diagnostic?mode=readiness",
+                        "estimated_minutes": 10,
+                    }
+                )
+                used_minutes += 10
 
         # Priority 3: Gap-targeted or prerequisite-ready lessons matching selected track
         gap_skills: set[str] = set()
@@ -385,9 +433,14 @@ class DailyPlanService:
             tasks,
         )
 
-    async def get_today_workspace(self, user: UserRecord) -> DailyPlanWorkspaceView:
+    async def get_today_workspace(
+        self, user: UserRecord, *, language_slug: str | None = None
+    ) -> DailyPlanWorkspaceView:
+        lang = resolve_user_language(user, language_slug)
         today = datetime.now(UTC).date()
-        active = await self._growth_repo.get_active_daily_plan(student_id=user.id, plan_date=today)
+        active = await self._growth_repo.get_active_daily_plan(
+            student_id=user.id, plan_date=today, language_slug=lang
+        )
         if active is None:
             default_minutes = (
                 user.preferences.daily_practice_minutes
@@ -396,10 +449,11 @@ class DailyPlanService:
             )
             default_minutes = min(max(default_minutes, 15), 240)
             track_slug, reason_en, reason_bn, ev_snap, tasks = await self._build_tasks(
-                user=user, available_minutes=default_minutes
+                user=user, available_minutes=default_minutes, language_slug=lang
             )
             active = await self._growth_repo.create_daily_plan(
                 student_id=user.id,
+                language_slug=lang,
                 plan_date=today,
                 selected_track_slug=track_slug,
                 available_minutes=default_minutes,
@@ -410,15 +464,22 @@ class DailyPlanService:
                 reuse_if_active_exists=True,
             )
 
-        history = await self._growth_repo.list_daily_plan_history(student_id=user.id, limit=14)
+        history = await self._growth_repo.list_daily_plan_history(
+            student_id=user.id, limit=14, language_slug=lang
+        )
         return DailyPlanWorkspaceView(
             active_plan=_plan_to_view(active),
             history=[_plan_to_history_item(p) for p in history],
         )
 
     async def regenerate_today_plan(
-        self, *, user: UserRecord, available_minutes: int | None
+        self,
+        *,
+        user: UserRecord,
+        available_minutes: int | None,
+        language_slug: str | None = None,
     ) -> DailyPlanWorkspaceView:
+        lang = resolve_user_language(user, language_slug)
         today: date = datetime.now(UTC).date()
         budget = available_minutes or (
             user.preferences.daily_practice_minutes
@@ -427,10 +488,11 @@ class DailyPlanService:
         )
         budget = min(max(budget, 15), 240)
         track_slug, reason_en, reason_bn, ev_snap, tasks = await self._build_tasks(
-            user=user, available_minutes=budget
+            user=user, available_minutes=budget, language_slug=lang
         )
         active = await self._growth_repo.create_daily_plan(
             student_id=user.id,
+            language_slug=lang,
             plan_date=today,
             selected_track_slug=track_slug,
             available_minutes=budget,
@@ -439,7 +501,9 @@ class DailyPlanService:
             evidence_snapshot=ev_snap,
             tasks_payload=tasks,
         )
-        history = await self._growth_repo.list_daily_plan_history(student_id=user.id, limit=14)
+        history = await self._growth_repo.list_daily_plan_history(
+            student_id=user.id, limit=14, language_slug=lang
+        )
         return DailyPlanWorkspaceView(
             active_plan=_plan_to_view(active),
             history=[_plan_to_history_item(p) for p in history],

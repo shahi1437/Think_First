@@ -11,11 +11,16 @@ import joblib
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.schemas.mentor import MLCandidateScore, MLDiagnosisResponse
+from app.services.mentor.multilanguage_diagnosis import diagnose_non_python_submission
 
 logger = get_logger(__name__)
 
-# Ensure repository root is importable for shared `ml.preprocessing.features`
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+# Ensure repository root (or Docker /app) is importable for shared `ml.preprocessing.features`
+_ML_INFERENCE_FILE = Path(__file__).resolve()
+_REPO_ROOT = next(
+    (parent for parent in _ML_INFERENCE_FILE.parents if (parent / "ml").is_dir()),
+    _ML_INFERENCE_FILE.parents[min(4, len(_ML_INFERENCE_FILE.parents) - 1)],
+)
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -96,6 +101,14 @@ class MLErrorClassifierService:
             ),
         }
 
+    def predict_for_language(
+        self, sample: ExecutionSample, *, language_slug: str = "python"
+    ) -> MLDiagnosisResponse:
+        """Use trained ML classifier for Python and rule-based diagnosis for JS/C/C++/Java."""
+        if language_slug != "python":
+            return diagnose_non_python_submission(sample, language_slug=language_slug)
+        return self.predict(sample)
+
     def predict(self, sample: ExecutionSample) -> MLDiagnosisResponse:
         bundle = self._ensure_loaded()
         threshold = self._settings.ml_low_confidence_threshold
@@ -105,6 +118,8 @@ class MLErrorClassifierService:
             pred = self._fallback.predict_one(sample)
             return MLDiagnosisResponse(
                 model_version="rule-fallback-v1",
+                diagnosis_source="rule_based",
+                language_slug="python",
                 predicted_error_code=pred,
                 predicted_display_name=DISPLAY_NAMES.get(pred, pred),
                 confidence=0.45,
@@ -165,6 +180,8 @@ class MLErrorClassifierService:
 
         return MLDiagnosisResponse(
             model_version=model_version,
+            diagnosis_source="ml_classifier",
+            language_slug="python",
             predicted_error_code=top_code,
             predicted_display_name=DISPLAY_NAMES.get(top_code, top_code),
             confidence=top_prob,

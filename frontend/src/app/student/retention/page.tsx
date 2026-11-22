@@ -1,5 +1,9 @@
+import { LanguageSelector } from "@/components/language-selector";
 import { RetentionClient } from "@/features/growth/retention-client";
-import { fetchRetentionOverview } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchRetentionOverview,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
 export const dynamic = "force-dynamic";
@@ -10,15 +14,29 @@ export default async function StudentRetentionPage() {
     currentPath: "/student/retention",
   });
 
-  const overview = await fetchRetentionOverview(accessToken);
+  const [languageOverview, overview] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchRetentionOverview(accessToken),
+  ]);
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
 
   return (
-    <RetentionClient
-      accessToken={accessToken}
-      initialOverview={overview}
-      initialLanguage={
-        user.preferences?.preferred_explanation_language ?? "en"
-      }
-    />
+    <div className="space-y-6">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+      <RetentionClient
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={overview}
+        initialLanguage={explanationLang}
+        activeLanguageSlug={languageOverview.active_language_slug}
+      />
+    </div>
   );
 }

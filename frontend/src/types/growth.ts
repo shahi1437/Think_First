@@ -94,6 +94,7 @@ export const learningDnaSnapshotSummarySchema = z.object({
 
 export const learningDnaProfileViewSchema = z.object({
   snapshot_id: z.string(),
+  language_slug: z.string().optional(),
   computed_at: z.string(),
   selected_track_slug: z.string(),
   dimensions: z.array(learningDnaDimensionViewSchema),
@@ -130,6 +131,7 @@ export type DailyPlanTaskView = z.infer<typeof dailyPlanTaskViewSchema>;
 
 export const dailyLearningPlanViewSchema = z.object({
   id: z.string(),
+  language_slug: z.string().optional(),
   plan_date: z.string(),
   version_number: z.number(),
   is_active: z.boolean(),
@@ -196,6 +198,7 @@ export type LearningHistoryResponseView = z.infer<
 
 export const retentionScheduleViewSchema = z.object({
   id: z.string(),
+  language_slug: z.string().optional(),
   skill_slug: z.string(),
   skill_title_en: z.string(),
   skill_title_bn: z.string(),

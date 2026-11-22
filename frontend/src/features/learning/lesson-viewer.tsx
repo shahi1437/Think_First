@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   BookCheck,
   CheckCircle2,
   Clock,
@@ -11,6 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { CodeEditor } from "@/features/workspace/code-editor";
@@ -18,6 +20,10 @@ import {
   markLessonReadingComplete,
   runLessonGuidedExercise,
 } from "@/lib/api-client";
+import {
+  getLanguageDisplayName,
+  getMonacoLanguageForSlug,
+} from "@/lib/languages";
 import type {
   LessonDetailView,
   LessonExerciseRunResponse,
@@ -43,6 +49,7 @@ export function LessonViewer({
   onMarkReading,
   onRunExercise,
 }: LessonViewerProps) {
+  const router = useRouter();
   const [lesson, setLesson] = useState<LessonDetailView>(initialLesson);
   const [lang, setLang] = useState<"en" | "bn">(initialLanguage);
   const [code, setCode] = useState<string>(
@@ -56,6 +63,10 @@ export function LessonViewer({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isBn = lang === "bn";
+  const exerciseLanguageSlug =
+    lesson.guided_exercise.language_slug || lesson.language_slug || "python";
+  const exerciseLanguageLabel = getLanguageDisplayName(exerciseLanguageSlug);
+  const monacoLanguage = getMonacoLanguageForSlug(exerciseLanguageSlug);
 
   async function handleMarkReading() {
     setErrorMsg(null);
@@ -65,6 +76,7 @@ export function LessonViewer({
         ? await onMarkReading(lesson.lesson_id)
         : await markLessonReadingComplete(accessToken, lesson.lesson_id);
       setLesson(updated);
+      router.refresh();
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "Could not save reading progress.",
@@ -90,30 +102,58 @@ export function LessonViewer({
         exercise_attempts: prev.exercise_attempts + 1,
         last_verdict: res.verdict,
       }));
+      router.refresh();
     } catch (err) {
       setErrorMsg(
         err instanceof Error
           ? err.message
-          : "Guided exercise execution failed on Judge0.",
+          : "Guided exercise execution failed on sandbox.",
       );
     } finally {
       setRunning(false);
     }
   }
 
+  const lessonSteps = [
+    {
+      num: 1,
+      label: isBn ? "ধারণা বোঝা" : "Understand Concept",
+      done: lesson.reading_completed || lesson.exercise_passed,
+      active: !lesson.reading_completed && !lesson.exercise_passed,
+    },
+    {
+      num: 2,
+      label: isBn ? "পড়া সম্পন্ন" : "Mark Reading",
+      done: lesson.reading_completed,
+      active: !lesson.reading_completed,
+    },
+    {
+      num: 3,
+      label: isBn ? "কোড অনুশীলন" : "Run Guided Code",
+      done: lesson.exercise_passed,
+      active: lesson.reading_completed && !lesson.exercise_passed,
+    },
+    {
+      num: 4,
+      label: isBn ? "লেসন পাস ও পরবর্তী ধাপ" : "Pass & Advance",
+      done: lesson.progress_status === "completed",
+      active: lesson.progress_status === "completed",
+    },
+  ];
+
   return (
-    <div className="space-y-5 overflow-x-hidden" lang={lang}>
+    <div className="tf-animate-enter space-y-5 overflow-x-hidden" lang={lang}>
       {/* Top Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href="/student/lessons"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="tf-btn-press inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             <span>Lessons</span>
           </Link>
-          <h1 className="text-base font-bold text-slate-900 sm:text-lg">
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
             {isBn ? lesson.title_bn : lesson.title_en}
           </h1>
           <Badge
@@ -132,20 +172,20 @@ export function LessonViewer({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600">
+            <Clock className="h-4 w-4" aria-hidden="true" />
             <span>{lesson.estimated_minutes} min</span>
           </span>
           <div
             role="group"
             aria-label="Lesson language"
-            className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs"
+            className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm"
           >
             <button
               type="button"
               onClick={() => setLang("en")}
               aria-pressed={lang === "en"}
-              className={`rounded-md px-2.5 py-1 font-semibold ${
+              className={`rounded-lg px-3 py-1 font-semibold transition ${
                 lang === "en"
                   ? "bg-indigo-600 text-white"
                   : "text-slate-600 hover:bg-slate-200/70"
@@ -157,7 +197,7 @@ export function LessonViewer({
               type="button"
               onClick={() => setLang("bn")}
               aria-pressed={lang === "bn"}
-              className={`rounded-md px-2.5 py-1 font-semibold ${
+              className={`rounded-lg px-3 py-1 font-semibold transition ${
                 lang === "bn"
                   ? "bg-indigo-600 text-white"
                   : "text-slate-600 hover:bg-slate-200/70"
@@ -169,15 +209,47 @@ export function LessonViewer({
         </div>
       </div>
 
+      {/* 4-Step Guided Lesson Progress Strip */}
+      <ol
+        aria-label="Guided lesson steps"
+        className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {lessonSteps.map((step) => (
+          <li
+            key={step.num}
+            className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition ${
+              step.done
+                ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
+                : step.active
+                  ? "border-indigo-300 bg-indigo-50/60 text-indigo-950"
+                  : "border-slate-200 bg-white text-slate-500"
+            }`}
+          >
+            <span
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                step.done
+                  ? "bg-emerald-600 text-white"
+                  : step.active
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-200 text-slate-600"
+              }`}
+            >
+              {step.done ? "✓" : step.num}
+            </span>
+            <span className="truncate">{step.label}</span>
+          </li>
+        ))}
+      </ol>
+
       {/* Main Split: Concept & Interactive Examples vs Real Judge0 Guided Exercise */}
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Left: Concept Explanation + Examples */}
-        <article className="min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-6">
+        <article className="min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
               {isBn ? "ধারণা ও ব্যাখ্যা" : "Concept Explanation"}
             </p>
-            <div className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-800">
+            <div className="mt-3 whitespace-pre-line text-base leading-relaxed text-slate-800 sm:text-[17px]">
               {isBn ? lesson.content_bn_md : lesson.content_en_md}
             </div>
           </div>
@@ -187,7 +259,7 @@ export function LessonViewer({
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Learning Objectives
               </h2>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-700">
+              <ul className="mt-2.5 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-700 sm:text-[15px]">
                 {lesson.learning_objectives.map((obj) => (
                   <li key={obj}>{obj}</li>
                 ))}
@@ -284,7 +356,9 @@ export function LessonViewer({
 
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-3.5 py-2 text-xs text-white">
-              <span className="font-semibold">Python 3 Guided Practice</span>
+              <span className="font-semibold">
+                {exerciseLanguageLabel} Guided Practice
+              </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -307,12 +381,12 @@ export function LessonViewer({
                   ) : (
                     <Play className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
-                  <span>{running ? "Running Judge0..." : "Run Guided Exercise"}</span>
+                  <span>{running ? "Running Sandbox..." : "Run Guided Exercise"}</span>
                 </button>
               </div>
             </div>
             <CodeEditor
-              language="python"
+              language={monacoLanguage}
               value={code}
               onChange={setCode}
               usePlainTextarea={usePlainEditor}
@@ -332,20 +406,18 @@ export function LessonViewer({
           {runResult ? (
             <div
               role="status"
-              className={`space-y-3 rounded-xl border p-4 text-xs ${
-                runResult.exercise_passed
-                  ? "border-emerald-300 bg-emerald-50/70"
-                  : "border-amber-200 bg-amber-50/70"
-              }`}
+              className={`space-y-3 rounded-xl border p-4 text-xs ${runResult.exercise_passed
+                ? "border-emerald-300 bg-emerald-50/70"
+                : "border-amber-200 bg-amber-50/70"
+                }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 font-bold text-slate-900">
                   <CheckCircle2
-                    className={`h-4 w-4 ${
-                      runResult.exercise_passed
-                        ? "text-emerald-700"
-                        : "text-amber-700"
-                    }`}
+                    className={`h-4 w-4 ${runResult.exercise_passed
+                      ? "text-emerald-700"
+                      : "text-amber-700"
+                      }`}
                   />
                   <span>
                     {runResult.exercise_passed
@@ -353,12 +425,27 @@ export function LessonViewer({
                       : `Not Passed Yet (${runResult.verdict})`}
                   </span>
                 </div>
-                <Badge
-                  variant={runResult.exercise_passed ? "emerald" : "amber"}
-                >
-                  {runResult.passed_tests} / {runResult.total_tests} tests · Skill:{" "}
-                  {runResult.skill_state_after}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant={runResult.exercise_passed ? "emerald" : "amber"}
+                  >
+                    {runResult.passed_tests} / {runResult.total_tests} tests · Skill:{" "}
+                    {runResult.skill_state_after}
+                  </Badge>
+                  {runResult.execution_provider ? (
+                    <Badge
+                      variant={
+                        runResult.execution_provider === "piston"
+                          ? "indigo"
+                          : "neutral"
+                      }
+                    >
+                      {runResult.execution_provider === "piston"
+                        ? "Engine: Piston Fallback"
+                        : "Engine: Judge0 CE"}
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -396,18 +483,67 @@ export function LessonViewer({
                         {cr.stderr}
                       </pre>
                     ) : null}
+                    {cr.compile_output ? (
+                      <div className="mt-1.5">
+                        <span className="text-[11px] font-medium text-amber-800">
+                          Compiler Output:
+                        </span>
+                        <pre className="mt-0.5 overflow-x-auto rounded bg-amber-50 p-1.5 font-mono text-amber-950">
+                          {cr.compile_output}
+                        </pre>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
 
               {runResult.exercise_passed ? (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Link
-                    href="/student"
-                    className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-500"
-                  >
-                    View Updated Skill Graph &amp; Next Recommendation →
-                  </Link>
+                <div className="tf-celebrate-pop space-y-2.5 border-t border-emerald-200 pt-3">
+                  {runResult.next_recommended_action ? (
+                    <div className="rounded-xl border border-emerald-200 bg-white p-3.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                        {isBn ? "পরবর্তী প্রস্তাবিত ধাপ" : "Next Recommended Activity"}
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">
+                        {isBn
+                          ? runResult.next_recommended_action.title_bn
+                          : runResult.next_recommended_action.title_en}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {isBn
+                          ? runResult.next_recommended_action.reason_bn
+                          : runResult.next_recommended_action.reason_en}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link
+                          href={runResult.next_recommended_action.href}
+                          data-testid="lesson-next-activity-cta"
+                          className="tf-btn-press inline-flex min-h-[42px] items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500"
+                        >
+                          <span>
+                            {isBn
+                              ? runResult.next_recommended_action.cta_label_bn
+                              : runResult.next_recommended_action.cta_label_en}
+                          </span>
+                          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                        </Link>
+                        <Link
+                          href="/student/lessons"
+                          className="tf-btn-press inline-flex min-h-[42px] items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          {isBn ? "সব লেসনে ফিরুন" : "Back to Lessons"}
+                        </Link>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href="/student"
+                      className="tf-btn-press inline-flex min-h-[40px] items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                    >
+                      View Updated Skill Graph &amp; Next Recommendation →
+                    </Link>
+                  </div>
                 </div>
               ) : null}
             </div>

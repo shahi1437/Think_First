@@ -15,10 +15,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { LanguageSelector } from "@/components/language-selector";
 import { Badge } from "@/components/ui/badge";
 import { SkillGraphPanel } from "@/features/learning/skill-graph-panel";
 import { selectLearningTrack } from "@/lib/api-client";
+import { getLanguageDisplayName } from "@/lib/languages";
 import type {
+  LanguageProgressOverview,
   LearningDashboardView,
   StudentTrackStatus,
   TrackSlug,
@@ -28,6 +31,7 @@ interface LearningDashboardClientProps {
   accessToken: string;
   studentName: string;
   initialDashboard: LearningDashboardView;
+  languageOverview?: LanguageProgressOverview;
   initialLanguage?: "en" | "bn";
   dnaSummary?: {
     verifiedCount: number;
@@ -62,6 +66,7 @@ export function LearningDashboardClient({
   accessToken,
   studentName,
   initialDashboard,
+  languageOverview,
   initialLanguage = "en",
   dnaSummary,
   dailyPlanSummary,
@@ -76,6 +81,47 @@ export function LearningDashboardClient({
   const [trackError, setTrackError] = useState<string | null>(null);
 
   const isBn = lang === "bn";
+  const activeLanguageLabel = getLanguageDisplayName(
+    initialDashboard.language_slug,
+  );
+  const journey = initialDashboard.journey ?? null;
+  const primaryAction = journey?.primary_action ?? null;
+  const resumeActivity =
+    journey?.resume_activity &&
+    primaryAction &&
+    journey.resume_activity.href !== primaryAction.href
+      ? journey.resume_activity
+      : null;
+  const fallbackRec = initialDashboard.recommendations[0] ?? null;
+  const continueHref = primaryAction?.href ?? fallbackRec?.href ?? "/student/lessons";
+  const continueTitle = primaryAction
+    ? isBn
+      ? primaryAction.title_bn
+      : primaryAction.title_en
+    : (fallbackRec?.title ?? `Continue ${activeLanguageLabel} Learning`);
+  const continueReason = primaryAction
+    ? isBn
+      ? primaryAction.reason_bn
+      : primaryAction.reason_en
+    : fallbackRec
+      ? isBn
+        ? fallbackRec.reason_bn
+        : fallbackRec.reason_en
+      : `Continue your structured ${activeLanguageLabel} learning track.`;
+  const continueCtaLabel = primaryAction
+    ? isBn
+      ? primaryAction.cta_label_bn
+      : primaryAction.cta_label_en
+    : isBn
+      ? "শেখা চালিয়ে যাও"
+      : "Continue Learning";
+  const lessonPct =
+    initialDashboard.lessons_total > 0
+      ? Math.round(
+          (initialDashboard.lessons_completed / initialDashboard.lessons_total) *
+            100,
+        )
+      : 0;
   const observedSkills = initialDashboard.skill_graph.nodes.filter(
     (n) => n.state !== "unobserved",
   ).length;
@@ -99,125 +145,283 @@ export function LearningDashboardClient({
   }
 
   return (
-    <div className="space-y-6" lang={lang}>
-      {/* Hero & Language Switcher */}
-      <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">
-              {isBn ? "অ্যাডাপ্টিভ লার্নিং ড্যাশবোর্ড" : "Student Learning Workspace"}
-            </p>
-            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-[34px]">
-              {isBn ? `স্বাগতম, ${studentName}` : `Welcome back, ${studentName}`}
-            </h1>
-            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-300">
-              {isBn
-                ? "তোমার ডায়াগনস্টিক ফলাফল, লেসন অগ্রগতি, বাস্তব কোড অনুশীলন এবং Skill Graph অনুযায়ী পরবর্তী ধাপ সাজানো হয়েছে।"
-                : "Your track, lessons, practice problems, and Skill Graph progress update directly from your real coding and diagnostic work."}
-            </p>
-          </div>
+    <div className="tf-animate-enter space-y-6" lang={lang}>
+      {/* Hero: Smart Continue Learning Decision Card + Factual Progress Strip */}
+      <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-lg sm:p-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(45,212,191,0.14),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(99,102,241,0.16),_transparent_55%)]"
+        />
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div
-              role="group"
-              aria-label="Dashboard language"
-              className="inline-flex rounded-xl border border-slate-700 bg-slate-900/90 p-1 text-sm"
-            >
-              <button
-                type="button"
-                onClick={() => setLang("en")}
-                aria-pressed={lang === "en"}
-                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
-                  lang === "en"
-                    ? "bg-teal-400 text-slate-950"
-                    : "text-slate-300 hover:bg-slate-800"
-                }`}
-              >
-                English
-              </button>
-              <button
-                type="button"
-                onClick={() => setLang("bn")}
-                aria-pressed={lang === "bn"}
-                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
-                  lang === "bn"
-                    ? "bg-teal-400 text-slate-950"
-                    : "text-slate-300 hover:bg-slate-800"
-                }`}
-              >
-                বাংলা
-              </button>
+        <div className="relative space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">
+                {isBn
+                  ? "অ্যাডাপ্টিভ লার্নিং ড্যাশবোর্ড"
+                  : "Student Learning Workspace"}{" "}
+                · {activeLanguageLabel}
+              </p>
+              <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                {isBn ? `স্বাগতম, ${studentName}` : `Welcome back, ${studentName}`}
+              </h1>
+              <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-[17px]">
+                {isBn
+                  ? "তোমার ডায়াগনস্টিক ফলাফল, লেসন অগ্রগতি, বাস্তব কোড অনুশীলন এবং Skill Graph অনুযায়ী পরবর্তী সেরা ধাপ নির্ধারিত হয়েছে।"
+                  : "Your next step is computed directly from your real coding evidence, lesson progress, class deadlines, and Skill Graph."}
+              </p>
             </div>
 
-            <Link
-              href="/student/diagnostic"
-              className="inline-flex items-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-[15px] font-semibold text-slate-950 shadow-sm transition hover:bg-teal-300"
-            >
-              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-              <span>
-                {trackStatus.diagnostic_completed
-                  ? isBn
-                    ? "নতুন ডায়াগনস্টিক"
-                    : "Retake Diagnostic"
-                  : isBn
-                    ? "৮-ডোমেইন ডায়াগনস্টিক শুরু করো"
-                    : "Start 8-Domain Diagnostic"}
-              </span>
-            </Link>
-          </div>
-        </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div
+                role="group"
+                aria-label="Dashboard language"
+                className="inline-flex rounded-xl border border-slate-700 bg-slate-900/90 p-1 text-sm"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLang("en")}
+                  aria-pressed={lang === "en"}
+                  className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                    lang === "en"
+                      ? "bg-teal-400 text-slate-950"
+                      : "text-slate-300 hover:bg-slate-800"
+                  }`}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLang("bn")}
+                  aria-pressed={lang === "bn"}
+                  className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                    lang === "bn"
+                      ? "bg-teal-400 text-slate-950"
+                      : "text-slate-300 hover:bg-slate-800"
+                  }`}
+                >
+                  বাংলা
+                </button>
+              </div>
 
-        {/* Factual Evidence Counters (Zero Fabricated Percentages) */}
-        <div className="mt-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Active Track
-            </p>
-            <p className="mt-1.5 text-lg font-bold capitalize text-teal-300">
-              {trackStatus.selected_track_slug.replaceAll("_", " ")}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              {trackStatus.recommendation_source === "diagnostic_evidence"
-                ? "Backed by diagnostic evidence"
-                : "Initial onboarding selection"}
-            </p>
+              <Link
+                href="/student/diagnostic"
+                className="tf-btn-press inline-flex min-h-[42px] items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/80 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-teal-400/60 hover:bg-slate-800"
+              >
+                <ClipboardCheck className="h-4 w-4 text-teal-300" aria-hidden="true" />
+                <span>
+                  {trackStatus.diagnostic_completed
+                    ? isBn
+                      ? "নতুন ডায়াগনস্টিক"
+                      : "Retake Diagnostic"
+                    : isBn
+                      ? "৮-ডোমেইন ডায়াগনস্টিক শুরু করো"
+                      : "Start 8-Domain Diagnostic"}
+                </span>
+              </Link>
+            </div>
           </div>
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Guided Lessons Passed
-            </p>
-            <p className="mt-1.5 text-2xl font-bold text-white">
-              {initialDashboard.lessons_completed} /{" "}
-              {initialDashboard.lessons_total}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Requires exercise verification
-            </p>
+
+          {/* Primary Authoritative Action: CONTINUE LEARNING */}
+          <div
+            data-testid="continue-learning-card"
+            className={`tf-scale-in rounded-2xl border p-5 sm:p-6 ${
+              primaryAction?.urgency === "urgent"
+                ? "border-amber-400/60 bg-amber-500/10"
+                : "border-teal-400/40 bg-slate-900/80"
+            }`}
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                      primaryAction?.urgency === "urgent"
+                        ? "bg-amber-400 text-slate-950"
+                        : "bg-teal-400/20 text-teal-200 ring-1 ring-teal-400/40"
+                    }`}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>
+                      {primaryAction?.urgency === "urgent"
+                        ? isBn
+                          ? "জরুরি পরবর্তী ধাপ · CONTINUE LEARNING"
+                          : "Priority Deadline · CONTINUE LEARNING"
+                        : isBn
+                          ? "এখন কী শিখবে? · CONTINUE LEARNING"
+                          : "Recommended Next · CONTINUE LEARNING"}
+                    </span>
+                  </span>
+                  {primaryAction?.estimated_minutes ? (
+                    <span className="text-xs font-semibold text-slate-300">
+                      ~{primaryAction.estimated_minutes} min
+                    </span>
+                  ) : null}
+                </div>
+                <h2 className="text-xl font-bold text-white sm:text-2xl">
+                  {continueTitle}
+                </h2>
+                <p className="max-w-2xl text-sm leading-relaxed text-slate-200 sm:text-base">
+                  {continueReason}
+                </p>
+                {primaryAction && primaryAction.evidence_factors.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {primaryAction.evidence_factors.map((factor) => (
+                      <code
+                        key={factor}
+                        className="rounded-md bg-slate-800/90 px-2 py-0.5 text-xs text-teal-200 ring-1 ring-slate-700"
+                      >
+                        {factor}
+                      </code>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+                <Link
+                  href={continueHref}
+                  data-testid="continue-learning-cta"
+                  className="tf-btn-press inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-teal-400 px-6 py-3 text-base font-bold text-slate-950 shadow-md transition hover:bg-teal-300"
+                >
+                  <span>{continueCtaLabel}</span>
+                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Beginner Foundation Path Progress Strip */}
+            {journey &&
+            (journey.journey_stage === "foundation_lessons" ||
+              journey.journey_stage === "readiness_check") ? (
+              <div className="mt-4 border-t border-slate-700/80 pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-300">
+                  <span>
+                    {isBn
+                      ? `নতুনদের ফাউন্ডেশন ধাপ: ${journey.foundation_lessons_completed}/${journey.foundation_lessons_target} প্রাথমিক লেসন → সংক্ষিপ্ত প্রস্তুতি যাচাই`
+                      : `Beginner Foundation Path: ${journey.foundation_lessons_completed}/${journey.foundation_lessons_target} intro lessons → Short Readiness Check`}
+                  </span>
+                  <span className="text-teal-300">
+                    {journey.readiness_check_unlocked
+                      ? isBn
+                        ? "প্রস্তুতি যাচাই আনলকড ✓"
+                        : "Readiness Check Unlocked ✓"
+                      : isBn
+                        ? "ধাপে ধাপে এগোও"
+                        : "Step-by-step gentle start"}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="tf-progress-fill h-full rounded-full bg-gradient-to-r from-teal-400 to-indigo-400"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          (journey.foundation_lessons_completed /
+                            Math.max(journey.foundation_lessons_target, 1)) *
+                            100,
+                        ),
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {/* Optional Resume Last Activity bar when distinct from primary CTA */}
+            {resumeActivity ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700/90 bg-slate-950/60 px-4 py-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-indigo-300">
+                    {isBn ? "আগের অসমাপ্ত কাজ চালিয়ে যাও" : "Resume Last Activity"}
+                  </p>
+                  <p className="text-sm font-semibold text-white">
+                    {isBn ? resumeActivity.title_bn : resumeActivity.title_en}
+                  </p>
+                </div>
+                <Link
+                  href={resumeActivity.href}
+                  data-testid="resume-activity-cta"
+                  className="tf-btn-press inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-indigo-400/50 bg-indigo-500/20 px-3.5 py-2 text-sm font-semibold text-indigo-100 hover:bg-indigo-500/30"
+                >
+                  <span>
+                    {isBn
+                      ? resumeActivity.cta_label_bn
+                      : resumeActivity.cta_label_en}
+                  </span>
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </div>
+            ) : null}
           </div>
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Diagnostics Completed
-            </p>
-            <p className="mt-1.5 text-2xl font-bold text-white">
-              {initialDashboard.diagnostic_sessions_completed}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Across 8 Python skill domains
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Skill Nodes Observed
-            </p>
-            <p className="mt-1.5 text-2xl font-bold text-white">
-              {observedSkills} / {initialDashboard.skill_graph.nodes.length}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              {verifiedSkills} independently verified
-            </p>
+
+          {/* Factual Evidence Counters (Zero Fabricated Percentages) */}
+          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Active Track
+              </p>
+              <p className="mt-1.5 text-lg font-bold capitalize text-teal-300">
+                {trackStatus.selected_track_slug.replaceAll("_", " ")}
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                {trackStatus.recommendation_source === "diagnostic_evidence"
+                  ? "Backed by diagnostic evidence"
+                  : "Initial onboarding selection"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Guided Lessons Passed
+              </p>
+              <p className="mt-1.5 text-2xl font-bold text-white">
+                {initialDashboard.lessons_completed} /{" "}
+                {initialDashboard.lessons_total}
+              </p>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="tf-progress-fill h-full rounded-full bg-teal-400"
+                  style={{ width: `${lessonPct}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-slate-300">
+                Requires exercise verification
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Diagnostics Completed
+              </p>
+              <p className="mt-1.5 text-2xl font-bold text-white">
+                {initialDashboard.diagnostic_sessions_completed}
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                Across {activeLanguageLabel} skill domains
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Skill Nodes Observed
+              </p>
+              <p className="mt-1.5 text-2xl font-bold text-white">
+                {observedSkills} / {initialDashboard.skill_graph.nodes.length}
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                {verifiedSkills} independently verified
+              </p>
+            </div>
           </div>
         </div>
       </section>
+
+      {languageOverview ? (
+        <LanguageSelector
+          accessToken={accessToken}
+          initialOverview={languageOverview}
+          explanationLanguage={lang}
+        />
+      ) : null}
 
       {/* Recommended Next Steps (Explainable Prerequisite-Based Logic) */}
       <section
@@ -247,7 +451,7 @@ export function LearningDashboardClient({
           {initialDashboard.recommendations.map((rec) => (
             <article
               key={`${rec.recommendation_type}-${rec.target_id}`}
-              className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-5"
+              className="tf-card-interactive flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/70 p-5 hover:border-indigo-300 hover:bg-white hover:shadow-md"
             >
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -271,7 +475,7 @@ export function LearningDashboardClient({
                 <h3 className="mt-2.5 text-lg font-bold text-slate-900">
                   {rec.title}
                 </h3>
-                <p className="mt-1.5 text-[15px] leading-relaxed text-slate-700">
+                <p className="mt-1.5 text-base leading-relaxed text-slate-700">
                   {isBn ? rec.reason_bn : rec.reason_en}
                 </p>
                 {rec.evidence_factors.length > 0 ? (
@@ -291,7 +495,7 @@ export function LearningDashboardClient({
               <div className="mt-4 pt-2">
                 <Link
                   href={rec.href}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#0b1221] px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-slate-800"
+                  className="tf-btn-press inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0b1221] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 sm:text-[15px]"
                 >
                   <span>{isBn ? "শুরু করো" : "Open Next Step"}</span>
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -331,54 +535,54 @@ export function LearningDashboardClient({
           )}
         </div>
 
-        <p className="text-xs text-slate-600">
+        <p className="text-sm leading-relaxed text-slate-600">
           {trackStatus.recommendation_reason}
         </p>
 
         {trackError ? (
-          <p role="alert" className="text-xs font-medium text-rose-700">
+          <p role="alert" className="text-sm font-medium text-rose-700">
             {trackError}
           </p>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {trackStatus.tracks.map((tr) => {
             const isActive = trackStatus.selected_track_slug === tr.slug;
             const isRecommended = trackStatus.recommended_track_slug === tr.slug;
             return (
               <div
                 key={tr.slug}
-                className={`flex flex-col justify-between rounded-xl border p-4 transition ${
+                className={`tf-card-interactive flex flex-col justify-between rounded-xl border p-4 ${
                   isActive
                     ? "border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500"
-                    : "border-slate-200 bg-white"
+                    : "border-slate-200 bg-white hover:border-indigo-300"
                 }`}
               >
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-1">
-                    <h3 className="text-sm font-bold text-slate-900">
+                    <h3 className="text-base font-bold text-slate-900">
                       {isBn ? tr.title_bn : tr.title_en}
                     </h3>
                     {isRecommended ? (
                       <Badge variant="teal">Recommended</Badge>
                     ) : null}
                   </div>
-                  <p className="mt-1.5 text-xs text-slate-600">
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
                     {isBn ? tr.summary_bn : tr.summary_en}
                   </p>
-                  <p className="mt-2 text-[11px] text-slate-500">
+                  <p className="mt-2 text-xs text-slate-500">
                     {isBn ? tr.target_audience_bn : tr.target_audience_en}
                   </p>
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-3.5">
                   <button
                     type="button"
                     disabled={isActive || savingTrack !== null}
                     onClick={() => {
                       void handleSelectTrack(tr.slug);
                     }}
-                    className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`tf-btn-press inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition ${
                       isActive
                         ? "bg-indigo-600 text-white"
                         : "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
@@ -535,8 +739,8 @@ export function LearningDashboardClient({
             <div>
               <h3 className="text-sm font-bold text-slate-900">
                 {isBn
-                  ? "বিগিনার Python লেসনসমূহ"
-                  : "Beginner Python Lessons (8 Topics)"}
+                  ? `${activeLanguageLabel} গাইডেড লেসনসমূহ (${initialDashboard.lessons_total}টি)`
+                  : `${activeLanguageLabel} Guided Lessons (${initialDashboard.lessons_total} Topics)`}
               </h3>
               <p className="text-xs text-slate-600">
                 Bilingual concepts, interactive examples &amp; real Judge0

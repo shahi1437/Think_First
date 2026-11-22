@@ -23,6 +23,9 @@ Verdict = Literal[
 RevisionType = Literal["autosave", "manual", "run", "submit"]
 
 
+ExecutionProvider = Literal["judge0", "piston"]
+
+
 class LanguageItem(BaseModel):
     slug: str
     display_name: str
@@ -139,6 +142,7 @@ class SubmissionResponse(BaseModel):
     total_tests: int
     runtime_ms: int | None = None
     memory_kb: int | None = None
+    execution_provider: ExecutionProvider = "judge0"
     execution_evidence: dict[str, Any]
     results: list[TestCaseExecutionView]
     created_at: datetime
@@ -156,6 +160,7 @@ class SubmissionSummaryItem(BaseModel):
     total_tests: int
     runtime_ms: int | None = None
     memory_kb: int | None = None
+    execution_provider: ExecutionProvider = "judge0"
     created_at: datetime
 
 

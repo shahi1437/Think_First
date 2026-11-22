@@ -32,6 +32,7 @@ from app.schemas.growth import (
 )
 from app.schemas.problems import SubmissionCreateRequest
 from app.services.execution.service import ExecutionService
+from app.services.learning.lessons_service import resolve_user_language
 from app.services.learning.skill_graph import SKILL_FOCUS_TO_NODE, STATE_RANK, SkillGraphService
 
 MIN_RETENTION_HOURS = 24.0
@@ -57,8 +58,14 @@ class RetentionVerificationService:
         self._skill_graph = skill_graph_service
         self._execution = execution_service
 
-    async def _pick_problem_for_skill(self, skill_slug: str) -> UUID | None:
-        problems, _ = await self._problem_repo.list_published_problems(limit=40, offset=0)
+    async def _pick_problem_for_skill(
+        self, skill_slug: str, *, language_slug: str = "python"
+    ) -> UUID | None:
+        problems, _ = await self._problem_repo.list_published_problems(
+            language=language_slug, limit=40, offset=0
+        )
+        if not problems:
+            problems, _ = await self._problem_repo.list_published_problems(limit=40, offset=0)
         if not problems:
             return None
         # Prefer a problem matching the skill topic/slug
@@ -73,11 +80,16 @@ class RetentionVerificationService:
                 return prob.id
         return problems[0][0].id
 
-    async def sync_schedules_for_student(self, user: UserRecord) -> list[RetentionSchedule]:
+    async def sync_schedules_for_student(
+        self, user: UserRecord, *, language_slug: str | None = None
+    ) -> list[RetentionSchedule]:
         """Auto-schedule delayed retention checks for independently verified/transferred skills."""
-        await self._skill_graph.sync_phase3_and_phase4_evidence(user.id)
-        skill_states = await self._learning_repo.list_student_skill_states(user.id)
-        existing = await self._growth_repo.list_retention_schedules(user.id)
+        lang = resolve_user_language(user, language_slug)
+        await self._skill_graph.sync_phase3_and_phase4_evidence(user.id, language_slug=lang)
+        skill_states = await self._learning_repo.list_student_skill_states(
+            user.id, language_slug=lang
+        )
+        existing = await self._growth_repo.list_retention_schedules(user.id, language_slug=lang)
         existing_by_skill = {s.skill_slug: s for s in existing}
         now = datetime.now(UTC)
 
@@ -92,7 +104,7 @@ class RetentionVerificationService:
                 continue
             if STATE_RANK.get(st.state, 0) < STATE_RANK["guided"]:
                 continue
-            prob_id = await self._pick_problem_for_skill(st.skill_slug)
+            prob_id = await self._pick_problem_for_skill(st.skill_slug, language_slug=lang)
             if prob_id is None:
                 continue
             verified_at = st.first_verified_at or st.last_evidence_at or now
@@ -106,6 +118,7 @@ class RetentionVerificationService:
             )
             await self._growth_repo.create_retention_schedule(
                 student_id=user.id,
+                language_slug=lang,
                 skill_slug=st.skill_slug,
                 problem_id=prob_id,
                 source_evidence_type=src_type,
@@ -115,13 +128,20 @@ class RetentionVerificationService:
                 interval_hours=24,
             )
 
-        return await self._growth_repo.list_retention_schedules(user.id)
+        return await self._growth_repo.list_retention_schedules(user.id, language_slug=lang)
 
-    async def get_retention_overview(self, user: UserRecord) -> RetentionOverviewView:
-        schedules = await self.sync_schedules_for_student(user)
-        attempts = await self._growth_repo.list_retention_attempts(student_id=user.id, limit=25)
+    async def get_retention_overview(
+        self, user: UserRecord, *, language_slug: str | None = None
+    ) -> RetentionOverviewView:
+        lang = resolve_user_language(user, language_slug)
+        schedules = await self.sync_schedules_for_student(user, language_slug=lang)
+        attempts = await self._growth_repo.list_retention_attempts(
+            student_id=user.id, limit=25, language_slug=lang
+        )
         skill_nodes = {n.slug: n for n in await self._learning_repo.list_skill_nodes()}
-        skill_states = await self._learning_repo.list_student_skill_states(user.id)
+        skill_states = await self._learning_repo.list_student_skill_states(
+            user.id, language_slug=lang
+        )
         retained_skills_count = sum(1 for s in skill_states if s.state == "retained")
 
         now = datetime.now(UTC)
@@ -134,10 +154,14 @@ class RetentionVerificationService:
                 continue
             prob, ver = loaded
             starter_code = ""
+            sched_lang = sched.language_slug or lang
             for variant in ver.variants:
-                if variant.language_slug == "python":
+                if variant.language_slug == sched_lang:
                     starter_code = variant.buggy_starter_code or variant.starter_code or ""
                     break
+            if not starter_code and ver.variants:
+                fallback_var = ver.variants[0]
+                starter_code = fallback_var.buggy_starter_code or fallback_var.starter_code or ""
 
             node = skill_nodes.get(sched.skill_slug)
             remaining_hours = max(0.0, (sched.due_at - now).total_seconds() / 3600.0)
@@ -148,6 +172,7 @@ class RetentionVerificationService:
             schedule_views.append(
                 RetentionScheduleView(
                     id=sched.id,
+                    language_slug=sched_lang,
                     skill_slug=sched.skill_slug,
                     skill_title_en=node.title_en if node else sched.skill_slug,
                     skill_title_bn=node.title_bn if node else sched.skill_slug,
@@ -255,6 +280,7 @@ class RetentionVerificationService:
             )
             await self._skill_graph.record_evidence(
                 student_id=user.id,
+                language_slug=sched.language_slug or payload.language_slug,
                 skill_slug=sched.skill_slug,
                 target_state="retained",
                 evidence_source="phase6_retention_verification",

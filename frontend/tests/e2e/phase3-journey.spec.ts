@@ -28,13 +28,27 @@ test.describe("Phase 3 Live Student Journey & Responsive UI", () => {
     });
     expect(signup.ok()).toBeTruthy();
 
-    // 2. Public Landing Page + responsive no-overflow check
+    // 2. Public Landing Page + redesigned portal links + no dev diagnostics exposed
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: /Adaptive programming and debugging/i }),
+      page.getByRole("heading", {
+        name: /Master Python programming through practice, error diagnosis, and guided reasoning/i,
+      }),
     ).toBeVisible();
-    await expect(page.getByText("API Server Connected")).toBeVisible();
-    await expect(page.getByText("PostgreSQL: Ready")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Create Student Account/i }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "STUDENT LOGIN" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "TEACHER LOGIN" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "ADMIN LOGIN" }),
+    ).toBeVisible();
+    await expect(page.getByText("API Server Connected")).toHaveCount(0);
+    await expect(page.getByText("PostgreSQL: Ready")).toHaveCount(0);
 
     // 3. Login via real UI form
     await page.goto("/login");

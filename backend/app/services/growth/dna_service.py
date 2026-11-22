@@ -21,7 +21,10 @@ from app.schemas.growth import (
     LearningDnaProfileView,
     LearningDnaSnapshotSummaryView,
 )
-from app.services.learning.lessons_service import LessonsAndTracksService
+from app.services.learning.lessons_service import (
+    LessonsAndTracksService,
+    resolve_user_language,
+)
 from app.services.learning.skill_graph import SkillGraphService
 
 
@@ -52,25 +55,36 @@ class LearningDnaService:
         self._lessons = lessons_service
         self._skill_graph = skill_graph_service
 
-    async def compute_and_persist_profile(self, user: UserRecord) -> LearningDnaProfileView:
-        track_status = await self._lessons.get_track_status(user)
-        skill_graph = await self._skill_graph.get_student_skill_graph(user.id)
+    async def compute_and_persist_profile(
+        self, user: UserRecord, *, language_slug: str | None = None
+    ) -> LearningDnaProfileView:
+        lang = resolve_user_language(user, language_slug)
+        track_status = await self._lessons.get_track_status(user, language_slug=lang)
+        skill_graph = await self._skill_graph.get_student_skill_graph(user.id, language_slug=lang)
 
-        submissions = await self._growth_repo.list_student_submissions_all(student_id=user.id)
-        revisions = await self._growth_repo.list_student_revisions(student_id=user.id)
+        submissions = await self._growth_repo.list_student_submissions_all(
+            student_id=user.id, language_slug=lang
+        )
+        revisions = await self._growth_repo.list_student_revisions(
+            student_id=user.id, language_slug=lang
+        )
         diagnoses = await self._growth_repo.list_student_diagnoses(student_id=user.id)
         hints = await self._growth_repo.list_student_hint_events(student_id=user.id)
         diag_responses = await self._growth_repo.list_student_diagnostic_responses(
-            student_id=user.id
+            student_id=user.id, language_slug=lang
         )
         lesson_rows = await self._growth_repo.list_student_lesson_progress_with_meta(
-            student_id=user.id
+            student_id=user.id, language_slug=lang
         )
         verifications = await self._growth_repo.list_student_verification_attempts_all(
             student_id=user.id
         )
-        retention_schedules = await self._growth_repo.list_retention_schedules(user.id)
-        retention_attempts = await self._growth_repo.list_retention_attempts(student_id=user.id)
+        retention_schedules = await self._growth_repo.list_retention_schedules(
+            user.id, language_slug=lang
+        )
+        retention_attempts = await self._growth_repo.list_retention_attempts(
+            student_id=user.id, language_slug=lang
+        )
 
         # Skill Graph state counts (authoritative)
         skill_state_summary: dict[str, int] = {
@@ -343,19 +357,33 @@ class LearningDnaService:
             "retention_attempts": len(retention_attempts),
         }
 
-        snap = await self._growth_repo.create_dna_snapshot(
-            student_id=user.id,
-            selected_track_slug=track_status.selected_track_slug,
-            dimensions_json=[d.model_dump() for d in dimensions],
-            skill_state_summary=skill_state_summary,
-            strengths=strengths,
-            growth_areas=growth_areas,
-            source_counts=source_counts,
+        recent = await self._growth_repo.list_dna_snapshots(
+            student_id=user.id, limit=6, language_slug=lang
         )
-        recent = await self._growth_repo.list_dna_snapshots(student_id=user.id, limit=6)
+        latest_snap = recent[0] if recent else None
+        if (
+            latest_snap is not None
+            and latest_snap.selected_track_slug == track_status.selected_track_slug
+            and dict(latest_snap.source_counts or {}) == source_counts
+            and dict(latest_snap.skill_state_summary or {}) == skill_state_summary
+        ):
+            snap = latest_snap
+        else:
+            snap = await self._growth_repo.create_dna_snapshot(
+                student_id=user.id,
+                language_slug=lang,
+                selected_track_slug=track_status.selected_track_slug,
+                dimensions_json=[d.model_dump() for d in dimensions],
+                skill_state_summary=skill_state_summary,
+                strengths=strengths,
+                growth_areas=growth_areas,
+                source_counts=source_counts,
+            )
+            recent = [snap, *recent[:5]]
 
         return LearningDnaProfileView(
             snapshot_id=snap.id,
+            language_slug=lang,
             computed_at=snap.computed_at,
             selected_track_slug=track_status.selected_track_slug,
             dimensions=dimensions,

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 RoleName = Literal["student", "teacher", "admin"]
 ProgrammingExperience = Literal["none", "beginner", "basic", "intermediate", "advanced"]
-PreferredLanguage = Literal["python", "javascript", "cpp", "java"]
+PreferredLanguage = Literal["python", "javascript", "c", "cpp", "java"]
 LearningGoal = Literal[
     "school_fundamentals",
     "university_coursework",
@@ -24,12 +24,14 @@ class UserPreferencesResponse(BaseModel):
 
     programming_experience: ProgrammingExperience
     preferred_language: PreferredLanguage
+    active_language_slug: PreferredLanguage = "python"
     learning_goal: LearningGoal
     daily_practice_minutes: int = Field(..., ge=10, le=240)
     preferred_explanation_language: ExplanationLanguage
     starting_preference: StartingPreference
     recommended_entry_track: RecommendedEntryTrack
     recommendation_rationale: str
+    entry_redirect_path: str = "/student"
 
 
 class UserPreferencesUpdate(BaseModel):
@@ -39,6 +41,7 @@ class UserPreferencesUpdate(BaseModel):
 
     programming_experience: ProgrammingExperience | None = None
     preferred_language: PreferredLanguage | None = None
+    active_language_slug: PreferredLanguage | None = None
     learning_goal: LearningGoal | None = None
     daily_practice_minutes: int | None = Field(default=None, ge=10, le=240)
     preferred_explanation_language: ExplanationLanguage | None = None

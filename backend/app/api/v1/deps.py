@@ -10,8 +10,10 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
 from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
+from app.integrations.execution.router import ResilientExecutionClient
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.integrations.llm.client import SocraticLLMClient
+from app.integrations.piston.client import HttpPistonClient, is_piston_configured
 from app.repositories.admin import AdminRepository
 from app.repositories.classroom import ClassroomRepository
 from app.repositories.growth import GrowthRepository
@@ -33,6 +35,7 @@ from app.services.growth.history_service import LearningHistoryService
 from app.services.growth.retention_service import RetentionVerificationService
 from app.services.identity.service import IdentityService
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
+from app.services.learning.journey_engine import LearningJourneyService
 from app.services.learning.lessons_service import LessonsAndTracksService
 from app.services.learning.recommendations_service import AdaptiveRecommendationService
 from app.services.learning.skill_graph import SkillGraphService
@@ -76,8 +79,10 @@ def get_jwt_verifier(
 def get_judge0_client(
     settings: Settings = Depends(get_settings),
 ) -> Judge0Client:
-    """Return Judge0 CE HTTP execution client."""
-    return HttpJudge0Client(settings)
+    """Return resilient execution client: Judge0 CE primary with Piston fallback."""
+    primary = HttpJudge0Client(settings)
+    fallback = HttpPistonClient(settings) if is_piston_configured(settings) else None
+    return ResilientExecutionClient(primary=primary, fallback=fallback, settings=settings)
 
 
 def get_identity_repository(
@@ -205,6 +210,7 @@ def get_lessons_and_tracks_service(
     mentor_repo: MentorRepository = Depends(get_mentor_repository),
     judge0: Judge0Client = Depends(get_judge0_client),
     skill_graph: SkillGraphService = Depends(get_skill_graph_service),
+    identity_repo: IdentityRepository = Depends(get_identity_repository),
 ) -> LessonsAndTracksService:
     return LessonsAndTracksService(
         learning_repo=learning_repo,
@@ -212,6 +218,7 @@ def get_lessons_and_tracks_service(
         mentor_repo=mentor_repo,
         judge0=judge0,
         skill_graph=skill_graph,
+        identity_repo=identity_repo,
     )
 
 
@@ -231,6 +238,40 @@ def get_diagnostic_assessment_service(
     )
 
 
+def get_growth_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> GrowthRepository:
+    return GrowthRepository(session)
+
+
+def get_classroom_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> ClassroomRepository:
+    return ClassroomRepository(session)
+
+
+def get_learning_journey_service(
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    problem_repo: ProblemRepository = Depends(get_problem_repository),
+    mentor_repo: MentorRepository = Depends(get_mentor_repository),
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+    classroom_repo: ClassroomRepository = Depends(get_classroom_repository),
+    lessons_service: LessonsAndTracksService = Depends(get_lessons_and_tracks_service),
+    diagnostics_service: DiagnosticAssessmentService = Depends(get_diagnostic_assessment_service),
+    skill_graph_service: SkillGraphService = Depends(get_skill_graph_service),
+) -> LearningJourneyService:
+    return LearningJourneyService(
+        learning_repo=learning_repo,
+        problem_repo=problem_repo,
+        mentor_repo=mentor_repo,
+        growth_repo=growth_repo,
+        classroom_repo=classroom_repo,
+        lessons_service=lessons_service,
+        diagnostics_service=diagnostics_service,
+        skill_graph_service=skill_graph_service,
+    )
+
+
 def get_recommendation_service(
     learning_repo: LearningRepository = Depends(get_learning_repository),
     problem_repo: ProblemRepository = Depends(get_problem_repository),
@@ -238,6 +279,7 @@ def get_recommendation_service(
     lessons_service: LessonsAndTracksService = Depends(get_lessons_and_tracks_service),
     diagnostics_service: DiagnosticAssessmentService = Depends(get_diagnostic_assessment_service),
     skill_graph_service: SkillGraphService = Depends(get_skill_graph_service),
+    journey_service: LearningJourneyService = Depends(get_learning_journey_service),
 ) -> AdaptiveRecommendationService:
     return AdaptiveRecommendationService(
         learning_repo=learning_repo,
@@ -246,13 +288,8 @@ def get_recommendation_service(
         lessons_service=lessons_service,
         diagnostics_service=diagnostics_service,
         skill_graph_service=skill_graph_service,
+        journey_service=journey_service,
     )
-
-
-def get_growth_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> GrowthRepository:
-    return GrowthRepository(session)
 
 
 def get_retention_service(
@@ -309,12 +346,6 @@ def get_learning_history_service(
     growth_repo: GrowthRepository = Depends(get_growth_repository),
 ) -> LearningHistoryService:
     return LearningHistoryService(growth_repo=growth_repo)
-
-
-def get_classroom_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> ClassroomRepository:
-    return ClassroomRepository(session)
 
 
 def get_classroom_course_service(

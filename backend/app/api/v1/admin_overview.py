@@ -14,6 +14,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import DatabaseManager, get_db_manager
 from app.core.errors import AppError
 from app.integrations.judge0.client import build_judge0_auth_headers, is_judge0_configured
+from app.integrations.piston.client import is_piston_configured
 from app.repositories.identity import UserRecord
 from app.schemas.admin import (
     AdminAuditLogItem,
@@ -110,6 +111,43 @@ async def get_admin_operations_health(
         )
     )
 
+    piston_ok = False
+    piston_latency: float | None = None
+    piston_detail = "Piston fallback disabled."
+    p_start = time.perf_counter()
+    if not is_piston_configured(settings):
+        piston_latency = 0.0
+    else:
+        try:
+            async with httpx.AsyncClient(timeout=2.5) as client:
+                p_resp = await client.get(f"{settings.piston_base_url.rstrip('/')}/api/v2/runtimes")
+                piston_latency = round((time.perf_counter() - p_start) * 1000, 2)
+                if p_resp.status_code == 200:
+                    runtimes = p_resp.json()
+                    rt_count = len(runtimes) if isinstance(runtimes, list) else 0
+                    piston_ok = rt_count > 0
+                    piston_detail = (
+                        f"Self-hosted Piston online ({rt_count} runtime(s) installed)."
+                        if piston_ok
+                        else "Piston online but no language runtimes installed yet."
+                    )
+                else:
+                    piston_detail = f"Piston returned HTTP {p_resp.status_code}."
+        except Exception as exc:
+            piston_latency = round((time.perf_counter() - p_start) * 1000, 2)
+            piston_detail = f"Piston check failed ({type(exc).__name__})."
+
+    checks.append(
+        OperationalCheckStatus(
+            name="piston_fallback",
+            status="ok"
+            if piston_ok
+            else ("degraded" if is_piston_configured(settings) else "unavailable"),
+            latency_ms=piston_latency,
+            detail=piston_detail,
+        )
+    )
+
     has_live_llm = (
         settings.llm_provider != "none"
         and bool(settings.llm_api_key and settings.llm_api_key.strip())
@@ -126,9 +164,8 @@ async def get_admin_operations_health(
         )
     )
 
-    overall_ok = all(
-        check.status == "ok" for check in checks if check.name in {"postgresql", "judge0"}
-    )
+    execution_available = judge0_ok or piston_ok
+    overall_ok = db_ok and execution_available
     return AdminOperationsHealthResponse(
         overall_status="ok" if overall_ok else "degraded",
         environment=settings.app_env,
