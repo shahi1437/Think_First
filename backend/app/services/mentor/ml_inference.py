@@ -15,8 +15,12 @@ from app.services.mentor.multilanguage_diagnosis import diagnose_non_python_subm
 
 logger = get_logger(__name__)
 
-# Ensure repository root is importable for shared `ml.preprocessing.features`
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+# Ensure repository root (or Docker /app) is importable for shared `ml.preprocessing.features`
+_ML_INFERENCE_FILE = Path(__file__).resolve()
+_REPO_ROOT = next(
+    (parent for parent in _ML_INFERENCE_FILE.parents if (parent / "ml").is_dir()),
+    _ML_INFERENCE_FILE.parents[min(4, len(_ML_INFERENCE_FILE.parents) - 1)],
+)
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
