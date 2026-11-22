@@ -557,6 +557,7 @@ class ProblemRepository:
         memory_kb: int | None,
         execution_evidence: dict[str, Any],
         results: list[ExecutionResult],
+        execution_provider: str = "judge0",
     ) -> Submission:
         submission.status = status_value
         submission.verdict = verdict
@@ -564,6 +565,7 @@ class ProblemRepository:
         submission.total_tests = total_tests
         submission.runtime_ms = runtime_ms
         submission.memory_kb = memory_kb
+        submission.execution_provider = execution_provider
         submission.execution_evidence = execution_evidence
         for res in results:
             self._session.add(res)

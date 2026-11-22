@@ -43,11 +43,19 @@ from ml.preprocessing.features import ExecutionSample
 
 def _diagnosis_model_to_schema(diag: ErrorDiagnosis) -> MLDiagnosisResponse:
     candidates = [MLCandidateScore.model_validate(item) for item in (diag.top_candidates or [])]
-    note = str((diag.feature_summary or {}).get("uncertainty_note", ""))
+    summary = diag.feature_summary or {}
+    note = str(summary.get("uncertainty_note", ""))
+    diag_source = str(
+        summary.get("diagnosis_source")
+        or ("rule_based" if diag.model_version_tag.startswith("rule-") else "ml_classifier")
+    )
+    lang_slug = str(summary.get("language_slug") or "python")
     return MLDiagnosisResponse(
         id=diag.id,
         submission_id=diag.submission_id,
         model_version=diag.model_version_tag,
+        diagnosis_source="rule_based" if diag_source == "rule_based" else "ml_classifier",
+        language_slug=lang_slug,
         predicted_error_code=diag.predicted_error_code,
         predicted_display_name=DISPLAY_NAMES.get(
             diag.predicted_error_code, diag.predicted_error_code
@@ -148,13 +156,25 @@ class SocraticMentorService:
             passed_tests=submission.passed_tests,
             total_tests=max(submission.total_tests, 1),
         )
-        prediction = self._ml.predict(sample)
+        prediction = self._ml.predict_for_language(sample, language_slug=submission.language_slug)
 
         mv = await self._mentor_repo.ensure_model_version(
             version_tag=prediction.model_version,
-            model_type="tfidf_logistic_regression",
-            dataset_version="python_errors_v1",
-            artifact_path=self._settings.ml_model_artifact_path,
+            model_type=(
+                "tfidf_logistic_regression"
+                if prediction.diagnosis_source == "ml_classifier"
+                else "deterministic_multilang_rules"
+            ),
+            dataset_version=(
+                "python_errors_v1"
+                if prediction.diagnosis_source == "ml_classifier"
+                else "multilang_rules_v1"
+            ),
+            artifact_path=(
+                self._settings.ml_model_artifact_path
+                if prediction.diagnosis_source == "ml_classifier"
+                else "rule_based_engine"
+            ),
             metrics={},
         )
         saved = await self._mentor_repo.save_diagnosis(
@@ -168,6 +188,8 @@ class SocraticMentorService:
             top_candidates=[c.model_dump() for c in prediction.top_candidates],
             feature_summary={
                 "verdict": submission.verdict,
+                "language_slug": submission.language_slug,
+                "diagnosis_source": prediction.diagnosis_source,
                 "passed_tests": submission.passed_tests,
                 "total_tests": submission.total_tests,
                 "uncertainty_note": prediction.uncertainty_note,
@@ -441,15 +463,16 @@ class SocraticMentorService:
         if submission.verdict != "accepted":
             diag_row, diag_resp = await self.diagnose_submission(user=user, submission=submission)
 
-        # 2. Verified pgvector RAG retrieval (strictly approved documents)
+        # 2. Verified pgvector RAG retrieval (strictly approved & language-scoped documents)
         primary_topic = version.topics[0] if version.topics else None
         rag_query = (
-            f"{version.title} {submission.verdict} "
+            f"{submission.language_slug} {version.title} {submission.verdict} "
             f"{diag_resp.predicted_error_code if diag_resp else ''} "
             f"{payload.student_message[:180]}"
         )
         rag_result = await self._rag.retrieve(
             query=rag_query,
+            language_slug=submission.language_slug,
             topic=primary_topic,
             error_code=diag_resp.predicted_error_code if diag_resp else None,
             top_k=2,
@@ -464,7 +487,11 @@ class SocraticMentorService:
                     ref_code_for_guard = v.reference_solution.reference_solution
                     break
 
-        stderr_preview = str((submission.execution_evidence or {}).get("stderr_preview") or "")
+        stderr_preview = str(
+            (submission.execution_evidence or {}).get("compile_output_preview")
+            or (submission.execution_evidence or {}).get("stderr_preview")
+            or ""
+        )
         ctx = TutorPromptContext(
             problem_title=version.title,
             problem_mode=version.mode,
@@ -481,6 +508,7 @@ class SocraticMentorService:
             next_state=next_state,
             requested_hint_level=requested_hint_level,
             reference_solution_for_leak_check=ref_code_for_guard,
+            programming_language=submission.language_slug,
         )
 
         reply, provider_mode = await self._llm.generate_socratic_reply(ctx)

@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 TrackSlug = Literal["absolute_beginner", "basic_university", "intermediate", "advanced"]
+LanguageSlug = Literal["python", "javascript", "c", "cpp", "java"]
 SkillState = Literal[
     "unobserved",
     "introduced",
@@ -46,6 +47,7 @@ class LearningTrackView(BaseModel):
 
 
 class StudentTrackStatus(BaseModel):
+    language_slug: str = "python"
     selected_track_slug: TrackSlug
     recommended_track_slug: TrackSlug | None = None
     recommendation_source: Literal[
@@ -62,6 +64,32 @@ class SelectTrackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     track_slug: TrackSlug
+    language_slug: LanguageSlug | None = None
+
+
+class LanguageProgressItem(BaseModel):
+    slug: str
+    display_name: str
+    monaco_language: str
+    version_label: str
+    is_enabled: bool
+    is_active: bool = False
+    lessons_completed: int = 0
+    lessons_total: int = 0
+    diagnostic_sessions_completed: int = 0
+    submissions_count: int = 0
+    selected_track_slug: TrackSlug | None = None
+
+
+class LanguageProgressOverview(BaseModel):
+    active_language_slug: str = "python"
+    languages: list[LanguageProgressItem]
+
+
+class SelectActiveLanguageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    language_slug: LanguageSlug
 
 
 # --- Beginner Learning Lessons ---
@@ -94,6 +122,7 @@ class LessonSummaryView(BaseModel):
     lesson_id: UUID
     version_id: UUID
     slug: str
+    language_slug: str = "python"
     skill_slug: str
     display_order: int
     title_en: str
@@ -148,6 +177,8 @@ class LessonExerciseCaseResult(BaseModel):
 
 class LessonExerciseRunResponse(BaseModel):
     lesson_id: UUID
+    language_slug: str = "python"
+    execution_provider: Literal["judge0", "piston"] = "judge0"
     verdict: str
     passed_tests: int
     total_tests: int
@@ -187,6 +218,7 @@ class DiagnosticSessionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     explanation_language: Literal["en", "bn"] = "en"
+    language_slug: LanguageSlug | None = None
 
 
 class DiagnosticAnswerSubmitRequest(BaseModel):
@@ -231,6 +263,7 @@ class DiagnosticResponseFeedback(BaseModel):
 
 class DiagnosticSessionView(BaseModel):
     id: UUID
+    language_slug: str = "python"
     status: Literal["in_progress", "completed", "abandoned"]
     explanation_language: Literal["en", "bn"]
     answered_count: int
@@ -302,6 +335,7 @@ class RecommendationItemView(BaseModel):
 
 
 class LearningDashboardView(BaseModel):
+    language_slug: str = "python"
     track_status: StudentTrackStatus
     lessons_completed: int
     lessons_total: int
@@ -318,6 +352,7 @@ class AdminLessonCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     slug: str = Field(..., pattern=r"^[a-z0-9-]{3,80}$")
+    language_slug: LanguageSlug = "python"
     skill_slug: str = Field(..., min_length=3, max_length=64)
     display_order: int = Field(..., ge=1, le=500)
     title_en: str = Field(..., min_length=3, max_length=180)
@@ -339,6 +374,7 @@ class AdminDiagnosticQuestionCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     slug: str = Field(..., pattern=r"^[a-z0-9-]{3,80}$")
+    language_slug: LanguageSlug = "python"
     domain_slug: DiagnosticDomain
     skill_slug: str = Field(..., min_length=3, max_length=64)
     difficulty: DiagnosticDifficulty

@@ -98,6 +98,7 @@ async def search_approved_knowledge_debug(
 ) -> RagSearchResponse:
     return await service.retrieve(
         query=payload.query,
+        language_slug=payload.language_slug,
         topic=payload.topic,
         error_code=payload.error_code,
         top_k=payload.top_k,

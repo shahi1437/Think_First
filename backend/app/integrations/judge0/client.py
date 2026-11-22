@@ -24,6 +24,9 @@ Verdict = Literal[
 ]
 
 
+ExecutionProvider = Literal["judge0", "piston"]
+
+
 @dataclass(frozen=True, slots=True)
 class Judge0Language:
     id: int
@@ -41,6 +44,7 @@ class Judge0ExecutionOutcome:
     compile_output: str | None
     runtime_ms: int | None
     memory_kb: int | None
+    execution_provider: ExecutionProvider = "judge0"
 
 
 class Judge0Client(Protocol):
@@ -272,6 +276,17 @@ class HttpJudge0Client:
         memory_limit_kb: int,
     ) -> Judge0ExecutionOutcome:
         self._ensure_configured()
+        # V8 (Node.js id=63) and OpenJDK (Java id=62) reserve >1GB virtual address space
+        # under RLIMIT_AS on cgroups-v2 hosts even while using <64MB resident RAM.
+        effective_memory_kb = min(max(memory_limit_kb, 16384), 524288)
+        effective_procs = 32
+        if judge0_language_id == 63:
+            effective_memory_kb = max(effective_memory_kb, 2097152)
+            effective_procs = 64
+        elif judge0_language_id == 62:
+            effective_memory_kb = max(effective_memory_kb, 4194304)
+            effective_procs = 64
+
         payload = {
             "source_code": _b64_encode(source_code),
             "language_id": judge0_language_id,
@@ -279,18 +294,30 @@ class HttpJudge0Client:
             "expected_output": _b64_encode(expected_output),
             "cpu_time_limit": min(max(cpu_time_limit_seconds, 0.5), 10.0),
             "wall_time_limit": min(max(cpu_time_limit_seconds * 2.5, 2.0), 15.0),
-            "memory_limit": min(max(memory_limit_kb, 16384), 524288),
-            "max_processes_and_or_threads": 32,
+            "memory_limit": effective_memory_kb,
+            "max_processes_and_or_threads": effective_procs,
             "enable_network": False,
         }
 
         async with httpx.AsyncClient(timeout=self._http_timeout) as client:
-            create_resp = await self._request_with_retry(
-                client,
-                "POST",
-                f"{self._base_url}/submissions?base64_encoded=true&wait=false",
-                json=payload,
-            )
+            try:
+                create_resp = await self._request_with_retry(
+                    client,
+                    "POST",
+                    f"{self._base_url}/submissions?base64_encoded=true&wait=false",
+                    json=payload,
+                )
+            except AppError:
+                if effective_memory_kb > 512000:
+                    payload["memory_limit"] = 512000
+                    create_resp = await self._request_with_retry(
+                        client,
+                        "POST",
+                        f"{self._base_url}/submissions?base64_encoded=true&wait=false",
+                        json=payload,
+                    )
+                else:
+                    raise
             token = create_resp.json().get("token")
             if not isinstance(token, str) or not token:
                 raise AppError(

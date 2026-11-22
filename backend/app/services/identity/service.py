@@ -56,6 +56,7 @@ def _format_preferences(pref: PreferencesRecord | None) -> UserPreferencesRespon
     return UserPreferencesResponse(
         programming_experience=pref.programming_experience,
         preferred_language=pref.preferred_language,
+        active_language_slug=pref.active_language_slug,
         learning_goal=pref.learning_goal,
         daily_practice_minutes=pref.daily_practice_minutes,
         preferred_explanation_language=pref.preferred_explanation_language,
@@ -194,6 +195,15 @@ class IdentityService:
             if payload.preferred_language is not None
             else (current.preferred_language if current else "python")
         )
+        active_language_slug = (
+            payload.active_language_slug
+            if payload.active_language_slug is not None
+            else (
+                payload.preferred_language
+                if payload.preferred_language is not None
+                else (current.active_language_slug if current else preferred_language)
+            )
+        )
         learning_goal = (
             payload.learning_goal
             if payload.learning_goal is not None
@@ -220,6 +230,7 @@ class IdentityService:
             user_id=user.id,
             programming_experience=experience,
             preferred_language=preferred_language,
+            active_language_slug=active_language_slug,
             learning_goal=learning_goal,
             daily_practice_minutes=daily_practice_minutes,
             preferred_explanation_language=explanation_language,

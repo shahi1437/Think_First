@@ -41,13 +41,26 @@ class LearningRepository:
         stmt = select(LearningTrack).order_by(LearningTrack.display_order.asc())
         return list((await self._session.execute(stmt)).scalars().all())
 
-    async def get_track_enrollment(self, student_id: UUID) -> StudentTrackEnrollment | None:
+    async def get_track_enrollment(
+        self, student_id: UUID, language_slug: str = "python"
+    ) -> StudentTrackEnrollment | None:
+        stmt = (
+            select(StudentTrackEnrollment)
+            .where(
+                StudentTrackEnrollment.student_id == student_id,
+                StudentTrackEnrollment.language_slug == language_slug,
+            )
+            .execution_options(populate_existing=True)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_track_enrollments(self, student_id: UUID) -> list[StudentTrackEnrollment]:
         stmt = (
             select(StudentTrackEnrollment)
             .where(StudentTrackEnrollment.student_id == student_id)
             .execution_options(populate_existing=True)
         )
-        return (await self._session.execute(stmt)).scalar_one_or_none()
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def upsert_track_enrollment(
         self,
@@ -58,6 +71,7 @@ class LearningRepository:
         recommendation_source: str,
         recommendation_reason: str,
         diagnostic_session_id: UUID | None = None,
+        language_slug: str = "python",
     ) -> StudentTrackEnrollment:
         update_values: dict[str, Any] = {
             "selected_track_slug": selected_track_slug,
@@ -74,6 +88,7 @@ class LearningRepository:
             pg_insert(StudentTrackEnrollment)
             .values(
                 student_id=student_id,
+                language_slug=language_slug,
                 selected_track_slug=selected_track_slug,
                 recommended_track_slug=recommended_track_slug,
                 recommendation_source=recommendation_source,
@@ -81,13 +96,16 @@ class LearningRepository:
                 diagnostic_session_id=diagnostic_session_id,
             )
             .on_conflict_do_update(
-                index_elements=[StudentTrackEnrollment.student_id],
+                index_elements=[
+                    StudentTrackEnrollment.student_id,
+                    StudentTrackEnrollment.language_slug,
+                ],
                 set_=update_values,
             )
         )
         await self._session.execute(stmt)
         await self._session.commit()
-        row = await self.get_track_enrollment(student_id)
+        row = await self.get_track_enrollment(student_id, language_slug=language_slug)
         assert row is not None
         return row
 
@@ -101,21 +119,27 @@ class LearningRepository:
         stmt = select(SkillPrerequisite)
         return list((await self._session.execute(stmt)).scalars().all())
 
-    async def list_student_skill_states(self, student_id: UUID) -> list[StudentSkillState]:
+    async def list_student_skill_states(
+        self, student_id: UUID, language_slug: str = "python"
+    ) -> list[StudentSkillState]:
         stmt = (
             select(StudentSkillState)
-            .where(StudentSkillState.student_id == student_id)
+            .where(
+                StudentSkillState.student_id == student_id,
+                StudentSkillState.language_slug == language_slug,
+            )
             .execution_options(populate_existing=True)
         )
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def get_student_skill_state(
-        self, *, student_id: UUID, skill_slug: str
+        self, *, student_id: UUID, skill_slug: str, language_slug: str = "python"
     ) -> StudentSkillState | None:
         stmt = (
             select(StudentSkillState)
             .where(
                 StudentSkillState.student_id == student_id,
+                StudentSkillState.language_slug == language_slug,
                 StudentSkillState.skill_slug == skill_slug,
             )
             .execution_options(populate_existing=True)
@@ -134,14 +158,18 @@ class LearningRepository:
         reason: str,
         increment_evidence: bool = True,
         mark_verified: bool = False,
+        language_slug: str = "python",
     ) -> StudentSkillState:
         now = datetime.now(UTC)
-        existing = await self.get_student_skill_state(student_id=student_id, skill_slug=skill_slug)
+        existing = await self.get_student_skill_state(
+            student_id=student_id, skill_slug=skill_slug, language_slug=language_slug
+        )
         prev_state = existing.state if existing else "unobserved"
 
         if existing is None:
             row = StudentSkillState(
                 student_id=student_id,
+                language_slug=language_slug,
                 skill_slug=skill_slug,
                 state=new_state,
                 evidence_count=1 if increment_evidence else 0,
@@ -166,6 +194,7 @@ class LearningRepository:
             self._session.add(
                 SkillStateTransition(
                     student_id=student_id,
+                    language_slug=language_slug,
                     skill_slug=skill_slug,
                     from_state=prev_state,
                     to_state=new_state,
@@ -180,25 +209,27 @@ class LearningRepository:
         return row
 
     async def list_skill_transitions(
-        self, *, student_id: UUID, limit: int = 20
+        self, *, student_id: UUID, limit: int = 20, language_slug: str | None = "python"
     ) -> list[SkillStateTransition]:
-        stmt = (
-            select(SkillStateTransition)
-            .where(SkillStateTransition.student_id == student_id)
-            .order_by(SkillStateTransition.created_at.desc())
-            .limit(limit)
-        )
+        stmt = select(SkillStateTransition).where(SkillStateTransition.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(SkillStateTransition.language_slug == language_slug)
+        stmt = stmt.order_by(SkillStateTransition.created_at.desc()).limit(limit)
         return list((await self._session.execute(stmt)).scalars().all())
 
     # --- Beginner Lessons ---
 
-    async def list_published_lessons(self) -> list[tuple[Lesson, LessonVersion]]:
+    async def list_published_lessons(
+        self, *, language_slug: str | None = None
+    ) -> list[tuple[Lesson, LessonVersion]]:
         stmt = (
             select(Lesson, LessonVersion)
             .join(LessonVersion, Lesson.current_published_version_id == LessonVersion.id)
             .where(LessonVersion.status == "published")
-            .order_by(Lesson.display_order.asc())
+            .order_by(Lesson.language_slug.asc(), Lesson.display_order.asc())
         )
+        if language_slug is not None:
+            stmt = stmt.where(Lesson.language_slug == language_slug)
         rows = (await self._session.execute(stmt)).all()
         return [(row[0], row[1]) for row in rows]
 
@@ -314,6 +345,7 @@ class LearningRepository:
         display_order: int,
         version_data: dict[str, Any],
         publish: bool,
+        language_slug: str = "python",
     ) -> tuple[Lesson, LessonVersion]:
         stmt = select(Lesson).where(Lesson.slug == slug)
         lesson = (await self._session.execute(stmt)).scalar_one_or_none()
@@ -322,6 +354,7 @@ class LearningRepository:
         if lesson is None:
             lesson = Lesson(
                 slug=slug,
+                language_slug=language_slug,
                 skill_slug=skill_slug,
                 display_order=display_order,
                 created_by=actor_id,
@@ -330,6 +363,7 @@ class LearningRepository:
             await self._session.flush()
             next_ver = 1
         else:
+            lesson.language_slug = language_slug
             ver_stmt = select(LessonVersion.version_number).where(
                 LessonVersion.lesson_id == lesson.id
             )
@@ -355,13 +389,17 @@ class LearningRepository:
 
     # --- Diagnostic Questions & Sessions ---
 
-    async def list_published_diagnostic_questions(self) -> list[DiagnosticQuestion]:
+    async def list_published_diagnostic_questions(
+        self, *, language_slug: str | None = None
+    ) -> list[DiagnosticQuestion]:
         stmt = (
             select(DiagnosticQuestion)
             .where(DiagnosticQuestion.status == "published")
             .options(selectinload(DiagnosticQuestion.answer_key))
             .order_by(DiagnosticQuestion.domain_slug.asc(), DiagnosticQuestion.slug.asc())
         )
+        if language_slug is not None:
+            stmt = stmt.where(DiagnosticQuestion.language_slug == language_slug)
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def get_diagnostic_question_with_answer(
@@ -404,9 +442,11 @@ class LearningRepository:
         student_id: UUID,
         explanation_language: str,
         question_queue: list[str],
+        language_slug: str = "python",
     ) -> DiagnosticSession:
         sess = DiagnosticSession(
             student_id=student_id,
+            language_slug=language_slug,
             status="in_progress",
             explanation_language=explanation_language,
             question_queue=question_queue,
@@ -430,7 +470,7 @@ class LearningRepository:
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def list_student_diagnostic_sessions(
-        self, *, student_id: UUID, limit: int = 10
+        self, *, student_id: UUID, limit: int = 10, language_slug: str | None = None
     ) -> list[DiagnosticSession]:
         stmt = (
             select(DiagnosticSession)
@@ -440,6 +480,8 @@ class LearningRepository:
             .limit(limit)
             .execution_options(populate_existing=True)
         )
+        if language_slug is not None:
+            stmt = stmt.where(DiagnosticSession.language_slug == language_slug)
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def save_diagnostic_response_and_advance(
@@ -499,14 +541,25 @@ class LearningRepository:
     # --- Recommendations ---
 
     async def replace_student_recommendations(
-        self, *, student_id: UUID, items: list[dict[str, Any]]
+        self,
+        *,
+        student_id: UUID,
+        items: list[dict[str, Any]],
+        language_slug: str = "python",
     ) -> list[StudentRecommendation]:
         await self._session.execute(
-            delete(StudentRecommendation).where(StudentRecommendation.student_id == student_id)
+            delete(StudentRecommendation).where(
+                StudentRecommendation.student_id == student_id,
+                StudentRecommendation.language_slug == language_slug,
+            )
         )
         created: list[StudentRecommendation] = []
         for item in items:
-            row = StudentRecommendation(student_id=student_id, **item)
+            row = StudentRecommendation(
+                student_id=student_id,
+                language_slug=language_slug,
+                **item,
+            )
             self._session.add(row)
             created.append(row)
         await self._session.commit()

@@ -33,6 +33,12 @@ class LearningDnaSnapshot(Base):
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
     )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
+    )
     selected_track_slug: Mapped[str] = mapped_column(
         String(48),
         ForeignKey("public.learning_tracks.slug", ondelete="RESTRICT"),
@@ -60,6 +66,12 @@ class DailyLearningPlan(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
     )
     plan_date: Mapped[date] = mapped_column(Date, nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -142,6 +154,12 @@ class RetentionSchedule(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("public.profiles.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
     )
     skill_slug: Mapped[str] = mapped_column(
         String(64),

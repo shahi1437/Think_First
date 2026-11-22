@@ -10,8 +10,10 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
 from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
+from app.integrations.execution.router import ResilientExecutionClient
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
 from app.integrations.llm.client import SocraticLLMClient
+from app.integrations.piston.client import HttpPistonClient, is_piston_configured
 from app.repositories.admin import AdminRepository
 from app.repositories.classroom import ClassroomRepository
 from app.repositories.growth import GrowthRepository
@@ -76,8 +78,10 @@ def get_jwt_verifier(
 def get_judge0_client(
     settings: Settings = Depends(get_settings),
 ) -> Judge0Client:
-    """Return Judge0 CE HTTP execution client."""
-    return HttpJudge0Client(settings)
+    """Return resilient execution client: Judge0 CE primary with Piston fallback."""
+    primary = HttpJudge0Client(settings)
+    fallback = HttpPistonClient(settings) if is_piston_configured(settings) else None
+    return ResilientExecutionClient(primary=primary, fallback=fallback, settings=settings)
 
 
 def get_identity_repository(
@@ -205,6 +209,7 @@ def get_lessons_and_tracks_service(
     mentor_repo: MentorRepository = Depends(get_mentor_repository),
     judge0: Judge0Client = Depends(get_judge0_client),
     skill_graph: SkillGraphService = Depends(get_skill_graph_service),
+    identity_repo: IdentityRepository = Depends(get_identity_repository),
 ) -> LessonsAndTracksService:
     return LessonsAndTracksService(
         learning_repo=learning_repo,
@@ -212,6 +217,7 @@ def get_lessons_and_tracks_service(
         mentor_repo=mentor_repo,
         judge0=judge0,
         skill_graph=skill_graph,
+        identity_repo=identity_repo,
     )
 
 

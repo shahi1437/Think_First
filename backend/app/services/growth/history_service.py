@@ -36,6 +36,7 @@ class LearningHistoryService:
         user: UserRecord,
         q: str | None = None,
         category: HistoryCategory | None = None,
+        language_slug: str | None = None,
         limit: int = 40,
         offset: int = 0,
     ) -> LearningHistoryResponseView:
@@ -43,7 +44,7 @@ class LearningHistoryService:
 
         # 1. Lessons
         lesson_rows = await self._growth_repo.list_student_lesson_progress_with_meta(
-            student_id=user.id
+            student_id=user.id, language_slug=language_slug
         )
         for prog, lsn, ver in lesson_rows:
             ts = prog.completed_at or prog.updated_at
@@ -77,7 +78,7 @@ class LearningHistoryService:
 
         # 2. Diagnostic Assessments
         diag_sessions = await self._growth_repo.list_student_diagnostic_sessions(
-            student_id=user.id, limit=25
+            student_id=user.id, limit=25, language_slug=language_slug
         )
         for ds in diag_sessions:
             ts = ds.completed_at or ds.started_at
@@ -107,8 +108,10 @@ class LearningHistoryService:
                 )
             )
 
-        # 3. Judge0 Submissions
-        subs = await self._growth_repo.list_student_submissions_all(student_id=user.id, limit=80)
+        # 3. Sandbox Submissions (Judge0 / Piston)
+        subs = await self._growth_repo.list_student_submissions_all(
+            student_id=user.id, limit=80, language_slug=language_slug
+        )
         for sub, prob, prob_ver in subs:
             events.append(
                 LearningHistoryItemView(
@@ -138,7 +141,9 @@ class LearningHistoryService:
             )
 
         # 4. Code Revisions
-        revs = await self._growth_repo.list_student_revisions(student_id=user.id, limit=50)
+        revs = await self._growth_repo.list_student_revisions(
+            student_id=user.id, limit=50, language_slug=language_slug
+        )
         for rev, rev_ver in revs:
             notes_parts: list[str] = []
             if (rev.prediction_text or "").strip():
@@ -242,7 +247,7 @@ class LearningHistoryService:
 
         # 8. Skill Graph Transitions
         transitions = await self._growth_repo.list_student_skill_transitions_all(
-            student_id=user.id, limit=60
+            student_id=user.id, limit=60, language_slug=language_slug
         )
         for tr in transitions:
             events.append(
@@ -287,7 +292,9 @@ class LearningHistoryService:
             )
 
         # 10. Retention Attempts
-        ret_attempts = await self._growth_repo.list_retention_attempts(student_id=user.id, limit=40)
+        ret_attempts = await self._growth_repo.list_retention_attempts(
+            student_id=user.id, limit=40, language_slug=language_slug
+        )
         for ra in ret_attempts:
             events.append(
                 LearningHistoryItemView(

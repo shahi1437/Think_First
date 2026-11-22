@@ -208,6 +208,7 @@ class MentorRepository:
         query_embedding: list[float],
         limit: int = 8,
         topic: str | None = None,
+        language_slug: str | None = None,
     ) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
         """Execute real PostgreSQL pgvector cosine similarity query on approved docs ONLY."""
         distance_expr = KnowledgeChunk.embedding.cosine_distance(query_embedding)
@@ -215,11 +216,11 @@ class MentorRepository:
             select(KnowledgeChunk, KnowledgeDocument, (1.0 - distance_expr).label("similarity"))
             .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
             .where(KnowledgeDocument.status == "approved")
-            .order_by(distance_expr.asc())
-            .limit(limit)
         )
+        if language_slug:
+            stmt = stmt.where(KnowledgeDocument.language_slug == language_slug)
+        stmt = stmt.order_by(distance_expr.asc()).limit(limit)
         if topic:
-            # Fetch broader candidates if topic filter is requested, or keep hybrid scoring
             _ = topic
         rows = (await self._session.execute(stmt)).all()
         return [(row[0], row[1], float(row[2])) for row in rows]

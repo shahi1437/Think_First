@@ -51,6 +51,12 @@ class UserPreference(Base):
     )
     programming_experience: Mapped[str] = mapped_column(String(32), nullable=False, default="none")
     preferred_language: Mapped[str] = mapped_column(String(32), nullable=False, default="python")
+    active_language_slug: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("public.supported_languages.slug", ondelete="RESTRICT"),
+        nullable=False,
+        default="python",
+    )
     learning_goal: Mapped[str] = mapped_column(
         String(64), nullable=False, default="university_coursework"
     )

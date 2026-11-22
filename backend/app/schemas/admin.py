@@ -89,6 +89,7 @@ class AdminLessonDetailView(BaseModel):
     version_id: UUID
     version_number: int
     slug: str
+    language_slug: str = "python"
     skill_slug: str
     display_order: int
     status: str

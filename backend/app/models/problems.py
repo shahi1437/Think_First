@@ -249,6 +249,7 @@ class Submission(Base):
     total_tests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     runtime_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     memory_kb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    execution_provider: Mapped[str] = mapped_column(String(16), nullable=False, default="judge0")
     execution_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -279,6 +280,7 @@ class ExecutionResult(Base):
         nullable=False,
     )
     is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    execution_provider: Mapped[str] = mapped_column(String(16), nullable=False, default="judge0")
     judge0_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     judge0_status_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     verdict: Mapped[str] = mapped_column(String(32), nullable=False)

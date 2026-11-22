@@ -31,6 +31,7 @@ from app.schemas.learning import (
     DiagnosticSessionView,
     TrackSlug,
 )
+from app.services.learning.lessons_service import resolve_user_language
 from app.services.learning.skill_graph import SkillGraphService
 
 ALL_EIGHT_DOMAINS: tuple[DiagnosticDomain, ...] = (
@@ -195,6 +196,7 @@ class DiagnosticAssessmentService:
         domain_ev, _, _ = _summarize_domain_evidence(session)
         return DiagnosticSessionView(
             id=session.id,
+            language_slug=session.language_slug,
             status=session.status,
             explanation_language=session.explanation_language,
             answered_count=answered,
@@ -210,20 +212,27 @@ class DiagnosticAssessmentService:
         )
 
     async def start_or_resume_session(
-        self, *, user: UserRecord, explanation_language: str
+        self,
+        *,
+        user: UserRecord,
+        explanation_language: str,
+        language_slug: str | None = None,
     ) -> DiagnosticSessionView:
+        lang = resolve_user_language(user, language_slug)
         existing_sessions = await self._learning_repo.list_student_diagnostic_sessions(
-            student_id=user.id, limit=5
+            student_id=user.id, limit=5, language_slug=lang
         )
         for s in existing_sessions:
             if s.status == "in_progress":
                 return await self._build_session_view(s)
 
-        published = await self._learning_repo.list_published_diagnostic_questions()
+        published = await self._learning_repo.list_published_diagnostic_questions(
+            language_slug=lang
+        )
         if not published:
             raise AppError(
                 code="DIAGNOSTIC_BANK_EMPTY",
-                message="No published diagnostic questions are available yet.",
+                message=f"No published diagnostic questions are available yet for '{lang}'.",
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -239,6 +248,7 @@ class DiagnosticAssessmentService:
 
         session = await self._learning_repo.create_diagnostic_session(
             student_id=user.id,
+            language_slug=lang,
             explanation_language=explanation_language,
             question_queue=initial_queue,
         )
@@ -260,9 +270,12 @@ class DiagnosticAssessmentService:
             )
         return await self._build_session_view(session)
 
-    async def list_my_sessions(self, *, user: UserRecord) -> list[DiagnosticSessionView]:
+    async def list_my_sessions(
+        self, *, user: UserRecord, language_slug: str | None = None
+    ) -> list[DiagnosticSessionView]:
+        lang = resolve_user_language(user, language_slug) if language_slug else None
         rows = await self._learning_repo.list_student_diagnostic_sessions(
-            student_id=user.id, limit=10
+            student_id=user.id, limit=10, language_slug=lang
         )
         return [await self._build_session_view(r) for r in rows]
 
@@ -361,8 +374,10 @@ class DiagnosticAssessmentService:
                     exec_stderr = out.stderr or out.compile_output
             is_correct = total_tests > 0 and passed_tests == total_tests
 
-        # Adaptive follow-up queue selection
-        published = await self._learning_repo.list_published_diagnostic_questions()
+        # Adaptive follow-up queue selection (strictly scoped to the session's language)
+        published = await self._learning_repo.list_published_diagnostic_questions(
+            language_slug=session.language_slug
+        )
         followups_added = session.adaptive_followups_added
         adaptive_action: str | None = None
 
@@ -409,37 +424,39 @@ class DiagnosticAssessmentService:
         next_index = session.current_index + 1
         completed = next_index >= len(queue)
 
-        # Update Skill Graph honestly from this single diagnostic item
+        # Update language-scoped Skill Graph honestly from this single diagnostic item
         if question.question_type == "code_execution" and is_correct:
             await self._skill_graph.record_evidence(
                 student_id=user.id,
+                language_slug=session.language_slug,
                 skill_slug=question.skill_slug,
                 target_state="independent",
                 evidence_source="diagnostic_judge0_execution",
                 evidence_ref_id=str(question.id),
                 reason=(
-                    f"Passed diagnostic Judge0 execution check ({passed_tests}/{total_tests}) "
-                    f"in {question.domain_slug}."
+                    f"Passed diagnostic {session.language_slug} execution check "
+                    f"({passed_tests}/{total_tests}) in {question.domain_slug}."
                 ),
                 uncertainty_note=(
-                    "Verified on a diagnostic Judge0 coding check; unseen transfer and "
+                    "Verified on a diagnostic coding check; unseen transfer and "
                     "later retention are not yet proven."
                 ),
             )
         else:
             await self._skill_graph.record_evidence(
                 student_id=user.id,
+                language_slug=session.language_slug,
                 skill_slug=question.skill_slug,
                 target_state="introduced",
                 evidence_source="diagnostic_mcq",
                 evidence_ref_id=str(question.id),
                 reason=(
-                    f"Diagnostic probe in '{question.domain_slug}' "
+                    f"Diagnostic probe in '{question.domain_slug}' ({session.language_slug}) "
                     f"({'correct' if is_correct else 'gap observed'})."
                 ),
                 uncertainty_note=(
                     "MCQ recognition alone does not prove independent coding mastery; "
-                    "complete guided and independent Judge0 exercises."
+                    "complete guided and independent coding exercises."
                 ),
             )
 
@@ -476,6 +493,7 @@ class DiagnosticAssessmentService:
             )
             await self._learning_repo.upsert_track_enrollment(
                 student_id=user.id,
+                language_slug=updated_session.language_slug,
                 selected_track_slug=rec_track,
                 recommended_track_slug=rec_track,
                 recommendation_source="diagnostic_evidence",
@@ -486,7 +504,7 @@ class DiagnosticAssessmentService:
                 student_id=user.id,
                 problem_id=None,
                 problem_version_id=None,
-                language_slug="python",
+                language_slug=updated_session.language_slug,
                 submission_id=None,
                 diagnosis_id=None,
                 event_type="diagnostic.completed",
@@ -494,6 +512,7 @@ class DiagnosticAssessmentService:
                 verdict=rec_track,
                 metadata={
                     "diagnostic_session_id": str(updated_session.id),
+                    "language_slug": updated_session.language_slug,
                     "recommended_track_slug": rec_track,
                     "answered_count": len(updated_session.responses),
                 },
@@ -522,6 +541,7 @@ class DiagnosticAssessmentService:
             actor_id=admin.id,
             question_data={
                 "slug": payload.slug,
+                "language_slug": payload.language_slug,
                 "domain_slug": payload.domain_slug,
                 "skill_slug": payload.skill_slug,
                 "difficulty": payload.difficulty,

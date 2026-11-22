@@ -26,6 +26,7 @@ from app.schemas.growth import (
     SubmitRetentionAttemptRequest,
     UpdateDailyTaskStatusRequest,
 )
+from app.schemas.learning import LanguageSlug
 from app.services.growth.daily_plan_service import DailyPlanService
 from app.services.growth.dna_service import LearningDnaService
 from app.services.growth.history_service import LearningHistoryService
@@ -38,20 +39,22 @@ _STUDENT_ROLES = require_roles("student", "teacher", "admin")
 
 @growth_router.get("/learning-dna", response_model=LearningDnaProfileView)
 async def get_learning_dna(
+    language: LanguageSlug | None = Query(default=None),
     user: UserRecord = Depends(_STUDENT_ROLES),
     service: LearningDnaService = Depends(get_learning_dna_service),
 ) -> LearningDnaProfileView:
     """Compute and return the student's evidence-based Learning DNA profile."""
-    return await service.compute_and_persist_profile(user)
+    return await service.compute_and_persist_profile(user, language_slug=language)
 
 
 @growth_router.get("/daily-plan", response_model=DailyPlanWorkspaceView)
 async def get_daily_plan(
+    language: LanguageSlug | None = Query(default=None),
     user: UserRecord = Depends(_STUDENT_ROLES),
     service: DailyPlanService = Depends(get_daily_plan_service),
 ) -> DailyPlanWorkspaceView:
     """Return today's active Adaptive Daily Learning Plan plus recent plan history."""
-    return await service.get_today_workspace(user)
+    return await service.get_today_workspace(user, language_slug=language)
 
 
 @growth_router.post(
@@ -61,12 +64,15 @@ async def get_daily_plan(
 )
 async def regenerate_daily_plan(
     payload: RegenerateDailyPlanRequest,
+    language: LanguageSlug | None = Query(default=None),
     user: UserRecord = Depends(_STUDENT_ROLES),
     service: DailyPlanService = Depends(get_daily_plan_service),
 ) -> DailyPlanWorkspaceView:
     """Regenerate today's Adaptive Daily Learning Plan, preserving previous versions in history."""
     return await service.regenerate_today_plan(
-        user=user, available_minutes=payload.available_minutes
+        user=user,
+        available_minutes=payload.available_minutes,
+        language_slug=language,
     )
 
 
@@ -88,22 +94,31 @@ async def update_daily_plan_task(
 async def get_learning_history(
     q: str | None = Query(default=None, max_length=120),
     category: HistoryCategory | None = Query(default=None),
+    language: LanguageSlug | None = Query(default=None),
     limit: int = Query(default=40, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     user: UserRecord = Depends(_STUDENT_ROLES),
     service: LearningHistoryService = Depends(get_learning_history_service),
 ) -> LearningHistoryResponseView:
     """Return the searchable, persistent longitudinal timeline for the authenticated student."""
-    return await service.get_timeline(user=user, q=q, category=category, limit=limit, offset=offset)
+    return await service.get_timeline(
+        user=user,
+        q=q,
+        category=category,
+        language_slug=language,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @growth_router.get("/retention", response_model=RetentionOverviewView)
 async def get_retention_overview(
+    language: LanguageSlug | None = Query(default=None),
     user: UserRecord = Depends(_STUDENT_ROLES),
     service: RetentionVerificationService = Depends(get_retention_service),
 ) -> RetentionOverviewView:
-    """Sync eligible retention schedules and return upcoming/due checks + recent Judge0 attempts."""
-    return await service.get_retention_overview(user)
+    """Sync eligible retention schedules and return upcoming/due checks + attempts."""
+    return await service.get_retention_overview(user, language_slug=language)
 
 
 @growth_router.post(

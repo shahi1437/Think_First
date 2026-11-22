@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     judge0_poll_interval_seconds: float = 0.4
     judge0_poll_timeout_seconds: float = 20.0
     judge0_max_retries: int = 2
+    # Phase 3+ Self-hosted Piston secure fallback execution settings
+    execution_fallback_enabled: bool = True
+    piston_enabled: bool = True
+    piston_base_url: str = "http://127.0.0.1:2000"
+    piston_http_timeout_seconds: float = 15.0
+    piston_compile_timeout_ms: int = 10000
+    piston_run_timeout_ms: int = 3000
+    piston_max_output_bytes: int = 65536
     max_source_code_bytes: int = 65536
     execution_rate_limit_per_minute: int = 20
     execution_daily_quota: int = 200

@@ -9,12 +9,16 @@ from fastapi import status
 from app.core.errors import AppError
 from app.integrations.judge0.client import Judge0Client
 from app.models.learning import Lesson, LessonProgress, LessonVersion
-from app.repositories.identity import UserRecord
+from app.repositories.identity import IdentityRepository, UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
+from app.schemas.identity import PreferredLanguage
 from app.schemas.learning import (
     AdminLessonCreateRequest,
+    LanguageProgressItem,
+    LanguageProgressOverview,
+    LanguageSlug,
     LearningTrackView,
     LessonDetailView,
     LessonExerciseCaseResult,
@@ -29,6 +33,21 @@ from app.schemas.learning import (
 from app.services.learning.skill_graph import SkillGraphService
 
 DEFAULT_PYTHON_JUDGE0_ID = 71
+VALID_LANGUAGES: frozenset[str] = frozenset({"python", "javascript", "c", "cpp", "java"})
+
+
+def resolve_user_language(user: UserRecord, explicit_language: str | None = None) -> str:
+    """Resolve effective learning language from explicit query override or user preference."""
+    if explicit_language and explicit_language in VALID_LANGUAGES:
+        return explicit_language
+    if user.preferences is not None:
+        active = getattr(user.preferences, "active_language_slug", None)
+        if active in VALID_LANGUAGES:
+            return str(active)
+        pref = getattr(user.preferences, "preferred_language", None)
+        if pref in VALID_LANGUAGES:
+            return str(pref)
+    return "python"
 
 
 def _initial_track_from_onboarding(user: UserRecord) -> tuple[TrackSlug, str]:
@@ -66,18 +85,95 @@ class LessonsAndTracksService:
         mentor_repo: MentorRepository,
         judge0: Judge0Client,
         skill_graph: SkillGraphService,
+        identity_repo: IdentityRepository | None = None,
     ) -> None:
         self._learning_repo = learning_repo
         self._problem_repo = problem_repo
         self._mentor_repo = mentor_repo
         self._judge0 = judge0
         self._skill_graph = skill_graph
+        self._identity_repo = identity_repo
 
-    async def get_track_status(self, user: UserRecord) -> StudentTrackStatus:
-        tracks = await self._learning_repo.list_tracks()
-        enrollment = await self._learning_repo.get_track_enrollment(user.id)
+    async def get_language_progress_overview(
+        self, user: UserRecord, *, active_override: str | None = None
+    ) -> LanguageProgressOverview:
+        active_lang = resolve_user_language(user, active_override)
+        languages = await self._problem_repo.list_languages(enabled_only=True)
+        all_lessons = await self._learning_repo.list_published_lessons()
+        progress_map = await self._learning_repo.list_student_lesson_progress(user.id)
         diag_sessions = await self._learning_repo.list_student_diagnostic_sessions(
-            student_id=user.id, limit=5
+            student_id=user.id, limit=50
+        )
+        enrollments = await self._learning_repo.list_track_enrollments(user.id)
+        enrollment_by_lang = {e.language_slug: e.selected_track_slug for e in enrollments}
+        subs, _ = await self._problem_repo.list_student_submissions(
+            student_id=user.id, limit=250, offset=0
+        )
+
+        # Canonical display order: python, javascript, c, cpp, java
+        order_map = {"python": 0, "javascript": 1, "c": 2, "cpp": 3, "java": 4}
+        ordered_langs = sorted(languages, key=lambda item: order_map.get(item.slug, 99))
+
+        items: list[LanguageProgressItem] = []
+        for lang in ordered_langs:
+            lang_lessons = [lsn for lsn, _ in all_lessons if lsn.language_slug == lang.slug]
+            completed_cnt = sum(
+                1
+                for lsn in lang_lessons
+                if lsn.id in progress_map and progress_map[lsn.id].status == "completed"
+            )
+            diag_cnt = sum(
+                1
+                for ds in diag_sessions
+                if ds.language_slug == lang.slug and ds.status == "completed"
+            )
+            sub_cnt = sum(1 for s in subs if s.language_slug == lang.slug)
+            track_val = enrollment_by_lang.get(lang.slug)
+            items.append(
+                LanguageProgressItem(
+                    slug=lang.slug,
+                    display_name=lang.display_name,
+                    monaco_language=lang.monaco_language,
+                    version_label=lang.version_label,
+                    is_enabled=lang.is_enabled,
+                    is_active=lang.slug == active_lang,
+                    lessons_completed=completed_cnt,
+                    lessons_total=len(lang_lessons),
+                    diagnostic_sessions_completed=diag_cnt,
+                    submissions_count=sub_cnt,
+                    selected_track_slug=track_val,
+                )
+            )
+        return LanguageProgressOverview(active_language_slug=active_lang, languages=items)
+
+    async def select_active_language(
+        self, *, user: UserRecord, language_slug: LanguageSlug
+    ) -> LanguageProgressOverview:
+        lang_row = await self._problem_repo.get_language_by_slug(language_slug)
+        if lang_row is None or not lang_row.is_enabled:
+            raise AppError(
+                code="UNSUPPORTED_LANGUAGE",
+                message=f"Language '{language_slug}' is not enabled.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        updated_user = user
+        if self._identity_repo is not None:
+            typed_lang: PreferredLanguage = language_slug
+            updated_user = await self._identity_repo.set_active_language(
+                user_id=user.id, language_slug=typed_lang
+            )
+        return await self.get_language_progress_overview(
+            updated_user, active_override=language_slug
+        )
+
+    async def get_track_status(
+        self, user: UserRecord, *, language_slug: str | None = None
+    ) -> StudentTrackStatus:
+        lang = resolve_user_language(user, language_slug)
+        tracks = await self._learning_repo.list_tracks()
+        enrollment = await self._learning_repo.get_track_enrollment(user.id, language_slug=lang)
+        diag_sessions = await self._learning_repo.list_student_diagnostic_sessions(
+            student_id=user.id, limit=5, language_slug=lang
         )
         completed_diag = any(s.status == "completed" for s in diag_sessions)
 
@@ -85,6 +181,7 @@ class LessonsAndTracksService:
             initial_slug, reason = _initial_track_from_onboarding(user)
             enrollment = await self._learning_repo.upsert_track_enrollment(
                 student_id=user.id,
+                language_slug=lang,
                 selected_track_slug=initial_slug,
                 recommended_track_slug=None,
                 recommendation_source="onboarding_initial",
@@ -92,6 +189,7 @@ class LessonsAndTracksService:
             )
 
         return StudentTrackStatus(
+            language_slug=lang,
             selected_track_slug=enrollment.selected_track_slug,
             recommended_track_slug=enrollment.recommended_track_slug,
             recommendation_source=enrollment.recommendation_source,
@@ -113,7 +211,10 @@ class LessonsAndTracksService:
             ],
         )
 
-    async def select_track(self, *, user: UserRecord, track_slug: TrackSlug) -> StudentTrackStatus:
+    async def select_track(
+        self, *, user: UserRecord, track_slug: TrackSlug, language_slug: str | None = None
+    ) -> StudentTrackStatus:
+        lang = resolve_user_language(user, language_slug)
         tracks = await self._learning_repo.list_tracks()
         if not any(t.slug == track_slug for t in tracks):
             raise AppError(
@@ -121,19 +222,20 @@ class LessonsAndTracksService:
                 message="Selected learning track does not exist.",
                 status_code=status.HTTP_404_NOT_FOUND,
             )
-        existing = await self._learning_repo.get_track_enrollment(user.id)
+        existing = await self._learning_repo.get_track_enrollment(user.id, language_slug=lang)
         await self._learning_repo.upsert_track_enrollment(
             student_id=user.id,
+            language_slug=lang,
             selected_track_slug=track_slug,
             recommended_track_slug=existing.recommended_track_slug if existing else None,
             recommendation_source="manual_selection",
             recommendation_reason=(
                 existing.recommendation_reason
                 if existing and existing.recommended_track_slug
-                else f"Learner selected {track_slug.replace('_', ' ')} track manually."
+                else f"Learner selected {track_slug.replace('_', ' ')} track manually for {lang}."
             ),
         )
-        return await self.get_track_status(user)
+        return await self.get_track_status(user, language_slug=lang)
 
     def _to_summary(
         self,
@@ -152,6 +254,7 @@ class LessonsAndTracksService:
             lesson_id=lesson.id,
             version_id=version.id,
             slug=lesson.slug,
+            language_slug=lesson.language_slug,
             skill_slug=lesson.skill_slug,
             display_order=lesson.display_order,
             title_en=version.title_en,
@@ -169,9 +272,14 @@ class LessonsAndTracksService:
         )
 
     async def list_lessons(
-        self, *, user: UserRecord, track_slug: str | None = None
+        self,
+        *,
+        user: UserRecord,
+        track_slug: str | None = None,
+        language_slug: str | None = None,
     ) -> list[LessonSummaryView]:
-        rows = await self._learning_repo.list_published_lessons()
+        lang = resolve_user_language(user, language_slug)
+        rows = await self._learning_repo.list_published_lessons(language_slug=lang)
         progress_map = await self._learning_repo.list_student_lesson_progress(user.id)
         completed_slugs = {
             lesson.slug
@@ -195,7 +303,9 @@ class LessonsAndTracksService:
                 status_code=status.HTTP_404_NOT_FOUND,
             )
         lesson, version = found
-        all_rows = await self._learning_repo.list_published_lessons()
+        all_rows = await self._learning_repo.list_published_lessons(
+            language_slug=lesson.language_slug
+        )
         progress_map = await self._learning_repo.list_student_lesson_progress(user.id)
         completed_slugs = {
             lsn.slug
@@ -243,12 +353,13 @@ class LessonsAndTracksService:
         # Reading introduces the concept — NEVER claims mastery!
         await self._skill_graph.record_evidence(
             student_id=user.id,
+            language_slug=lesson.language_slug,
             skill_slug=lesson.skill_slug,
             target_state="introduced",
             evidence_source="lesson_reading",
             evidence_ref_id=str(lesson.id),
-            reason=f"Completed reading lesson '{version.title_en}' (concept introduced; execution practice still required).",
-            uncertainty_note="Concept introduced through reading only — pass guided and independent Judge0 tasks to prove understanding.",
+            reason=f"Completed reading {lesson.language_slug} lesson '{version.title_en}' (concept introduced; execution practice still required).",
+            uncertainty_note="Concept introduced through reading only — pass guided and independent sandbox tasks to prove understanding.",
         )
         return await self.get_lesson_detail(user=user, slug=lesson.slug)
 
@@ -267,16 +378,18 @@ class LessonsAndTracksService:
         if not exercise.test_cases:
             raise AppError(
                 code="EXERCISE_HAS_NO_TESTS",
-                message="Guided exercise has no configured Judge0 test cases.",
+                message="Guided exercise has no configured execution test cases.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        lang_row = await self._problem_repo.get_language_by_slug(exercise.language_slug)
+        effective_lang = exercise.language_slug or lesson.language_slug or "python"
+        lang_row = await self._problem_repo.get_language_by_slug(effective_lang)
         judge0_lang_id = lang_row.judge0_language_id if lang_row else DEFAULT_PYTHON_JUDGE0_ID
 
         case_results: list[LessonExerciseCaseResult] = []
         passed_count = 0
         overall_verdict = "accepted"
+        providers_used: list[str] = []
         first_stdout: str | None = None
         first_stderr: str | None = None
 
@@ -286,9 +399,10 @@ class LessonsAndTracksService:
                 judge0_language_id=judge0_lang_id,
                 stdin=tc.input_data,
                 expected_output=tc.expected_output,
-                cpu_time_limit_seconds=2.0,
+                cpu_time_limit_seconds=2.5,
                 memory_limit_kb=131072,
             )
+            providers_used.append(outcome.execution_provider)
             passed = outcome.verdict == "accepted"
             if passed:
                 passed_count += 1
@@ -313,6 +427,7 @@ class LessonsAndTracksService:
                 )
             )
 
+        effective_provider = "piston" if "piston" in providers_used else "judge0"
         all_passed = passed_count == len(exercise.test_cases)
         prog = await self._learning_repo.upsert_lesson_progress(
             student_id=user.id,
@@ -327,32 +442,34 @@ class LessonsAndTracksService:
             last_stderr=first_stderr,
         )
 
-        # Guided Judge0 exercise updates Skill Graph to `guided` (never over-claims `transferred`)
+        # Guided sandbox exercise updates language-scoped Skill Graph to `guided`
         if all_passed:
             new_skill_state = await self._skill_graph.record_evidence(
                 student_id=user.id,
+                language_slug=lesson.language_slug,
                 skill_slug=lesson.skill_slug,
                 target_state="guided",
                 evidence_source="lesson_guided_judge0",
                 evidence_ref_id=str(lesson.id),
                 reason=(
-                    f"Passed guided Judge0 exercise for '{version.title_en}' "
-                    f"({passed_count}/{len(exercise.test_cases)} tests)."
+                    f"Passed guided {lesson.language_slug} exercise for '{version.title_en}' "
+                    f"({passed_count}/{len(exercise.test_cases)} tests via {effective_provider})."
                 ),
                 uncertainty_note=(
-                    "Guided practice passed on Judge0; independent debugging and transfer "
+                    "Guided practice passed in isolated sandbox; independent debugging and transfer "
                     "challenges are still needed to prove unassisted mastery."
                 ),
             )
         else:
             new_skill_state = await self._skill_graph.record_evidence(
                 student_id=user.id,
+                language_slug=lesson.language_slug,
                 skill_slug=lesson.skill_slug,
                 target_state="introduced",
                 evidence_source="lesson_guided_attempt",
                 evidence_ref_id=str(lesson.id),
                 reason=(
-                    f"Attempted guided Judge0 exercise for '{version.title_en}' "
+                    f"Attempted guided {lesson.language_slug} exercise for '{version.title_en}' "
                     f"({passed_count}/{len(exercise.test_cases)} passed, verdict={overall_verdict})."
                 ),
                 uncertainty_note="Guided exercise not yet passed; review the concept and retry.",
@@ -362,7 +479,7 @@ class LessonsAndTracksService:
             student_id=user.id,
             problem_id=None,
             problem_version_id=None,
-            language_slug=exercise.language_slug,
+            language_slug=effective_lang,
             submission_id=None,
             diagnosis_id=None,
             event_type="lesson.exercise_run",
@@ -371,6 +488,8 @@ class LessonsAndTracksService:
             metadata={
                 "lesson_slug": lesson.slug,
                 "skill_slug": lesson.skill_slug,
+                "language_slug": effective_lang,
+                "execution_provider": effective_provider,
                 "passed_tests": passed_count,
                 "total_tests": len(exercise.test_cases),
                 "exercise_passed": all_passed,
@@ -379,6 +498,8 @@ class LessonsAndTracksService:
 
         return LessonExerciseRunResponse(
             lesson_id=lesson.id,
+            language_slug=effective_lang,
+            execution_provider=effective_provider,
             verdict=overall_verdict,
             passed_tests=passed_count,
             total_tests=len(exercise.test_cases),
@@ -394,6 +515,7 @@ class LessonsAndTracksService:
         lesson, version = await self._learning_repo.create_admin_lesson(
             actor_id=admin.id,
             slug=payload.slug,
+            language_slug=payload.language_slug,
             skill_slug=payload.skill_slug,
             display_order=payload.display_order,
             version_data={
