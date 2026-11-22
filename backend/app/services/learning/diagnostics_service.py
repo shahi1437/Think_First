@@ -22,6 +22,7 @@ from app.repositories.mentor import MentorRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.learning import (
     AdminDiagnosticQuestionCreateRequest,
+    AssessmentMode,
     DiagnosticAnswerSubmitRequest,
     DiagnosticDomain,
     DiagnosticDomainEvidence,
@@ -29,6 +30,7 @@ from app.schemas.learning import (
     DiagnosticQuestionPublicView,
     DiagnosticResponseFeedback,
     DiagnosticSessionView,
+    JourneyActionView,
     TrackSlug,
 )
 from app.services.learning.lessons_service import resolve_user_language
@@ -44,8 +46,30 @@ ALL_EIGHT_DOMAINS: tuple[DiagnosticDomain, ...] = (
     "functions",
     "mixed_logic",
 )
+READINESS_DOMAINS: tuple[DiagnosticDomain, ...] = (
+    "variables",
+    "syntax_runtime_debugging",
+    "conditions",
+    "loop_boundaries",
+)
 MAX_ADAPTIVE_FOLLOWUPS = 3
+MAX_READINESS_FOLLOWUPS = 1
 DEFAULT_PYTHON_JUDGE0_ID = 71
+LANG_DISPLAY_NAMES: dict[str, str] = {
+    "python": "Python",
+    "javascript": "JavaScript",
+    "c": "C",
+    "cpp": "C++",
+    "java": "Java",
+}
+
+
+def _extract_assessment_mode(session: DiagnosticSession) -> AssessmentMode:
+    summary = getattr(session, "domain_summary", None) or {}
+    meta = summary.get("_meta") if isinstance(summary, dict) else None
+    if isinstance(meta, dict) and meta.get("assessment_mode") == "readiness":
+        return "readiness"
+    return "full"
 
 
 def _to_public_question(q: DiagnosticQuestion) -> DiagnosticQuestionPublicView:
@@ -127,33 +151,56 @@ def _summarize_domain_evidence(
             )
         )
 
-    # Deterministic, explainable 4-track placement rule (zero fabricated ability score!)
+    mode = _extract_assessment_mode(session)
+    raw_lang = getattr(session, "language_slug", None) or "python"
+    lang_label = LANG_DISPLAY_NAMES.get(raw_lang, raw_lang.capitalize())
+
+    # Deterministic, explainable track placement rule (zero fabricated ability score!)
+    if mode == "readiness":
+        # Short 4-domain beginner readiness check: conservatively places in Absolute Beginner
+        # or Basic University — never prematurely awards Intermediate/Advanced from 4 checks.
+        if domains_demonstrated >= 3 and foundation_gaps == 0:
+            track: TrackSlug = "basic_university"
+            rationale = (
+                f"Recommended Basic University track for {lang_label}: readiness check demonstrated "
+                f"{domains_demonstrated}/4 foundational areas cleanly. Take the full 8-domain "
+                "diagnostic anytime if you want to verify Intermediate or Advanced placement."
+            )
+        else:
+            track = "absolute_beginner"
+            rationale = (
+                f"Recommended Absolute Beginner track for {lang_label}: readiness check observed "
+                f"{domains_demonstrated}/4 foundational areas demonstrated ({foundation_gaps} gap(s)). "
+                "Continue with guided foundation lessons to build rock-solid fundamentals."
+            )
+        return evidence_list, track, rationale
+
     if domains_demonstrated <= 2 or foundation_gaps >= 5:
-        track: TrackSlug = "absolute_beginner"
+        track = "absolute_beginner"
         rationale = (
             f"Recommended Absolute Beginner track: diagnostic showed gaps in {foundation_gaps} "
-            f"domains ({domains_demonstrated}/8 domains demonstrated). Start with guided Python "
+            f"domains ({domains_demonstrated}/8 domains demonstrated). Start with guided {lang_label} "
             "foundation lessons before tackling debugging sets."
         )
     elif domains_demonstrated <= 5:
         track = "basic_university"
         rationale = (
             f"Recommended Basic University track: demonstrated {domains_demonstrated}/8 core "
-            f"domains with targeted gaps in {foundation_gaps} areas. Pair foundational lessons "
-            "with structured debugging practice."
+            f"domains with targeted gaps in {foundation_gaps} areas. Pair foundational {lang_label} "
+            "lessons with structured debugging practice."
         )
     elif domains_demonstrated >= 7 and domains_strong_exec >= 1:
         track = "advanced"
         rationale = (
             f"Recommended Advanced track: demonstrated {domains_demonstrated}/8 domains including "
-            f"{domains_strong_exec} verified Judge0 stretch execution check(s). Ready for complex "
-            "debugging and zero-hint transfer verification."
+            f"{domains_strong_exec} verified sandbox stretch execution check(s). Ready for complex "
+            f"{lang_label} debugging and zero-hint transfer verification."
         )
     else:
         track = "intermediate"
         rationale = (
             f"Recommended Intermediate track: demonstrated {domains_demonstrated}/8 core domains. "
-            "Focus on boundary debugging, edge cases, and independent Judge0 execution challenges."
+            f"Focus on {lang_label} boundary debugging, edge cases, and independent execution challenges."
         )
 
     return evidence_list, track, rationale
@@ -194,9 +241,56 @@ class DiagnosticAssessmentService:
                 current_q = _to_public_question(q_row)
 
         domain_ev, _, _ = _summarize_domain_evidence(session)
+        mode = _extract_assessment_mode(session)
+        next_action: JourneyActionView | None = None
+        if session.status == "completed":
+            lang_label = LANG_DISPLAY_NAMES.get(
+                session.language_slug, session.language_slug.capitalize()
+            )
+            has_gaps = any(
+                ev.evidence_status in ("gap_detected", "guided_needed") for ev in domain_ev
+            )
+            if has_gaps or session.recommended_track_slug in (
+                "absolute_beginner",
+                "basic_university",
+            ):
+                next_action = JourneyActionView(
+                    action_type="lesson",
+                    target_id=f"lessons-{session.language_slug}",
+                    target_slug="lessons",
+                    href="/student/lessons",
+                    cta_label_en=f"Start {lang_label} Guided Lessons →",
+                    cta_label_bn=f"{lang_label} গাইডেড লেসন শুরু করো →",
+                    title_en=f"Recommended {lang_label} Guided Lessons",
+                    title_bn=f"প্রস্তাবিত {lang_label} গাইডেড লেসনসমূহ",
+                    reason_en="Start with prerequisite-ready lessons targeted to your diagnostic findings.",
+                    reason_bn="ডায়াগনস্টিকের ফলাফল অনুযায়ী তোমার উপযুক্ত গাইডেড লেসন থেকে শুরু করো।",
+                    evidence_factors=[
+                        f"track:{session.recommended_track_slug or 'absolute_beginner'}"
+                    ],
+                    priority=5,
+                    estimated_minutes=15,
+                )
+            else:
+                next_action = JourneyActionView(
+                    action_type="problem",
+                    target_id=f"problems-{session.language_slug}",
+                    target_slug="problems",
+                    href="/student/problems",
+                    cta_label_en=f"Open {lang_label} Practice & Debugging →",
+                    cta_label_bn=f"{lang_label} প্র্যাকটিস ও ডিবাগিং শুরু করো →",
+                    title_en=f"{lang_label} Adaptive Coding & Debugging Practice",
+                    title_bn=f"{lang_label} অ্যাডাপ্টিভ কোডিং ও ডিবাগিং অনুশীলন",
+                    reason_en="Your baseline is strong — move directly into hands-on sandbox debugging and transfer checks.",
+                    reason_bn="তোমার ভিত্তি শক্ত — সরাসরি আসল স্যান্ডবক্স ডিবাগিং ও ট্রান্সফার চ্যালেঞ্জে এগিয়ে যাও।",
+                    evidence_factors=[f"track:{session.recommended_track_slug or 'intermediate'}"],
+                    priority=8,
+                    estimated_minutes=20,
+                )
         return DiagnosticSessionView(
             id=session.id,
             language_slug=session.language_slug,
+            assessment_mode=mode,
             status=session.status,
             explanation_language=session.explanation_language,
             answered_count=answered,
@@ -209,6 +303,7 @@ class DiagnosticAssessmentService:
             domain_evidence=domain_ev,
             started_at=session.started_at,
             completed_at=session.completed_at,
+            next_recommended_action=next_action,
         )
 
     async def start_or_resume_session(
@@ -217,6 +312,7 @@ class DiagnosticAssessmentService:
         user: UserRecord,
         explanation_language: str,
         language_slug: str | None = None,
+        assessment_mode: AssessmentMode = "full",
     ) -> DiagnosticSessionView:
         lang = resolve_user_language(user, language_slug)
         existing_sessions = await self._learning_repo.list_student_diagnostic_sessions(
@@ -236,21 +332,33 @@ class DiagnosticAssessmentService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Build initial 8-domain core queue (1 core item per domain; fallback to foundation)
+        # Build queue based on assessment_mode ("readiness" = 4 foundational domains; "full" = all 8)
         initial_queue: list[str] = []
-        for dom in ALL_EIGHT_DOMAINS:
-            dom_qs = [q for q in published if q.domain_slug == dom]
-            pick = next((q for q in dom_qs if q.difficulty == "core"), None) or (
-                dom_qs[0] if dom_qs else None
-            )
-            if pick is not None:
-                initial_queue.append(str(pick.id))
+        if assessment_mode == "readiness":
+            for dom in READINESS_DOMAINS:
+                dom_qs = [q for q in published if q.domain_slug == dom]
+                pick = (
+                    next((q for q in dom_qs if q.difficulty == "foundation"), None)
+                    or next((q for q in dom_qs if q.difficulty == "core"), None)
+                    or (dom_qs[0] if dom_qs else None)
+                )
+                if pick is not None:
+                    initial_queue.append(str(pick.id))
+        else:
+            for dom in ALL_EIGHT_DOMAINS:
+                dom_qs = [q for q in published if q.domain_slug == dom]
+                pick = next((q for q in dom_qs if q.difficulty == "core"), None) or (
+                    dom_qs[0] if dom_qs else None
+                )
+                if pick is not None:
+                    initial_queue.append(str(pick.id))
 
         session = await self._learning_repo.create_diagnostic_session(
             student_id=user.id,
             language_slug=lang,
             explanation_language=explanation_language,
             question_queue=initial_queue,
+            domain_summary={"_meta": {"assessment_mode": assessment_mode}},
         )
         return await self._build_session_view(session)
 
@@ -349,7 +457,7 @@ class DiagnosticAssessmentService:
             if not payload.source_code or not payload.source_code.strip():
                 raise AppError(
                     code="CODE_REQUIRED",
-                    message="Provide Python code to run this diagnostic execution check.",
+                    message="Provide source code to run this diagnostic execution check.",
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
             tests = list(question.answer_key.evaluation_tests or [])
@@ -374,14 +482,18 @@ class DiagnosticAssessmentService:
                     exec_stderr = out.stderr or out.compile_output
             is_correct = total_tests > 0 and passed_tests == total_tests
 
-        # Adaptive follow-up queue selection (strictly scoped to the session's language)
+        # Adaptive follow-up queue selection (strictly scoped to the session's language & mode)
         published = await self._learning_repo.list_published_diagnostic_questions(
             language_slug=session.language_slug
+        )
+        session_mode = _extract_assessment_mode(session)
+        max_followups = (
+            MAX_READINESS_FOLLOWUPS if session_mode == "readiness" else MAX_ADAPTIVE_FOLLOWUPS
         )
         followups_added = session.adaptive_followups_added
         adaptive_action: str | None = None
 
-        if followups_added < MAX_ADAPTIVE_FOLLOWUPS and question.difficulty == "core":
+        if followups_added < max_followups and question.difficulty == "core":
             if not is_correct:
                 # Queue a foundation follow-up in the same domain to pinpoint fundamental gap
                 cand = next(
@@ -485,11 +597,15 @@ class DiagnosticAssessmentService:
 
         if completed:
             domain_ev, rec_track, rationale = _summarize_domain_evidence(updated_session)
+            summary_payload: dict[str, object] = {
+                ev.domain_slug: ev.model_dump() for ev in domain_ev
+            }
+            summary_payload["_meta"] = {"assessment_mode": session_mode}
             updated_session = await self._learning_repo.finalize_diagnostic_session(
                 session_id=updated_session.id,
                 recommended_track_slug=rec_track,
                 recommendation_rationale=rationale,
-                domain_summary={ev.domain_slug: ev.model_dump() for ev in domain_ev},
+                domain_summary=summary_payload,
             )
             await self._learning_repo.upsert_track_enrollment(
                 student_id=user.id,

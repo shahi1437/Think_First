@@ -12,6 +12,8 @@ Uses deterministic, auditable prerequisite rules — never fabricates AI persona
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.repositories.identity import UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
@@ -31,6 +33,9 @@ from app.services.learning.lessons_service import (
 )
 from app.services.learning.skill_graph import STATE_RANK, SkillGraphService
 
+if TYPE_CHECKING:
+    from app.services.learning.journey_engine import LearningJourneyService
+
 
 class AdaptiveRecommendationService:
     """Generates explainable prerequisite-based next lessons, diagnostics, and practice items."""
@@ -44,6 +49,7 @@ class AdaptiveRecommendationService:
         lessons_service: LessonsAndTracksService,
         diagnostics_service: DiagnosticAssessmentService,
         skill_graph_service: SkillGraphService,
+        journey_service: LearningJourneyService | None = None,
     ) -> None:
         self._learning_repo = learning_repo
         self._problem_repo = problem_repo
@@ -51,6 +57,7 @@ class AdaptiveRecommendationService:
         self._lessons = lessons_service
         self._diagnostics = diagnostics_service
         self._skill_graph = skill_graph_service
+        self._journey = journey_service
 
     async def compute_recommendations(
         self,
@@ -300,6 +307,18 @@ class AdaptiveRecommendationService:
             skill_graph=skill_graph,
             diag_sessions=diag_sessions,
         )
+        journey = (
+            await self._journey.evaluate(
+                user,
+                language_slug=lang,
+                track_status=track_status,
+                lessons=lessons,
+                skill_graph=skill_graph,
+                diag_sessions=diag_sessions,
+            )
+            if self._journey is not None
+            else None
+        )
 
         return LearningDashboardView(
             language_slug=lang,
@@ -310,4 +329,5 @@ class AdaptiveRecommendationService:
             latest_diagnostic=completed_diags[0] if completed_diags else None,
             skill_graph=skill_graph,
             recommendations=recommendations,
+            journey=journey,
         )

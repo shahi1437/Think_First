@@ -169,28 +169,66 @@ class DailyPlanService:
             )
             used_minutes += est
 
-        # Priority 2: 8-Domain Diagnostic if not yet completed
+        # Priority 2: Adaptive Entry Diagnostic (for beginners, wait until >=2 foundation lessons done!)
+        completed_lessons_count = sum(1 for lsn in lessons if lsn.progress_status == "completed")
+        prefs = user.preferences
+        is_beginner_entry = bool(
+            (prefs.programming_experience if prefs else "none") in ("none", "beginner")
+            and (prefs.starting_preference if prefs else "guided_beginner") == "guided_beginner"
+        )
+        lang_labels = {
+            "python": "Python",
+            "javascript": "JavaScript",
+            "c": "C",
+            "cpp": "C++",
+            "java": "Java",
+        }
+        lang_name = lang_labels.get(language_slug, language_slug.capitalize())
+
         if latest_diag is None and can_fit(15):
-            tasks.append(
-                {
-                    "task_type": "diagnostic",
-                    "skill_slug": None,
-                    "target_id": "diagnostic-8-domain",
-                    "target_slug": "diagnostic-8-domain",
-                    "title_en": "Complete 8-Domain Adaptive Diagnostic",
-                    "title_bn": "৮-ডোমেইন অ্যাডাপ্টিভ ডায়াগনস্টিক সম্পন্ন করো",
-                    "reason_en": (
-                        "Establishes evidence-backed track placement across 8 Python domains "
-                        "instead of relying on self-reported experience."
-                    ),
-                    "reason_bn": (
-                        "নিজের অনুমানের বদলে ৮টি পাইথন ডোমেইনে বাস্তব প্রমাণের ভিত্তিতে সঠিক ট্র্যাক নির্ধারণ করবে।"
-                    ),
-                    "href": "/student/diagnostic",
-                    "estimated_minutes": 15,
-                }
-            )
-            used_minutes += 15
+            if not is_beginner_entry:
+                tasks.append(
+                    {
+                        "task_type": "diagnostic",
+                        "skill_slug": None,
+                        "target_id": f"diagnostic-8-domain-{language_slug}",
+                        "target_slug": "diagnostic-8-domain",
+                        "title_en": f"Complete 8-Domain {lang_name} Adaptive Diagnostic",
+                        "title_bn": f"৮-ডোমেইন {lang_name} অ্যাডাপ্টিভ ডায়াগনস্টিক সম্পন্ন করো",
+                        "reason_en": (
+                            f"Establishes evidence-backed track placement across 8 {lang_name} domains "
+                            "instead of relying on self-reported experience."
+                        ),
+                        "reason_bn": (
+                            f"নিজের অনুমানের বদলে ৮টি {lang_name} ডোমেইনে বাস্তব প্রমাণের ভিত্তিতে সঠিক ট্র্যাক নির্ধারণ করবে।"
+                        ),
+                        "href": "/student/diagnostic?mode=full",
+                        "estimated_minutes": 15,
+                    }
+                )
+                used_minutes += 15
+            elif completed_lessons_count >= 2:
+                tasks.append(
+                    {
+                        "task_type": "diagnostic",
+                        "skill_slug": None,
+                        "target_id": f"diagnostic-readiness-{language_slug}",
+                        "target_slug": "diagnostic-readiness",
+                        "title_en": f"Take Short {lang_name} Foundation Readiness Check",
+                        "title_bn": f"{lang_name} সংক্ষিপ্ত প্রস্তুতি যাচাই সম্পন্ন করো",
+                        "reason_en": (
+                            f"You finished {completed_lessons_count} foundation lessons — confirm your "
+                            f"{lang_name} track with a quick 4-question readiness check."
+                        ),
+                        "reason_bn": (
+                            f"তুমি {completed_lessons_count}টি প্রাথমিক লেসন সম্পন্ন করেছ — চারটি প্রশ্নের "
+                            f"সংক্ষিপ্ত যাচাই দিয়ে তোমার {lang_name} ট্র্যাক নিশ্চিত করো।"
+                        ),
+                        "href": "/student/diagnostic?mode=readiness",
+                        "estimated_minutes": 10,
+                    }
+                )
+                used_minutes += 10
 
         # Priority 3: Gap-targeted or prerequisite-ready lessons matching selected track
         gap_skills: set[str] = set()

@@ -499,6 +499,7 @@ class LearningRepository:
         explanation_language: str,
         question_queue: list[str],
         language_slug: str = "python",
+        domain_summary: dict[str, Any] | None = None,
     ) -> DiagnosticSession:
         sess = DiagnosticSession(
             student_id=student_id,
@@ -508,7 +509,7 @@ class LearningRepository:
             question_queue=question_queue,
             current_index=0,
             adaptive_followups_added=0,
-            domain_summary={},
+            domain_summary=domain_summary or {},
         )
         self._session.add(sess)
         await self._session.commit()

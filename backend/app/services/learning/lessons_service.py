@@ -477,6 +477,20 @@ class LessonsAndTracksService:
             },
         )
 
+        next_action = None
+        if all_passed:
+            from app.services.learning.journey_engine import build_post_lesson_next_action
+
+            updated_lessons = await self.list_lessons(user=user, language_slug=lesson.language_slug)
+            diag_counts = await self._learning_repo.count_completed_diagnostics_by_language(user.id)
+            next_action = build_post_lesson_next_action(
+                lessons=updated_lessons,
+                current_lesson_slug=lesson.slug,
+                language_slug=lesson.language_slug,
+                user=user,
+                has_completed_diagnostic=diag_counts.get(lesson.language_slug, 0) > 0,
+            )
+
         return LessonExerciseRunResponse(
             lesson_id=lesson.id,
             language_slug=effective_lang,
@@ -488,6 +502,7 @@ class LessonsAndTracksService:
             progress_status=prog.status,
             skill_state_after=new_skill_state,
             case_results=case_results,
+            next_recommended_action=next_action,
         )
 
     async def create_admin_lesson(

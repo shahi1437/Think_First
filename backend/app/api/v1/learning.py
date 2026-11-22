@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.v1.deps import (
     get_current_user,
     get_diagnostic_assessment_service,
+    get_learning_journey_service,
     get_lessons_and_tracks_service,
     get_recommendation_service,
     get_skill_graph_service,
@@ -19,6 +20,7 @@ from app.schemas.learning import (
     LanguageProgressOverview,
     LanguageSlug,
     LearningDashboardView,
+    LearningJourneyView,
     LessonDetailView,
     LessonExerciseRunRequest,
     LessonExerciseRunResponse,
@@ -31,6 +33,7 @@ from app.schemas.learning import (
     StudentTrackStatus,
 )
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
+from app.services.learning.journey_engine import LearningJourneyService
 from app.services.learning.lessons_service import LessonsAndTracksService, resolve_user_language
 from app.services.learning.recommendations_service import AdaptiveRecommendationService
 from app.services.learning.skill_graph import SkillGraphService
@@ -63,6 +66,19 @@ async def select_active_learning_language(
     return await service.select_active_language(
         user=current_user, language_slug=payload.language_slug
     )
+
+
+@phase5_learning_router.get(
+    "/journey",
+    response_model=LearningJourneyView,
+    summary="Compute the student's authoritative Continue Learning journey state and next action",
+)
+async def get_learning_journey(
+    language: LanguageSlug | None = Query(default=None),
+    current_user: UserRecord = Depends(get_current_user),
+    service: LearningJourneyService = Depends(get_learning_journey_service),
+) -> LearningJourneyView:
+    return await service.evaluate(current_user, language_slug=language)
 
 
 @phase5_learning_router.get(
@@ -182,6 +198,7 @@ async def create_diagnostic_session(
         user=current_user,
         explanation_language=payload.explanation_language,
         language_slug=payload.language_slug,
+        assessment_mode=payload.assessment_mode,
     )
 
 

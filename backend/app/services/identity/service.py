@@ -53,6 +53,11 @@ def _format_preferences(pref: PreferencesRecord | None) -> UserPreferencesRespon
     if pref is None:
         return None
     track, rationale = recommend_entry_track(pref.programming_experience, pref.starting_preference)
+    entry_redirect_path = (
+        "/student/diagnostic?mode=full&entry=onboarding"
+        if track == "diagnostic_assessment"
+        else "/student"
+    )
     return UserPreferencesResponse(
         programming_experience=pref.programming_experience,
         preferred_language=pref.preferred_language,
@@ -63,6 +68,7 @@ def _format_preferences(pref: PreferencesRecord | None) -> UserPreferencesRespon
         starting_preference=pref.starting_preference,
         recommended_entry_track=track,
         recommendation_rationale=rationale,
+        entry_redirect_path=entry_redirect_path,
     )
 
 

@@ -28,7 +28,73 @@ DiagnosticDomain = Literal[
 ]
 DiagnosticDifficulty = Literal["foundation", "core", "stretch"]
 DiagnosticQuestionType = Literal["mcq", "code_execution"]
+AssessmentMode = Literal["full", "readiness"]
 LessonProgressStatus = Literal["not_started", "in_progress", "completed"]
+JourneyActionType = Literal[
+    "onboarding",
+    "assignment",
+    "diagnostic_resume",
+    "lesson_resume",
+    "retention_check",
+    "diagnostic_full",
+    "diagnostic_readiness",
+    "lesson_remediation",
+    "lesson",
+    "transfer_verification",
+    "problem",
+    "daily_plan",
+    "milestone_complete",
+]
+JourneyStage = Literal[
+    "onboarding",
+    "foundation_lessons",
+    "readiness_check",
+    "diagnostic_placement",
+    "guided_practice",
+    "independent_mastery",
+    "retention_growth",
+]
+
+
+class JourneyActionView(BaseModel):
+    """Single authoritative next-step recommendation produced by the Learning Journey Engine."""
+
+    action_type: JourneyActionType
+    target_id: str
+    target_slug: str
+    href: str
+    cta_label_en: str
+    cta_label_bn: str
+    title_en: str
+    title_bn: str
+    reason_en: str
+    reason_bn: str
+    evidence_factors: list[str] = Field(default_factory=list)
+    priority: int = Field(..., ge=0, le=20)
+    urgency: Literal["urgent", "recommended", "optional"] = "recommended"
+    eligibility_note_en: str = ""
+    eligibility_note_bn: str = ""
+    estimated_minutes: int | None = None
+
+
+class LearningJourneyView(BaseModel):
+    """Authoritative student learning journey snapshot for a specific programming language."""
+
+    language_slug: str = "python"
+    onboarding_completed: bool = True
+    active_track_slug: TrackSlug = "absolute_beginner"
+    journey_stage: JourneyStage = "foundation_lessons"
+    foundation_lessons_completed: int = 0
+    foundation_lessons_target: int = 2
+    readiness_check_unlocked: bool = False
+    diagnostic_completed: bool = False
+    full_diagnostic_completed: bool = False
+    urgent_assignments_count: int = 0
+    due_retentions_count: int = 0
+    unlocked_transfers_count: int = 0
+    primary_action: JourneyActionView
+    resume_activity: JourneyActionView | None = None
+    secondary_actions: list[JourneyActionView] = Field(default_factory=list)
 
 
 # --- Learning Tracks ---
@@ -186,6 +252,7 @@ class LessonExerciseRunResponse(BaseModel):
     progress_status: LessonProgressStatus
     skill_state_after: SkillState
     case_results: list[LessonExerciseCaseResult]
+    next_recommended_action: JourneyActionView | None = None
 
 
 # --- Adaptive Diagnostic Assessment ---
@@ -219,6 +286,7 @@ class DiagnosticSessionCreateRequest(BaseModel):
 
     explanation_language: Literal["en", "bn"] = "en"
     language_slug: LanguageSlug | None = None
+    assessment_mode: AssessmentMode = "full"
 
 
 class DiagnosticAnswerSubmitRequest(BaseModel):
@@ -264,6 +332,7 @@ class DiagnosticResponseFeedback(BaseModel):
 class DiagnosticSessionView(BaseModel):
     id: UUID
     language_slug: str = "python"
+    assessment_mode: AssessmentMode = "full"
     status: Literal["in_progress", "completed", "abandoned"]
     explanation_language: Literal["en", "bn"]
     answered_count: int
@@ -276,6 +345,7 @@ class DiagnosticSessionView(BaseModel):
     domain_evidence: list[DiagnosticDomainEvidence] = Field(default_factory=list)
     started_at: datetime
     completed_at: datetime | None = None
+    next_recommended_action: JourneyActionView | None = None
 
 
 # --- Prerequisite-Aware Skill Graph ---
@@ -343,6 +413,7 @@ class LearningDashboardView(BaseModel):
     latest_diagnostic: DiagnosticSessionView | None = None
     skill_graph: SkillGraphView
     recommendations: list[RecommendationItemView]
+    journey: LearningJourneyView | None = None
 
 
 # --- Admin Content Governance Schemas (Phase 5) ---

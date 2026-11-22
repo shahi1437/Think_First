@@ -31,6 +31,7 @@ class UserPreferencesResponse(BaseModel):
     starting_preference: StartingPreference
     recommended_entry_track: RecommendedEntryTrack
     recommendation_rationale: str
+    entry_redirect_path: str = "/student"
 
 
 class UserPreferencesUpdate(BaseModel):
