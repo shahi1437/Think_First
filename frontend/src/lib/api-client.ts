@@ -179,8 +179,8 @@ export class BackendUnavailableError extends Error {
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-const HEALTH_TIMEOUT_MS = 8_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
+const HEALTH_TIMEOUT_MS = 25_000;
 const EXECUTION_TIMEOUT_MS = 60_000;
 
 async function safeFetch(

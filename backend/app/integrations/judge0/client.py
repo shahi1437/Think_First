@@ -131,7 +131,11 @@ def build_judge0_auth_headers(settings: Settings) -> dict[str, str]:
     if mode == "disabled" or not (settings.judge0_base_url or "").strip():
         raise AppError(
             code="EXECUTION_SERVICE_UNAVAILABLE",
-            message="Code execution is temporarily unavailable because Judge0 is not configured.",
+            message=(
+                "Live code execution is temporarily unavailable while the remote sandbox is "
+                "offline. You can still read lessons, save code revisions, complete MCQ "
+                "diagnostics, and use your learning dashboard."
+            ),
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     if mode == "rapidapi":
@@ -179,7 +183,9 @@ class HttpJudge0Client:
             raise AppError(
                 code="EXECUTION_SERVICE_UNAVAILABLE",
                 message=(
-                    "Code execution is temporarily unavailable because Judge0 is not configured."
+                    "Live code execution is temporarily unavailable while the remote sandbox is "
+                    "offline. You can still read lessons, save code revisions, complete MCQ "
+                    "diagnostics, and use your learning dashboard."
                 ),
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )

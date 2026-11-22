@@ -223,7 +223,11 @@ class ExecutionService:
         if isinstance(self._judge0, HttpJudge0Client) and not is_judge0_configured(self._settings):
             raise AppError(
                 code="EXECUTION_SERVICE_UNAVAILABLE",
-                message=("Code execution is temporarily unavailable because Judge0 is disabled."),
+                message=(
+                    "Live code execution is temporarily unavailable while the remote sandbox is "
+                    "offline. Your draft can still be saved as a revision while you read lessons "
+                    "and complete MCQ diagnostics."
+                ),
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         if (
@@ -234,8 +238,9 @@ class ExecutionService:
             raise AppError(
                 code="EXECUTION_SERVICE_UNAVAILABLE",
                 message=(
-                    "Code execution is temporarily unavailable because no execution engine "
-                    "is configured."
+                    "Live code execution is temporarily unavailable while the remote sandbox is "
+                    "offline. Your draft can still be saved as a revision while you read lessons "
+                    "and complete MCQ diagnostics."
                 ),
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
