@@ -437,3 +437,102 @@ def test_socratic_fallback_does_not_leak_python_syntax_into_c_or_java() -> None:
     )
     assert "range(" not in java_reply.guiding_question.lower()
     assert "range(" not in (java_reply.hint_text or "").lower()
+
+
+def test_production_readiness_guards_unisolated_piston_fallback() -> None:
+    """In production, Piston fallback must be disabled or explicitly verified on an isolated VM."""
+    base_prod_kwargs = {
+        "app_env": "production",
+        "database_url": "postgresql+asyncpg://prod_user:secret@db.example.com:5432/prod",
+        "supabase_url": "https://prodref.supabase.co",
+        "cors_origins": ["https://thinkfirst.example.com"],
+        "judge0_base_url": "https://judge0.example.com",
+        "judge0_auth_mode": "auth_token",
+    }
+
+    from app.integrations.piston.client import is_piston_configured
+
+    # Secure-by-default: production disables Piston fallback unless explicitly opted in
+    default_prod = Settings(**base_prod_kwargs)
+    assert default_prod.piston_enabled is False
+    assert is_piston_configured(default_prod) is False
+    assert default_prod.validate_production_readiness() == []
+
+    # Unsafe: Piston explicitly enabled on loopback without isolated-host attestation
+    unsafe_settings = Settings(
+        **base_prod_kwargs,
+        execution_fallback_enabled=True,
+        piston_enabled=True,
+        piston_base_url="http://127.0.0.1:2000",
+        piston_isolated_host_verified=False,
+    )
+    assert is_piston_configured(unsafe_settings) is False
+    issues = unsafe_settings.validate_production_readiness()
+    assert any("PISTON_BASE_URL" in issue for issue in issues)
+    assert any("PISTON_ISOLATED_HOST_VERIFIED" in issue for issue in issues)
+
+    # Safe option 1: Piston disabled in public production
+    disabled_piston = Settings(
+        **base_prod_kwargs,
+        execution_fallback_enabled=False,
+        piston_enabled=False,
+    )
+    assert is_piston_configured(disabled_piston) is False
+    assert disabled_piston.validate_production_readiness() == []
+
+    # Safe option 2: Dedicated isolated VM host explicitly verified
+    isolated_vm = Settings(
+        **base_prod_kwargs,
+        execution_fallback_enabled=True,
+        piston_enabled=True,
+        piston_base_url="http://10.42.0.15:2000",
+        piston_isolated_host_verified=True,
+    )
+    assert is_piston_configured(isolated_vm) is True
+    assert isolated_vm.validate_production_readiness() == []
+
+
+@pytest.mark.asyncio
+async def test_piston_client_never_sends_negative_memory_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hardened Piston servers enforce positive cgroup memory caps and reject -1 overrides."""
+    import httpx
+
+    captured_payloads: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/api/v2/runtimes"):
+            return httpx.Response(
+                200,
+                json=[
+                    {"language": "python", "version": "3.9.4", "aliases": ["py"]},
+                    {"language": "javascript", "version": "20.11.1", "aliases": ["js"]},
+                ],
+            )
+        import json as _json
+
+        captured_payloads.append(_json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"run": {"stdout": "42\n", "stderr": "", "code": 0}})
+
+    real_client = httpx.AsyncClient
+
+    def mock_client(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_client)
+
+    client = HttpPistonClient(Settings(piston_base_url="http://127.0.0.1:2000"))
+    await client.execute_test_case(source_code="print(42)", language_slug="python", **_EXEC_KWARGS)
+    await client.execute_test_case(
+        source_code="console.log(42);", language_slug="javascript", **_EXEC_KWARGS
+    )
+
+    assert len(captured_payloads) == 2
+    for payload in captured_payloads:
+        assert "compile_memory_limit" not in payload
+        if "run_memory_limit" in payload:
+            assert int(str(payload["run_memory_limit"])) > 0
+    assert "run_memory_limit" in captured_payloads[0]
+    assert "run_memory_limit" not in captured_payloads[1]

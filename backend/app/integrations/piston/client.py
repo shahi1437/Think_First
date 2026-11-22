@@ -99,12 +99,19 @@ class PistonClient(Protocol):
 
 
 def is_piston_configured(settings: Settings) -> bool:
-    """Return True only when self-hosted Piston fallback is enabled with a base URL."""
-    return bool(
-        settings.execution_fallback_enabled
-        and settings.piston_enabled
-        and (settings.piston_base_url or "").strip()
-    )
+    """Return True only when self-hosted Piston fallback is safely enabled and configured."""
+    base_url = (settings.piston_base_url or "").strip()
+    if not (settings.execution_fallback_enabled and settings.piston_enabled and base_url):
+        return False
+    if settings.app_env == "production":
+        lowered = base_url.lower()
+        if (
+            not settings.piston_isolated_host_verified
+            or "127.0.0.1" in lowered
+            or "localhost" in lowered
+        ):
+            return False
+    return True
 
 
 def _truncate_output(value: str | None, max_bytes: int) -> str | None:
@@ -234,13 +241,13 @@ class HttpPistonClient:
             "stdin": stdin,
             "compile_timeout": compile_timeout_ms,
             "run_timeout": run_timeout_ms,
-            "compile_memory_limit": -1,
-            "run_memory_limit": (
-                min(max(memory_limit_kb * 1024, 67_108_864), 536_870_912)
-                if spec.allow_rlimit_as
-                else -1
-            ),
         }
+        # Never send -1 ("unlimited"): hardened Piston servers with positive cgroup v2
+        # memory limits reject negative overrides with HTTP 400. For Python/C/C++, pass
+        # a bounded positive per-problem limit; for V8/JVM (JS/Java), defer to Piston's
+        # server-side cgroup v2 PISTON_RUN_MEMORY_LIMIT cap.
+        if spec.allow_rlimit_as:
+            payload["run_memory_limit"] = min(max(memory_limit_kb * 1024, 67_108_864), 536_870_912)
 
         started = time.perf_counter()
         try:
