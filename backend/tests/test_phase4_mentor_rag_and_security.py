@@ -172,12 +172,22 @@ class InMemoryMentorRepository:
         return doc
 
     async def search_approved_chunks_pgvector(
-        self, *, query_embedding: list[float], limit: int = 8, topic: str | None = None
+        self,
+        *,
+        query_embedding: list[float],
+        limit: int = 8,
+        topic: str | None = None,
+        language_slug: str | None = None,
     ) -> list[tuple[Any, Any, float]]:
         _ = topic
         scored: list[tuple[Any, Any, float]] = []
         for ch, doc in self.chunks.values():
             if doc.status != "approved":
+                continue
+            if (
+                language_slug is not None
+                and getattr(doc, "language_slug", "python") != language_slug
+            ):
                 continue
             sim = cosine_similarity(query_embedding, ch.embedding)
             scored.append((ch, doc, sim))
@@ -464,9 +474,9 @@ async def test_rag_excludes_unapproved_docs_and_returns_no_match_fallback() -> N
     rag = RagKnowledgeService(repository=repo, settings=Settings())  # type: ignore[arg-type]
     admin = _make_user(role="admin")
 
-    # Seed approved corpus (10 docs)
+    # Seed approved corpus (26 docs across 5 languages: 10 Python + 16 JS/C/C++/Java)
     seeded = await rag.seed_approved_corpus(actor_id=admin.id)
-    assert seeded == 10
+    assert seeded == 26
 
     # Insert a DRAFT secret-like doc — MUST NEVER be retrieved
     from app.schemas.mentor import KnowledgeDocumentCreateRequest
@@ -639,11 +649,11 @@ async def test_socratic_mentor_state_machine_bilingual_security_and_rbac() -> No
         non_admin_kb = await client.get("/api/v1/admin/knowledge")
         assert non_admin_kb.status_code == 403
 
-        # 7. Admin CAN list & search approved knowledge
+        # 7. Admin CAN list & search approved knowledge (26 docs across 5 languages)
         active_user_holder["user"] = admin
         admin_kb = await client.get("/api/v1/admin/knowledge")
         assert admin_kb.status_code == 200
-        assert len(admin_kb.json()) == 10
+        assert len(admin_kb.json()) == 26
 
 
 @pytest.mark.asyncio
