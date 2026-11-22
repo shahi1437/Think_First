@@ -17,6 +17,7 @@ import {
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { sendMentorTurn, startOrResumeMentorSession } from "@/lib/api-client";
+import { getLanguageShortLabel } from "@/lib/languages";
 import type { MentorSessionDetail } from "@/types/mentor";
 
 interface MentorPanelProps {
@@ -304,18 +305,23 @@ export function MentorPanel({
         </div>
       ) : null}
 
-      {/* ML Diagnosis Card */}
+      {/* Diagnosis Card (Honest ML vs Rule-Based Indicator) */}
       {diagnosis ? (
         <section
-          aria-label="ML error diagnosis"
+          aria-label="Error diagnosis"
           className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Brain className="h-4 w-4 text-teal-700" aria-hidden="true" />
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                ML Error Diagnosis ({diagnosis.model_version})
+                {diagnosis.diagnosis_source === "rule_based"
+                  ? `Rule-Based Error Diagnosis (${diagnosis.model_version})`
+                  : `ML Error Diagnosis (${diagnosis.model_version})`}
               </span>
+              <Badge variant="neutral">
+                {getLanguageShortLabel(diagnosis.language_slug)}
+              </Badge>
             </div>
             <Badge variant={diagnosis.is_low_confidence ? "amber" : "teal"}>
               <span>

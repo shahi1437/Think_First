@@ -13,11 +13,13 @@ interface ProblemWorkspacePageProps {
   params: Promise<{ id: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ProblemWorkspacePage({
   params,
 }: ProblemWorkspacePageProps) {
   const { id } = await params;
-  const { accessToken } = await requireAuthenticatedUser({
+  const { user, accessToken } = await requireAuthenticatedUser({
     allowedRoles: ["student", "teacher", "admin"],
     currentPath: `/student/problems/${id}`,
   });
@@ -45,6 +47,7 @@ export default async function ProblemWorkspacePage({
       initialSubmissions={submissionsRes.items}
       initialRevisions={revisions}
       initialTransferChallenge={transferChallenge}
+      preferredLanguageSlug={user.preferences?.active_language_slug ?? "python"}
     />
   );
 }

@@ -41,6 +41,7 @@ export function CurriculumManagerClient({
   const [lessons, setLessons] =
     useState<AdminLessonDetailView[]>(initialLessons);
   const [trackFilter, setTrackFilter] = useState<string>("all");
+  const [languageFilter, setLanguageFilter] = useState<string>("all");
 
   // Track editor state
   const [editingTrackSlug, setEditingTrackSlug] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export function CurriculumManagerClient({
 
   // Lesson authoring state
   const [slug, setSlug] = useState("");
+  const [lessonLangSlug, setLessonLangSlug] = useState("python");
   const [skillSlug, setSkillSlug] = useState("nested_control_flow");
   const [displayOrder, setDisplayOrder] = useState("25");
   const [titleEn, setTitleEn] = useState("");
@@ -76,10 +78,14 @@ export function CurriculumManagerClient({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const visibleLessons =
-    trackFilter === "all"
-      ? lessons
-      : lessons.filter((l) => l.track_slugs.includes(trackFilter));
+  const visibleLessons = lessons.filter((l) => {
+    const matchesTrack =
+      trackFilter === "all" || l.track_slugs.includes(trackFilter);
+    const matchesLang =
+      languageFilter === "all" ||
+      (l.language_slug || "python") === languageFilter;
+    return matchesTrack && matchesLang;
+  });
 
   function openTrackEditor(t: LearningTrackView) {
     setEditingTrackSlug(t.slug);
@@ -140,7 +146,7 @@ export function CurriculumManagerClient({
         guided_exercise: {
           prompt_en: summaryEn.trim(),
           prompt_bn: summaryBn.trim() || summaryEn.trim(),
-          language_slug: "python",
+          language_slug: lessonLangSlug,
           starter_code: starterCode,
           test_cases: [
             {
@@ -427,6 +433,21 @@ export function CurriculumManagerClient({
             className="rounded-lg border border-slate-300 p-2"
           />
           <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
+            <label className="inline-flex items-center gap-1.5 font-semibold text-slate-700">
+              <span>Language:</span>
+              <select
+                aria-label="Lesson programming language"
+                value={lessonLangSlug}
+                onChange={(e) => setLessonLangSlug(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium"
+              >
+                <option value="python">Python 3</option>
+                <option value="javascript">JavaScript</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="java">Java</option>
+              </select>
+            </label>
             <span className="font-semibold text-slate-700">Tracks:</span>
             {ALL_TRACKS.map((trk) => {
               const active = selectedTracks.includes(trk);
@@ -499,19 +520,34 @@ export function CurriculumManagerClient({
               Curriculum Lessons ({visibleLessons.length})
             </h2>
           </div>
-          <select
-            aria-label="Filter lessons by track"
-            value={trackFilter}
-            onChange={(e) => setTrackFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
-          >
-            <option value="all">All Tracks ({lessons.length})</option>
-            {ALL_TRACKS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Filter lessons by language"
+              value={languageFilter}
+              onChange={(e) => setLanguageFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+            >
+              <option value="all">All Languages</option>
+              <option value="python">Python 3</option>
+              <option value="javascript">JavaScript</option>
+              <option value="c">C</option>
+              <option value="cpp">C++</option>
+              <option value="java">Java</option>
+            </select>
+            <select
+              aria-label="Filter lessons by track"
+              value={trackFilter}
+              onChange={(e) => setTrackFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+            >
+              <option value="all">All Tracks ({lessons.length})</option>
+              {ALL_TRACKS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
@@ -537,6 +573,11 @@ export function CurriculumManagerClient({
                   <span className="font-mono text-slate-500">
                     #{lesson.display_order}
                   </span>
+                  <Badge variant="neutral">
+                    <span className="uppercase">
+                      {lesson.language_slug || "python"}
+                    </span>
+                  </Badge>
                   <Badge
                     variant={
                       lesson.status === "published" ? "emerald" : "neutral"

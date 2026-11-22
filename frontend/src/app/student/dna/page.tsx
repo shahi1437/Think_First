@@ -1,5 +1,9 @@
+import { LanguageSelector } from "@/components/language-selector";
 import { LearningDnaClient } from "@/features/growth/learning-dna-client";
-import { fetchLearningDnaProfile } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchLearningDnaProfile,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
 export const dynamic = "force-dynamic";
@@ -10,15 +14,28 @@ export default async function StudentLearningDnaPage() {
     currentPath: "/student/dna",
   });
 
-  const profile = await fetchLearningDnaProfile(accessToken);
+  const [languageOverview, profile] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchLearningDnaProfile(accessToken),
+  ]);
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
 
   return (
-    <LearningDnaClient
-      accessToken={accessToken}
-      initialProfile={profile}
-      initialLanguage={
-        user.preferences?.preferred_explanation_language ?? "en"
-      }
-    />
+    <div className="space-y-6">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+      <LearningDnaClient
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialProfile={profile}
+        initialLanguage={explanationLang}
+      />
+    </div>
   );
 }

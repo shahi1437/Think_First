@@ -20,11 +20,16 @@ import {
   startOrResumeDiagnosticSession,
   submitDiagnosticAnswer,
 } from "@/lib/api-client";
+import {
+  getLanguageDisplayName,
+  getMonacoLanguageForSlug,
+} from "@/lib/languages";
 import type { DiagnosticSessionView } from "@/types/learning";
 
 interface DiagnosticWorkspaceProps {
   accessToken: string;
   initialHistory: DiagnosticSessionView[];
+  activeLanguageSlug?: string;
   initialLanguage?: "en" | "bn";
   usePlainEditor?: boolean;
   onStartSession?: (lang: "en" | "bn") => Promise<DiagnosticSessionView>;
@@ -52,6 +57,7 @@ const DOMAIN_LABELS: Record<string, string> = {
 export function DiagnosticWorkspace({
   accessToken,
   initialHistory,
+  activeLanguageSlug = "python",
   initialLanguage = "en",
   usePlainEditor = false,
   onStartSession,
@@ -73,6 +79,13 @@ export function DiagnosticWorkspace({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isBn = lang === "bn";
+  const langLabel = getLanguageDisplayName(
+    session?.language_slug || activeLanguageSlug,
+  );
+  const questionLangSlug =
+    session?.current_question?.language_slug || activeLanguageSlug;
+  const questionLangLabel = getLanguageDisplayName(questionLangSlug);
+  const questionMonacoLang = getMonacoLanguageForSlug(questionLangSlug);
 
   async function handleStartDiagnostic() {
     setErrorMsg(null);
@@ -148,8 +161,8 @@ export function DiagnosticWorkspace({
           </div>
           <p className="mt-1 text-xs text-slate-600">
             {isBn
-              ? "অ্যাডাপ্টিভ ফলো-আপ প্রশ্ন এবং আসল Judge0 কোড এক্সিকিউশন দিয়ে তোমার প্রকৃত দক্ষতা যাচাই করো।"
-              : "Evaluates 8 Python domains with adaptive follow-up questions and real Judge0 execution checks—no fabricated marks or IQ scores."}
+              ? `অ্যাডাপ্টিভ ফলো-আপ প্রশ্ন এবং আসল স্যান্ডবক্স এক্সিকিউশন দিয়ে তোমার ${langLabel} দক্ষতা যাচাই করো।`
+              : `Evaluates 8 ${langLabel} domains with adaptive follow-up questions and real sandbox execution checks—no fabricated marks or IQ scores.`}
           </p>
         </div>
 
@@ -237,7 +250,7 @@ export function DiagnosticWorkspace({
       {!session ? (
         <div className="space-y-4 rounded-2xl border border-indigo-200 bg-white p-6 shadow-sm">
           <h2 className="text-base font-bold text-slate-900">
-            Ready to discover your actual Python baseline?
+            Ready to discover your actual {langLabel} baseline?
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(DOMAIN_LABELS).map(([slug, label]) => (
@@ -340,10 +353,10 @@ export function DiagnosticWorkspace({
           ) : (
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <div className="bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-200">
-                Python 3 Execution Editor (Evaluated on Judge0 CE)
+                {questionLangLabel} Execution Editor (Evaluated in Real Sandbox)
               </div>
               <CodeEditor
-                language="python"
+                language={questionMonacoLang}
                 value={codeAnswer}
                 onChange={setCodeAnswer}
                 usePlainTextarea={usePlainEditor}
@@ -462,7 +475,7 @@ export function DiagnosticWorkspace({
               href="/student/lessons"
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
             >
-              <span>Start Beginner Python Lessons</span>
+              <span>Start {langLabel} Guided Lessons</span>
             </Link>
           </div>
         </div>

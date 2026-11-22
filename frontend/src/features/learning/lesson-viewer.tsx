@@ -11,6 +11,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { CodeEditor } from "@/features/workspace/code-editor";
@@ -18,6 +19,10 @@ import {
   markLessonReadingComplete,
   runLessonGuidedExercise,
 } from "@/lib/api-client";
+import {
+  getLanguageDisplayName,
+  getMonacoLanguageForSlug,
+} from "@/lib/languages";
 import type {
   LessonDetailView,
   LessonExerciseRunResponse,
@@ -43,6 +48,7 @@ export function LessonViewer({
   onMarkReading,
   onRunExercise,
 }: LessonViewerProps) {
+  const router = useRouter();
   const [lesson, setLesson] = useState<LessonDetailView>(initialLesson);
   const [lang, setLang] = useState<"en" | "bn">(initialLanguage);
   const [code, setCode] = useState<string>(
@@ -56,6 +62,10 @@ export function LessonViewer({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isBn = lang === "bn";
+  const exerciseLanguageSlug =
+    lesson.guided_exercise.language_slug || lesson.language_slug || "python";
+  const exerciseLanguageLabel = getLanguageDisplayName(exerciseLanguageSlug);
+  const monacoLanguage = getMonacoLanguageForSlug(exerciseLanguageSlug);
 
   async function handleMarkReading() {
     setErrorMsg(null);
@@ -65,6 +75,7 @@ export function LessonViewer({
         ? await onMarkReading(lesson.lesson_id)
         : await markLessonReadingComplete(accessToken, lesson.lesson_id);
       setLesson(updated);
+      router.refresh();
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "Could not save reading progress.",
@@ -90,11 +101,12 @@ export function LessonViewer({
         exercise_attempts: prev.exercise_attempts + 1,
         last_verdict: res.verdict,
       }));
+      router.refresh();
     } catch (err) {
       setErrorMsg(
         err instanceof Error
           ? err.message
-          : "Guided exercise execution failed on Judge0.",
+          : "Guided exercise execution failed on sandbox.",
       );
     } finally {
       setRunning(false);
@@ -284,7 +296,9 @@ export function LessonViewer({
 
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-3.5 py-2 text-xs text-white">
-              <span className="font-semibold">Python 3 Guided Practice</span>
+              <span className="font-semibold">
+                {exerciseLanguageLabel} Guided Practice
+              </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -307,12 +321,12 @@ export function LessonViewer({
                   ) : (
                     <Play className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
-                  <span>{running ? "Running Judge0..." : "Run Guided Exercise"}</span>
+                  <span>{running ? "Running Sandbox..." : "Run Guided Exercise"}</span>
                 </button>
               </div>
             </div>
             <CodeEditor
-              language="python"
+              language={monacoLanguage}
               value={code}
               onChange={setCode}
               usePlainTextarea={usePlainEditor}
@@ -353,12 +367,27 @@ export function LessonViewer({
                       : `Not Passed Yet (${runResult.verdict})`}
                   </span>
                 </div>
-                <Badge
-                  variant={runResult.exercise_passed ? "emerald" : "amber"}
-                >
-                  {runResult.passed_tests} / {runResult.total_tests} tests · Skill:{" "}
-                  {runResult.skill_state_after}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant={runResult.exercise_passed ? "emerald" : "amber"}
+                  >
+                    {runResult.passed_tests} / {runResult.total_tests} tests · Skill:{" "}
+                    {runResult.skill_state_after}
+                  </Badge>
+                  {runResult.execution_provider ? (
+                    <Badge
+                      variant={
+                        runResult.execution_provider === "piston"
+                          ? "indigo"
+                          : "neutral"
+                      }
+                    >
+                      {runResult.execution_provider === "piston"
+                        ? "Engine: Piston Fallback"
+                        : "Engine: Judge0 CE"}
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -395,6 +424,16 @@ export function LessonViewer({
                       <pre className="mt-1.5 overflow-x-auto rounded bg-rose-50 p-1.5 font-mono text-rose-900">
                         {cr.stderr}
                       </pre>
+                    ) : null}
+                    {cr.compile_output ? (
+                      <div className="mt-1.5">
+                        <span className="text-[11px] font-medium text-amber-800">
+                          Compiler Output:
+                        </span>
+                        <pre className="mt-0.5 overflow-x-auto rounded bg-amber-50 p-1.5 font-mono text-amber-950">
+                          {cr.compile_output}
+                        </pre>
+                      </div>
                     ) : null}
                   </div>
                 ))}

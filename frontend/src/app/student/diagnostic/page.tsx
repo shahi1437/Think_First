@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
+import { LanguageSelector } from "@/components/language-selector";
 import { DiagnosticWorkspace } from "@/features/learning/diagnostic-workspace";
-import { fetchMyDiagnosticSessions } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchMyDiagnosticSessions,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
+
+export const dynamic = "force-dynamic";
 
 export default async function StudentDiagnosticPage() {
   const { user, accessToken } = await requireAuthenticatedUser({
@@ -13,13 +19,29 @@ export default async function StudentDiagnosticPage() {
     redirect("/student/onboarding");
   }
 
-  const history = await fetchMyDiagnosticSessions(accessToken);
+  const [languageOverview, history] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchMyDiagnosticSessions(accessToken),
+  ]);
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
 
   return (
-    <DiagnosticWorkspace
-      accessToken={accessToken}
-      initialHistory={history}
-      initialLanguage={user.preferences?.preferred_explanation_language ?? "en"}
-    />
+    <div className="space-y-6">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+      <DiagnosticWorkspace
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialHistory={history}
+        activeLanguageSlug={languageOverview.active_language_slug}
+        initialLanguage={explanationLang}
+      />
+    </div>
   );
 }

@@ -23,6 +23,7 @@ interface ProblemBankClientProps {
   accessToken: string;
   initialProblems: StudentProblemListItem[];
   initialTotal: number;
+  activeLanguageSlug?: string;
 }
 
 const difficultyVariant: Record<
@@ -39,20 +40,25 @@ export function ProblemBankClient({
   accessToken,
   initialProblems,
   initialTotal,
+  activeLanguageSlug,
 }: ProblemBankClientProps) {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<ProblemMode | "">("");
   const [difficulty, setDifficulty] = useState<Difficulty | "">("");
+  const [languageFilter, setLanguageFilter] = useState<string>("");
 
-  const isFiltered = Boolean(search.trim() || mode || difficulty);
+  const isFiltered = Boolean(
+    search.trim() || mode || difficulty || languageFilter,
+  );
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["problems", search.trim(), mode, difficulty],
+    queryKey: ["problems", search.trim(), mode, difficulty, languageFilter],
     queryFn: () =>
       fetchProblems(accessToken, {
         search: search.trim() || undefined,
         mode: mode || undefined,
         difficulty: difficulty || undefined,
+        language: languageFilter || undefined,
         limit: 30,
       }),
     initialData: !isFiltered
@@ -84,7 +90,7 @@ export function ProblemBankClient({
 
       {/* Filters */}
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-12">
-        <div className="relative sm:col-span-6">
+        <div className="relative sm:col-span-4">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
             aria-hidden="true"
@@ -100,6 +106,25 @@ export function ProblemBankClient({
         </div>
 
         <div className="sm:col-span-3">
+          <select
+            aria-label="Filter by programming language"
+            value={languageFilter}
+            onChange={(e) => setLanguageFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-600 focus:outline-none"
+          >
+            <option value="">
+              All languages
+              {activeLanguageSlug ? ` (Active: ${activeLanguageSlug.toUpperCase()})` : ""}
+            </option>
+            <option value="python">Python 3</option>
+            <option value="javascript">JavaScript (Node.js)</option>
+            <option value="c">C (GCC)</option>
+            <option value="cpp">C++ (GCC)</option>
+            <option value="java">Java (OpenJDK)</option>
+          </select>
+        </div>
+
+        <div className="sm:col-span-2">
           <select
             aria-label="Filter by mode"
             value={mode}

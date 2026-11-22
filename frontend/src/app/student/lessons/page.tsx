@@ -1,9 +1,16 @@
 import { ArrowRight, BookOpen, CheckCircle2, Clock } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LanguageSelector } from "@/components/language-selector";
 import { Badge } from "@/components/ui/badge";
-import { fetchLessons } from "@/lib/api-client";
+import {
+  fetchLanguageProgressOverview,
+  fetchLessons,
+} from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
+import { getLanguageDisplayName } from "@/lib/languages";
+
+export const dynamic = "force-dynamic";
 
 export default async function StudentLessonsPage() {
   const { user, accessToken } = await requireAuthenticatedUser({
@@ -15,25 +22,41 @@ export default async function StudentLessonsPage() {
     redirect("/student/onboarding");
   }
 
-  const lessons = await fetchLessons(accessToken);
+  const [languageOverview, lessons] = await Promise.all([
+    fetchLanguageProgressOverview(accessToken),
+    fetchLessons(accessToken),
+  ]);
   const completedCount = lessons.filter(
     (lsn) => lsn.progress_status === "completed",
   ).length;
+  const activeLanguageLabel = getLanguageDisplayName(
+    languageOverview.active_language_slug,
+  );
+  const explanationLang =
+    user.preferences?.preferred_explanation_language ?? "en";
 
   return (
     <div className="space-y-6">
+      <LanguageSelector
+        key={languageOverview.active_language_slug}
+        accessToken={accessToken}
+        initialOverview={languageOverview}
+        explanationLanguage={explanationLang}
+        compact
+      />
+
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
-              Guided Python Curriculum
+              Guided {activeLanguageLabel} Curriculum
             </p>
             <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-slate-900 sm:text-[34px]">
-              Beginner Python Lessons
+              {activeLanguageLabel} Guided Lessons
             </h1>
             <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">
-              Learn step-by-step in English or Bangla with interactive examples
-              and hands-on guided Python coding exercises.
+              Learn {activeLanguageLabel} step-by-step in English or Bangla with
+              interactive examples and real sandbox-executed guided exercises.
             </p>
           </div>
           <Badge variant="indigo">

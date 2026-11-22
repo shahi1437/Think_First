@@ -7,6 +7,33 @@ export const trackSlugSchema = z.enum([
   "advanced",
 ]);
 
+export const languageSlugSchema = z.enum([
+  "python",
+  "javascript",
+  "c",
+  "cpp",
+  "java",
+]);
+
+export const languageProgressItemSchema = z.object({
+  slug: z.string(),
+  display_name: z.string(),
+  monaco_language: z.string(),
+  version_label: z.string(),
+  is_enabled: z.boolean(),
+  is_active: z.boolean().default(false),
+  lessons_completed: z.number().int().default(0),
+  lessons_total: z.number().int().default(0),
+  diagnostic_sessions_completed: z.number().int().default(0),
+  submissions_count: z.number().int().default(0),
+  selected_track_slug: trackSlugSchema.nullable().optional(),
+});
+
+export const languageProgressOverviewSchema = z.object({
+  active_language_slug: z.string().default("python"),
+  languages: z.array(languageProgressItemSchema),
+});
+
 export const skillStateSchema = z.enum([
   "unobserved",
   "introduced",
@@ -40,6 +67,7 @@ export const learningTrackViewSchema = z.object({
 });
 
 export const studentTrackStatusSchema = z.object({
+  language_slug: z.string().optional(),
   selected_track_slug: trackSlugSchema,
   recommended_track_slug: trackSlugSchema.nullable().optional(),
   recommendation_source: z.enum([
@@ -79,6 +107,7 @@ export const lessonSummaryViewSchema = z.object({
   lesson_id: z.string().uuid(),
   version_id: z.string().uuid(),
   slug: z.string(),
+  language_slug: z.string().optional(),
   skill_slug: z.string(),
   display_order: z.number().int(),
   title_en: z.string(),
@@ -127,6 +156,7 @@ export const lessonExerciseRunResponseSchema = z.object({
   exercise_passed: z.boolean(),
   progress_status: z.enum(["not_started", "in_progress", "completed"]),
   skill_state_after: skillStateSchema,
+  execution_provider: z.string().optional(),
   case_results: z.array(lessonExerciseCaseResultSchema),
 });
 
@@ -184,6 +214,7 @@ export const diagnosticResponseFeedbackSchema = z.object({
 
 export const diagnosticSessionViewSchema = z.object({
   id: z.string().uuid(),
+  language_slug: z.string().optional(),
   status: z.enum(["in_progress", "completed", "abandoned"]),
   explanation_language: z.enum(["en", "bn"]),
   answered_count: z.number().int(),
@@ -226,6 +257,7 @@ export const skillTransitionViewSchema = z.object({
 });
 
 export const skillGraphViewSchema = z.object({
+  language_slug: z.string().optional(),
   nodes: z.array(skillNodeStateViewSchema),
   recent_transitions: z.array(skillTransitionViewSchema),
   state_legend: z.array(z.record(z.string(), z.string())),
@@ -249,6 +281,7 @@ export const recommendationItemViewSchema = z.object({
 });
 
 export const learningDashboardViewSchema = z.object({
+  language_slug: z.string().optional(),
   track_status: studentTrackStatusSchema,
   lessons_completed: z.number().int(),
   lessons_total: z.number().int(),
@@ -259,6 +292,11 @@ export const learningDashboardViewSchema = z.object({
 });
 
 export type TrackSlug = z.infer<typeof trackSlugSchema>;
+export type LanguageSlug = z.infer<typeof languageSlugSchema>;
+export type LanguageProgressItem = z.infer<typeof languageProgressItemSchema>;
+export type LanguageProgressOverview = z.infer<
+  typeof languageProgressOverviewSchema
+>;
 export type SkillState = z.infer<typeof skillStateSchema>;
 export type LearningTrackView = z.infer<typeof learningTrackViewSchema>;
 export type StudentTrackStatus = z.infer<typeof studentTrackStatusSchema>;

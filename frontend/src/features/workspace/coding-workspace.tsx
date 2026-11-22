@@ -48,6 +48,7 @@ interface CodingWorkspaceProps {
   initialSubmissions: SubmissionSummaryItem[];
   initialRevisions: RevisionResponse[];
   initialTransferChallenge?: TransferChallengeSummary | null;
+  preferredLanguageSlug?: string;
   usePlainEditor?: boolean;
   onExecuteCode?: (payload: {
     problem_id: string;
@@ -73,11 +74,14 @@ export function CodingWorkspace({
   initialSubmissions,
   initialRevisions,
   initialTransferChallenge = null,
+  preferredLanguageSlug,
   usePlainEditor = false,
   onExecuteCode,
   onSaveRevision,
 }: CodingWorkspaceProps) {
-  const defaultVariant = problem.variants[0];
+  const defaultVariant =
+    problem.variants.find((v) => v.language_slug === preferredLanguageSlug) ??
+    problem.variants[0];
   const [selectedLang, setSelectedLang] = useState(
     defaultVariant?.language_slug ?? "python",
   );
@@ -230,6 +234,7 @@ export function CodingWorkspace({
           total_tests: result.total_tests,
           runtime_ms: result.runtime_ms,
           memory_kb: result.memory_kb,
+          execution_provider: result.execution_provider ?? "judge0",
           created_at: result.created_at,
         },
         ...prev,
@@ -354,11 +359,10 @@ export function CodingWorkspace({
           {debuggingSteps.map((step, idx) => (
             <div key={step.label} className="flex items-center gap-1.5 text-xs">
               <span
-                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${
-                  step.done
+                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${step.done
                     ? "bg-indigo-600 text-white"
                     : "border border-indigo-300 bg-white text-indigo-700"
-                }`}
+                  }`}
               >
                 {idx + 1}
               </span>
@@ -407,11 +411,10 @@ export function CodingWorkspace({
               if (tabKey === "mentor") setBottomTab("mentor");
               if (tabKey === "verify") setBottomTab("verify");
             }}
-            className={`truncate rounded-lg px-1.5 py-2 text-[11px] font-semibold transition sm:text-xs ${
-              mobileTab === tabKey
+            className={`truncate rounded-lg px-1.5 py-2 text-[11px] font-semibold transition sm:text-xs ${mobileTab === tabKey
                 ? "bg-indigo-600 text-white"
                 : "text-slate-600 hover:bg-slate-100"
-            }`}
+              }`}
           >
             {label}
           </button>
@@ -423,9 +426,8 @@ export function CodingWorkspace({
         {/* LEFT PANE: Problem Description + Debugging Prompts */}
         <section
           aria-label="Problem specification"
-          className={`min-w-0 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-5 ${
-            mobileTab === "problem" ? "block" : "hidden lg:block"
-          }`}
+          className={`min-w-0 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-5 ${mobileTab === "problem" ? "block" : "hidden lg:block"
+            }`}
         >
           <div className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
@@ -546,9 +548,8 @@ export function CodingWorkspace({
           {/* Code Editor Card */}
           <section
             aria-label="Code editor workspace"
-            className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${
-              mobileTab === "editor" ? "block" : "hidden lg:block"
-            }`}
+            className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${mobileTab === "editor" ? "block" : "hidden lg:block"
+              }`}
           >
             {/* Editor Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-900 px-4 py-2.5 text-white">
@@ -656,13 +657,12 @@ export function CodingWorkspace({
           {/* Bottom Panel: Results / AI Mentor / Transfer Verify / Submissions / Revisions */}
           <section
             aria-label="Execution results, AI Mentor, and verification"
-            className={`rounded-xl border border-slate-200 bg-white shadow-sm ${
-              mobileTab === "results" ||
-              mobileTab === "mentor" ||
-              mobileTab === "verify"
+            className={`rounded-xl border border-slate-200 bg-white shadow-sm ${mobileTab === "results" ||
+                mobileTab === "mentor" ||
+                mobileTab === "verify"
                 ? "block"
                 : "hidden lg:block"
-            }`}
+              }`}
           >
             <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 px-3 pt-2 sm:px-4">
               {(
@@ -683,11 +683,10 @@ export function CodingWorkspace({
                   key={tabKey}
                   type="button"
                   onClick={() => setBottomTab(tabKey)}
-                  className={`border-b-2 px-3 py-2 text-xs font-semibold transition ${
-                    bottomTab === tabKey
+                  className={`border-b-2 px-3 py-2 text-xs font-semibold transition ${bottomTab === tabKey
                       ? "border-indigo-600 text-indigo-700"
                       : "border-transparent text-slate-500 hover:text-slate-800"
-                  }`}
+                    }`}
                 >
                   {label}
                 </button>
@@ -731,6 +730,19 @@ export function CodingWorkspace({
                             {activeSubmission.submission_kind}
                           </span>
                         </Badge>
+                        {activeSubmission.execution_provider ? (
+                          <Badge
+                            variant={
+                              activeSubmission.execution_provider === "piston"
+                                ? "indigo"
+                                : "neutral"
+                            }
+                          >
+                            {activeSubmission.execution_provider === "piston"
+                              ? "Piston Fallback"
+                              : "Judge0 CE"}
+                          </Badge>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                         <span>

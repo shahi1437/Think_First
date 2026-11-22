@@ -63,6 +63,7 @@ import {
 } from "@/types/mentor";
 import {
   diagnosticSessionViewSchema,
+  languageProgressOverviewSchema,
   learningDashboardViewSchema,
   learningTrackViewSchema,
   lessonDetailViewSchema,
@@ -71,6 +72,8 @@ import {
   skillGraphViewSchema,
   studentTrackStatusSchema,
   type DiagnosticSessionView,
+  type LanguageProgressOverview,
+  type LanguageSlug,
   type LearningDashboardView,
   type LearningTrackView,
   type LessonDetailView,
@@ -352,6 +355,7 @@ export async function fetchProblems(
     difficulty?: Difficulty | "";
     mode?: ProblemMode | "";
     topic?: string;
+    language?: string;
     limit?: number;
     offset?: number;
   },
@@ -362,6 +366,7 @@ export async function fetchProblems(
   if (params?.difficulty) query.set("difficulty", params.difficulty);
   if (params?.mode) query.set("mode", params.mode);
   if (params?.topic) query.set("topic", params.topic);
+  if (params?.language) query.set("language", params.language);
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.offset) query.set("offset", String(params.offset));
   const qs = query.toString();
@@ -740,7 +745,36 @@ export async function fetchMyLearningEvents(
   return z.array(learningEventViewSchema).parse(await response.json());
 }
 
-// --- Phase 5: Tracks, Bilingual Beginner Lessons, Adaptive Diagnostic & Skill Graph ---
+// --- Phase 5 + Multi-Language: Languages, Tracks, Bilingual Lessons, Diagnostics & Skill Graph ---
+
+export async function fetchLanguageProgressOverview(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LanguageProgressOverview> {
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/languages`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return languageProgressOverviewSchema.parse(await response.json());
+}
+
+export async function selectActiveLanguage(
+  accessToken: string,
+  languageSlug: LanguageSlug,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LanguageProgressOverview> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/learning/languages/select`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ language_slug: languageSlug }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return languageProgressOverviewSchema.parse(await response.json());
+}
 
 export async function fetchLearningDashboard(
   accessToken: string,

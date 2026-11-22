@@ -15,10 +15,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { LanguageSelector } from "@/components/language-selector";
 import { Badge } from "@/components/ui/badge";
 import { SkillGraphPanel } from "@/features/learning/skill-graph-panel";
 import { selectLearningTrack } from "@/lib/api-client";
+import { getLanguageDisplayName } from "@/lib/languages";
 import type {
+  LanguageProgressOverview,
   LearningDashboardView,
   StudentTrackStatus,
   TrackSlug,
@@ -28,6 +31,7 @@ interface LearningDashboardClientProps {
   accessToken: string;
   studentName: string;
   initialDashboard: LearningDashboardView;
+  languageOverview?: LanguageProgressOverview;
   initialLanguage?: "en" | "bn";
   dnaSummary?: {
     verifiedCount: number;
@@ -62,6 +66,7 @@ export function LearningDashboardClient({
   accessToken,
   studentName,
   initialDashboard,
+  languageOverview,
   initialLanguage = "en",
   dnaSummary,
   dailyPlanSummary,
@@ -76,6 +81,9 @@ export function LearningDashboardClient({
   const [trackError, setTrackError] = useState<string | null>(null);
 
   const isBn = lang === "bn";
+  const activeLanguageLabel = getLanguageDisplayName(
+    initialDashboard.language_slug,
+  );
   const observedSkills = initialDashboard.skill_graph.nodes.filter(
     (n) => n.state !== "unobserved",
   ).length;
@@ -202,7 +210,7 @@ export function LearningDashboardClient({
               {initialDashboard.diagnostic_sessions_completed}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              Across 8 Python skill domains
+              Across 8 {activeLanguageLabel} skill domains
             </p>
           </div>
           <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
@@ -218,6 +226,14 @@ export function LearningDashboardClient({
           </div>
         </div>
       </section>
+
+      {languageOverview ? (
+        <LanguageSelector
+          accessToken={accessToken}
+          initialOverview={languageOverview}
+          explanationLanguage={lang}
+        />
+      ) : null}
 
       {/* Recommended Next Steps (Explainable Prerequisite-Based Logic) */}
       <section
@@ -535,8 +551,8 @@ export function LearningDashboardClient({
             <div>
               <h3 className="text-sm font-bold text-slate-900">
                 {isBn
-                  ? "বিগিনার Python লেসনসমূহ"
-                  : "Beginner Python Lessons (8 Topics)"}
+                  ? `${activeLanguageLabel} গাইডেড লেসনসমূহ (${initialDashboard.lessons_total}টি)`
+                  : `${activeLanguageLabel} Guided Lessons (${initialDashboard.lessons_total} Topics)`}
               </h3>
               <p className="text-xs text-slate-600">
                 Bilingual concepts, interactive examples &amp; real Judge0

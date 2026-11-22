@@ -11,6 +11,7 @@ export const programmingExperienceSchema = z.enum([
 export const preferredLanguageSchema = z.enum([
   "python",
   "javascript",
+  "c",
   "cpp",
   "java",
 ]);
@@ -34,6 +35,7 @@ export const recommendedEntryTrackSchema = z.enum([
 export const userPreferencesResponseSchema = z.object({
   programming_experience: programmingExperienceSchema,
   preferred_language: preferredLanguageSchema,
+  active_language_slug: preferredLanguageSchema.optional(),
   learning_goal: learningGoalSchema,
   daily_practice_minutes: z.number().int().min(10).max(240),
   preferred_explanation_language: explanationLanguageSchema,

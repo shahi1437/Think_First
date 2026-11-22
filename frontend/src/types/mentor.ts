@@ -25,6 +25,10 @@ export const mlDiagnosisResponseSchema = z.object({
   id: z.string().uuid().nullable().optional(),
   submission_id: z.string().uuid().nullable().optional(),
   model_version: z.string(),
+  diagnosis_source: z
+    .enum(["ml_classifier", "rule_based"])
+    .optional(),
+  language_slug: z.string().optional(),
   predicted_error_code: z.string(),
   predicted_display_name: z.string(),
   confidence: z.number(),

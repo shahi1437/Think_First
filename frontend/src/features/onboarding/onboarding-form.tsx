@@ -230,10 +230,11 @@ export function OnboardingForm({
               {...register("preferred_language")}
               className={selectBaseClass}
             >
-              <option value="python">Python</option>
-              <option value="javascript">JavaScript</option>
-              <option value="cpp">C++</option>
-              <option value="java">Java</option>
+              <option value="python">Python 3</option>
+              <option value="javascript">JavaScript (Node.js)</option>
+              <option value="c">C (GCC)</option>
+              <option value="cpp">C++ (GCC)</option>
+              <option value="java">Java (OpenJDK)</option>
             </select>
             <ChevronDown
               className="pointer-events-none absolute right-3.5 top-1/2 mt-1 h-4 w-4 -translate-y-1/2 text-slate-500"
@@ -241,7 +242,8 @@ export function OnboardingForm({
             />
           </div>
           <p className="mt-1.5 text-[13px] text-slate-500">
-            Python is recommended for guided lessons.
+            Learn any of our 5 languages under one account with independent
+            progress per language.
           </p>
         </div>
 
