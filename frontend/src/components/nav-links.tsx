@@ -254,7 +254,7 @@ export function NavLinks({
           {mobileOpen ? (
             <nav
               aria-label="Mobile navigation"
-              className="mt-3 flex flex-col gap-1 border-t border-slate-200 pt-3"
+              className="tf-drawer-enter mt-3 flex flex-col gap-1 border-t border-slate-200 pt-3"
             >
               {showPortalSwitcher ? (
                 <div

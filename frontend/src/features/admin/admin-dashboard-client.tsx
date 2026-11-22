@@ -33,7 +33,7 @@ export function AdminDashboardClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
+      <section className="tf-animate-enter rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">

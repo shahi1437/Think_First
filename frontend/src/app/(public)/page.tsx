@@ -137,7 +137,7 @@ export default function LandingPage() {
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(45,212,191,0.16),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(79,70,229,0.18),_transparent_55%)]"
         />
 
-        <div className="relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
+        <div className="tf-animate-enter relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
           <div className="max-w-3xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-500/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-teal-300">
               Think First. Code Better.
@@ -149,17 +149,17 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-[18px]">
-              Think_First (CodeMentor AI) helps university and school learners
-              build real coding habits—combining structured lessons, hands-on
-              practice problems, mistake diagnosis, and classroom assignments in
-              one focused workspace.
+              Think_First (CodeMentor AI) guides university and school learners
+              from beginner to advanced across Python, JavaScript, C, C++, and
+              Java—combining adaptive lessons, real sandbox practice, mistake
+              diagnosis, and classroom assignments in one focused workspace.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3.5">
               <Link
                 href="/register"
                 prefetch={true}
-                className="inline-flex items-center gap-2 rounded-xl bg-teal-400 px-6 py-3.5 text-[15px] font-semibold text-slate-950 shadow-sm transition hover:bg-teal-300 sm:text-base"
+                className="tf-btn-press inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-teal-400 px-6 py-3.5 text-base font-semibold text-slate-950 shadow-sm transition hover:bg-teal-300"
               >
                 <GraduationCap className="h-4 w-4" aria-hidden="true" />
                 Create Student Account
@@ -167,7 +167,7 @@ export default function LandingPage() {
               </Link>
               <a
                 href="#how-it-works"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/60 px-6 py-3.5 text-[15px] font-semibold text-slate-100 transition hover:border-slate-400 hover:bg-slate-800 sm:text-base"
+                className="tf-btn-press inline-flex min-h-[48px] items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/60 px-6 py-3.5 text-base font-semibold text-slate-100 transition hover:border-slate-400 hover:bg-slate-800"
               >
                 <Compass className="h-4 w-4 text-teal-300" aria-hidden="true" />
                 See How It Works

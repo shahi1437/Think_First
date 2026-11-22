@@ -49,6 +49,7 @@ interface CodingWorkspaceProps {
   initialRevisions: RevisionResponse[];
   initialTransferChallenge?: TransferChallengeSummary | null;
   preferredLanguageSlug?: string;
+  initialBottomTab?: BottomTab;
   usePlainEditor?: boolean;
   onExecuteCode?: (payload: {
     problem_id: string;
@@ -75,6 +76,7 @@ export function CodingWorkspace({
   initialRevisions,
   initialTransferChallenge = null,
   preferredLanguageSlug,
+  initialBottomTab,
   usePlainEditor = false,
   onExecuteCode,
   onSaveRevision,
@@ -113,8 +115,16 @@ export function CodingWorkspace({
     latestRevisionForLang?.explanation_text ?? "",
   );
 
-  const [mobileTab, setMobileTab] = useState<MobileTab>("problem");
-  const [bottomTab, setBottomTab] = useState<BottomTab>("results");
+  const [mobileTab, setMobileTab] = useState<MobileTab>(
+    initialBottomTab === "verify"
+      ? "verify"
+      : initialBottomTab === "mentor"
+        ? "mentor"
+        : "problem",
+  );
+  const [bottomTab, setBottomTab] = useState<BottomTab>(
+    initialBottomTab ?? "results",
+  );
 
   const [submissions, setSubmissions] =
     useState<SubmissionSummaryItem[]>(initialSubmissions);
@@ -312,27 +322,27 @@ export function CodingWorkspace({
   ];
 
   return (
-    <div className="space-y-4 overflow-x-hidden">
+    <div className="tf-animate-enter space-y-4 overflow-x-hidden">
       {/* Workspace Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href="/student/problems"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="tf-btn-press inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             <span>Problems</span>
           </Link>
 
-          <h1 className="text-base font-bold text-slate-900 sm:text-lg">
+          <h1 className="text-lg font-bold text-slate-900 sm:text-xl">
             {problem.title}
           </h1>
 
           <Badge variant={isDebugging ? "indigo" : "teal"}>
             {isDebugging ? (
-              <Bug className="h-3 w-3" aria-hidden="true" />
+              <Bug className="h-3.5 w-3.5" aria-hidden="true" />
             ) : (
-              <Code2 className="h-3 w-3" aria-hidden="true" />
+              <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
             )}
             <span className="capitalize">{problem.mode} Mode</span>
           </Badge>
@@ -341,14 +351,63 @@ export function CodingWorkspace({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+        <div className="flex items-center gap-2 text-sm text-slate-600">
+          <Clock className="h-4 w-4" aria-hidden="true" />
           <span>
             Limit: {problem.time_limit_ms / 1000}s ·{" "}
             {Math.round(problem.memory_limit_kb / 1024)} MB
           </span>
         </div>
       </div>
+
+      {/* Post-Accepted Next Recommended Step Callout (No Dead End) */}
+      {hasAcceptedSubmit ? (
+        <div
+          role="status"
+          className="tf-celebrate-pop flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-5 py-3.5 text-sm text-emerald-950"
+        >
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2
+              className="h-5 w-5 shrink-0 text-emerald-700"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="font-bold">
+                Accepted Solution Verified in Isolated Sandbox!
+              </p>
+              <p className="text-emerald-900">
+                {transferChallenge?.unlocked &&
+                transferChallenge.latest_attempt?.outcome !==
+                  "verified_independent"
+                  ? "Your Independent Transfer Verification challenge is now unlocked — solve it with zero hints to earn Transferred."
+                  : "Your progress and Skill Graph have been updated. Ready for your next learning step?"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {transferChallenge?.unlocked &&
+            transferChallenge.latest_attempt?.outcome !==
+              "verified_independent" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setBottomTab("verify");
+                  setMobileTab("verify");
+                }}
+                className="tf-btn-press inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-600"
+              >
+                <span>Open Independent Transfer Check →</span>
+              </button>
+            ) : null}
+            <Link
+              href="/student"
+              className="tf-btn-press inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              <span>Continue Learning →</span>
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       {/* Debugging 7-step Workflow Strip */}
       {isDebugging ? (
@@ -360,8 +419,8 @@ export function CodingWorkspace({
             <div key={step.label} className="flex items-center gap-1.5 text-xs">
               <span
                 className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${step.done
-                    ? "bg-indigo-600 text-white"
-                    : "border border-indigo-300 bg-white text-indigo-700"
+                  ? "bg-indigo-600 text-white"
+                  : "border border-indigo-300 bg-white text-indigo-700"
                   }`}
               >
                 {idx + 1}
@@ -412,8 +471,8 @@ export function CodingWorkspace({
               if (tabKey === "verify") setBottomTab("verify");
             }}
             className={`truncate rounded-lg px-1.5 py-2 text-[11px] font-semibold transition sm:text-xs ${mobileTab === tabKey
-                ? "bg-indigo-600 text-white"
-                : "text-slate-600 hover:bg-slate-100"
+              ? "bg-indigo-600 text-white"
+              : "text-slate-600 hover:bg-slate-100"
               }`}
           >
             {label}
@@ -658,10 +717,10 @@ export function CodingWorkspace({
           <section
             aria-label="Execution results, AI Mentor, and verification"
             className={`rounded-xl border border-slate-200 bg-white shadow-sm ${mobileTab === "results" ||
-                mobileTab === "mentor" ||
-                mobileTab === "verify"
-                ? "block"
-                : "hidden lg:block"
+              mobileTab === "mentor" ||
+              mobileTab === "verify"
+              ? "block"
+              : "hidden lg:block"
               }`}
           >
             <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 px-3 pt-2 sm:px-4">
@@ -684,8 +743,8 @@ export function CodingWorkspace({
                   type="button"
                   onClick={() => setBottomTab(tabKey)}
                   className={`border-b-2 px-3 py-2 text-xs font-semibold transition ${bottomTab === tabKey
-                      ? "border-indigo-600 text-indigo-700"
-                      : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "border-indigo-600 text-indigo-700"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
                     }`}
                 >
                   {label}
@@ -882,6 +941,7 @@ export function CodingWorkspace({
                 <TransferVerificationPanel
                   accessToken={accessToken}
                   challenge={transferChallenge}
+                  activeLanguageSlug={selectedLang}
                   latestAcceptedSubmissionId={
                     submissions.find(
                       (s) =>

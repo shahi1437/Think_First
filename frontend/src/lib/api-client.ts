@@ -65,16 +65,19 @@ import {
   diagnosticSessionViewSchema,
   languageProgressOverviewSchema,
   learningDashboardViewSchema,
+  learningJourneyViewSchema,
   learningTrackViewSchema,
   lessonDetailViewSchema,
   lessonExerciseRunResponseSchema,
   lessonSummaryViewSchema,
   skillGraphViewSchema,
   studentTrackStatusSchema,
+  type AssessmentMode,
   type DiagnosticSessionView,
   type LanguageProgressOverview,
   type LanguageSlug,
   type LearningDashboardView,
+  type LearningJourneyView,
   type LearningTrackView,
   type LessonDetailView,
   type LessonExerciseRunResponse,
@@ -868,17 +871,35 @@ export async function runLessonGuidedExercise(
   return lessonExerciseRunResponseSchema.parse(await response.json());
 }
 
+export async function fetchLearningJourney(
+  accessToken: string,
+  language?: LanguageSlug,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<LearningJourneyView> {
+  const qs = language ? `?language=${encodeURIComponent(language)}` : "";
+  const response = await safeFetch(`${baseUrl}/api/v1/learning/journey${qs}`, {
+    headers: authHeaders(accessToken),
+    cache: "no-store",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return learningJourneyViewSchema.parse(await response.json());
+}
+
 export async function startOrResumeDiagnosticSession(
   accessToken: string,
   explanationLanguage: "en" | "bn" = "en",
   baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+  assessmentMode: AssessmentMode = "full",
 ): Promise<DiagnosticSessionView> {
   const response = await safeFetch(
     `${baseUrl}/api/v1/learning/diagnostics/sessions`,
     {
       method: "POST",
       headers: authHeaders(accessToken, true),
-      body: JSON.stringify({ explanation_language: explanationLanguage }),
+      body: JSON.stringify({
+        explanation_language: explanationLanguage,
+        assessment_mode: assessmentMode,
+      }),
     },
   );
   if (!response.ok) throw await parseErrorResponse(response);

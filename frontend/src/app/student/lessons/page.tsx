@@ -45,7 +45,7 @@ export default async function StudentLessonsPage() {
         compact
       />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+      <div className="tf-animate-enter rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
@@ -66,13 +66,25 @@ export default async function StudentLessonsPage() {
             </span>
           </Badge>
         </div>
+        {lessons.length > 0 ? (
+          <div className="mt-4">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="tf-progress-fill h-full rounded-full bg-gradient-to-r from-indigo-500 to-teal-500"
+                style={{
+                  width: `${Math.round((completedCount / lessons.length) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
         {lessons.map((lesson) => (
           <article
             key={lesson.lesson_id}
-            className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+            className="tf-card-interactive flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:border-indigo-300"
           >
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">

@@ -16,12 +16,7 @@
   html {
     font-size: 16px;
     scroll-behavior: smooth;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
-    }
+    text-size-adjust: 100%;
   }
 
   body {
@@ -29,6 +24,8 @@
     color: var(--ink-primary);
     font-family:
       "Inter",
+      "Noto Sans Bengali",
+      "Hind Siliguri",
       "Segoe UI",
       system-ui,
       -apple-system,
@@ -36,12 +33,177 @@
       Roboto,
       sans-serif;
     font-size: 1rem;
-    line-height: 1.6;
+    line-height: 1.65;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family:
+      "JetBrains Mono",
+      "Fira Code",
+      "Cascadia Code",
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      monospace;
   }
 
   :focus-visible {
     outline: 2px solid var(--accent-indigo);
     outline-offset: 2px;
+  }
+}
+
+/* ============================================================================
+   Think_First Motion Language — Lightweight, GPU-friendly, accessible animations
+   ============================================================================ */
+
+@keyframes tf-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tf-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tf-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tf-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tf-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.tf-animate-enter {
+  animation: tf-fade-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tf-animate-enter-delay-1 {
+  animation: tf-fade-up 260ms cubic-bezier(0.22, 1, 0.36, 1) 50ms both;
+}
+
+.tf-animate-enter-delay-2 {
+  animation: tf-fade-up 280ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+}
+
+.tf-scale-in {
+  animation: tf-scale-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tf-drawer-enter {
+  animation: tf-slide-down 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tf-celebrate-pop {
+  animation: tf-check-pop 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tf-card-interactive {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.tf-card-interactive:hover {
+  transform: translateY(-2px);
+}
+
+.tf-btn-press {
+  transition:
+    transform 120ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.tf-btn-press:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.tf-progress-fill {
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tf-skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: tf-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Strictly honor prefers-reduced-motion for accessibility (WCAG 2.2 AA) */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .tf-animate-enter,
+  .tf-animate-enter-delay-1,
+  .tf-animate-enter-delay-2,
+  .tf-scale-in,
+  .tf-drawer-enter,
+  .tf-celebrate-pop,
+  .tf-skeleton {
+    animation: none !important;
+  }
+
+  .tf-card-interactive,
+  .tf-btn-press,
+  .tf-progress-fill {
+    transition-duration: 0.01ms !important;
+    transform: none !important;
   }
 }

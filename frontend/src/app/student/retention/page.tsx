@@ -35,6 +35,7 @@ export default async function StudentRetentionPage() {
         accessToken={accessToken}
         initialOverview={overview}
         initialLanguage={explanationLang}
+        activeLanguageSlug={languageOverview.active_language_slug}
       />
     </div>
   );

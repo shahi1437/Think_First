@@ -6,10 +6,16 @@ import {
   fetchMyDiagnosticSessions,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
+import type { AssessmentMode } from "@/types/learning";
 
 export const dynamic = "force-dynamic";
 
-export default async function StudentDiagnosticPage() {
+export default async function StudentDiagnosticPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ mode?: string; entry?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const { user, accessToken } = await requireAuthenticatedUser({
     allowedRoles: ["student", "teacher", "admin"],
     currentPath: "/student/diagnostic",
@@ -25,9 +31,12 @@ export default async function StudentDiagnosticPage() {
   ]);
   const explanationLang =
     user.preferences?.preferred_explanation_language ?? "en";
+  const initialMode: AssessmentMode =
+    params.mode === "readiness" ? "readiness" : "full";
+  const fromOnboarding = params.entry === "onboarding";
 
   return (
-    <div className="space-y-6">
+    <div className="tf-animate-enter space-y-6">
       <LanguageSelector
         key={languageOverview.active_language_slug}
         accessToken={accessToken}
@@ -41,6 +50,8 @@ export default async function StudentDiagnosticPage() {
         initialHistory={history}
         activeLanguageSlug={languageOverview.active_language_slug}
         initialLanguage={explanationLang}
+        recommendedMode={initialMode}
+        fromOnboarding={fromOnboarding}
       />
     </div>
   );

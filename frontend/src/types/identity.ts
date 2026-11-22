@@ -42,6 +42,7 @@ export const userPreferencesResponseSchema = z.object({
   starting_preference: startingPreferenceSchema,
   recommended_entry_track: recommendedEntryTrackSchema,
   recommendation_rationale: z.string(),
+  entry_redirect_path: z.string().optional(),
 });
 
 export const userMeResponseSchema = z.object({

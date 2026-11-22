@@ -148,6 +148,71 @@ export const lessonExerciseCaseResultSchema = z.object({
   passed: z.boolean(),
 });
 
+export const assessmentModeSchema = z.enum(["full", "readiness"]);
+
+export const journeyActionTypeSchema = z.enum([
+  "onboarding",
+  "assignment",
+  "diagnostic_resume",
+  "lesson_resume",
+  "retention_check",
+  "diagnostic_full",
+  "diagnostic_readiness",
+  "lesson_remediation",
+  "lesson",
+  "transfer_verification",
+  "problem",
+  "daily_plan",
+  "milestone_complete",
+]);
+
+export const journeyStageSchema = z.enum([
+  "onboarding",
+  "foundation_lessons",
+  "readiness_check",
+  "diagnostic_placement",
+  "guided_practice",
+  "independent_mastery",
+  "retention_growth",
+]);
+
+export const journeyActionViewSchema = z.object({
+  action_type: journeyActionTypeSchema,
+  target_id: z.string(),
+  target_slug: z.string(),
+  href: z.string(),
+  cta_label_en: z.string(),
+  cta_label_bn: z.string(),
+  title_en: z.string(),
+  title_bn: z.string(),
+  reason_en: z.string(),
+  reason_bn: z.string(),
+  evidence_factors: z.array(z.string()).default([]),
+  priority: z.number().int(),
+  urgency: z.enum(["urgent", "recommended", "optional"]).default("recommended"),
+  eligibility_note_en: z.string().default(""),
+  eligibility_note_bn: z.string().default(""),
+  estimated_minutes: z.number().int().nullable().optional(),
+});
+
+export const learningJourneyViewSchema = z.object({
+  language_slug: z.string().default("python"),
+  onboarding_completed: z.boolean().default(true),
+  active_track_slug: trackSlugSchema.default("absolute_beginner"),
+  journey_stage: journeyStageSchema.default("foundation_lessons"),
+  foundation_lessons_completed: z.number().int().default(0),
+  foundation_lessons_target: z.number().int().default(2),
+  readiness_check_unlocked: z.boolean().default(false),
+  diagnostic_completed: z.boolean().default(false),
+  full_diagnostic_completed: z.boolean().default(false),
+  urgent_assignments_count: z.number().int().default(0),
+  due_retentions_count: z.number().int().default(0),
+  unlocked_transfers_count: z.number().int().default(0),
+  primary_action: journeyActionViewSchema,
+  resume_activity: journeyActionViewSchema.nullable().optional(),
+  secondary_actions: z.array(journeyActionViewSchema).default([]),
+});
+
 export const lessonExerciseRunResponseSchema = z.object({
   lesson_id: z.string().uuid(),
   verdict: z.string(),
@@ -158,6 +223,7 @@ export const lessonExerciseRunResponseSchema = z.object({
   skill_state_after: skillStateSchema,
   execution_provider: z.string().optional(),
   case_results: z.array(lessonExerciseCaseResultSchema),
+  next_recommended_action: journeyActionViewSchema.nullable().optional(),
 });
 
 export const diagnosticOptionViewSchema = z.object({
@@ -215,6 +281,7 @@ export const diagnosticResponseFeedbackSchema = z.object({
 export const diagnosticSessionViewSchema = z.object({
   id: z.string().uuid(),
   language_slug: z.string().optional(),
+  assessment_mode: assessmentModeSchema.optional(),
   status: z.enum(["in_progress", "completed", "abandoned"]),
   explanation_language: z.enum(["en", "bn"]),
   answered_count: z.number().int(),
@@ -227,6 +294,7 @@ export const diagnosticSessionViewSchema = z.object({
   domain_evidence: z.array(diagnosticDomainEvidenceSchema).default([]),
   started_at: z.string(),
   completed_at: z.string().nullable().optional(),
+  next_recommended_action: journeyActionViewSchema.nullable().optional(),
 });
 
 export const skillNodeStateViewSchema = z.object({
@@ -289,10 +357,14 @@ export const learningDashboardViewSchema = z.object({
   latest_diagnostic: diagnosticSessionViewSchema.nullable().optional(),
   skill_graph: skillGraphViewSchema,
   recommendations: z.array(recommendationItemViewSchema),
+  journey: learningJourneyViewSchema.nullable().optional(),
 });
 
 export type TrackSlug = z.infer<typeof trackSlugSchema>;
 export type LanguageSlug = z.infer<typeof languageSlugSchema>;
+export type AssessmentMode = z.infer<typeof assessmentModeSchema>;
+export type JourneyActionView = z.infer<typeof journeyActionViewSchema>;
+export type LearningJourneyView = z.infer<typeof learningJourneyViewSchema>;
 export type LanguageProgressItem = z.infer<typeof languageProgressItemSchema>;
 export type LanguageProgressOverview = z.infer<
   typeof languageProgressOverviewSchema

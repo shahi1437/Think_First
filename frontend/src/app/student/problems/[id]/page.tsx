@@ -11,14 +11,17 @@ import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
 interface ProblemWorkspacePageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ tab?: string }>;
 }
 
 export const dynamic = "force-dynamic";
 
 export default async function ProblemWorkspacePage({
   params,
+  searchParams,
 }: ProblemWorkspacePageProps) {
   const { id } = await params;
+  const query = searchParams ? await searchParams : {};
   const { user, accessToken } = await requireAuthenticatedUser({
     allowedRoles: ["student", "teacher", "admin"],
     currentPath: `/student/problems/${id}`,
@@ -40,6 +43,9 @@ export default async function ProblemWorkspacePage({
     fetchTransferChallenge(accessToken, problem.problem_id).catch(() => null),
   ]);
 
+  const initialTab =
+    query.tab === "verify" || query.tab === "mentor" ? query.tab : undefined;
+
   return (
     <CodingWorkspace
       accessToken={accessToken}
@@ -48,6 +54,7 @@ export default async function ProblemWorkspacePage({
       initialRevisions={revisions}
       initialTransferChallenge={transferChallenge}
       preferredLanguageSlug={user.preferences?.active_language_slug ?? "python"}
+      initialBottomTab={initialTab}
     />
   );
 }
