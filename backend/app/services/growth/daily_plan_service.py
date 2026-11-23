@@ -27,7 +27,14 @@ from app.schemas.growth import (
     DailyPlanHistoryItemView,
     DailyPlanTaskView,
     DailyPlanWorkspaceView,
+    RetentionOverviewView,
     UpdateDailyTaskStatusRequest,
+)
+from app.schemas.learning import (
+    DiagnosticSessionView,
+    LessonSummaryView,
+    SkillGraphView,
+    StudentTrackStatus,
 )
 from app.services.growth.retention_service import RetentionVerificationService
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
@@ -118,21 +125,35 @@ class DailyPlanService:
         self._retention = retention_service
 
     async def _build_tasks(
-        self, *, user: UserRecord, available_minutes: int, language_slug: str = "python"
+        self,
+        *,
+        user: UserRecord,
+        available_minutes: int,
+        language_slug: str = "python",
+        track_status: StudentTrackStatus | None = None,
+        lessons: list[LessonSummaryView] | None = None,
+        skill_graph: SkillGraphView | None = None,
+        diag_sessions: list[DiagnosticSessionView] | None = None,
+        retention_overview: RetentionOverviewView | None = None,
     ) -> tuple[str, str, str, dict[str, Any], list[dict[str, Any]]]:
-        track_status = await self._lessons.get_track_status(user, language_slug=language_slug)
-        lessons = await self._lessons.list_lessons(user=user, language_slug=language_slug)
-        skill_graph = await self._skill_graph.get_student_skill_graph(
-            user.id, language_slug=language_slug
-        )
-        diag_sessions = await self._diagnostics.list_my_sessions(
-            user=user, language_slug=language_slug
-        )
+        if track_status is None:
+            track_status = await self._lessons.get_track_status(user, language_slug=language_slug)
+        if lessons is None:
+            lessons = await self._lessons.list_lessons(user=user, language_slug=language_slug)
+        if skill_graph is None:
+            skill_graph = await self._skill_graph.get_student_skill_graph(
+                user.id, language_slug=language_slug
+            )
+        if diag_sessions is None:
+            diag_sessions = await self._diagnostics.list_my_sessions(
+                user=user, language_slug=language_slug
+            )
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
         latest_diag = completed_diags[0] if completed_diags else None
-        retention_overview = await self._retention.get_retention_overview(
-            user, language_slug=language_slug
-        )
+        if retention_overview is None:
+            retention_overview = await self._retention.get_retention_overview(
+                user, language_slug=language_slug
+            )
 
         skill_state_map = {n.slug: n.state for n in skill_graph.nodes}
         tasks: list[dict[str, Any]] = []
@@ -434,7 +455,15 @@ class DailyPlanService:
         )
 
     async def get_today_workspace(
-        self, user: UserRecord, *, language_slug: str | None = None
+        self,
+        user: UserRecord,
+        *,
+        language_slug: str | None = None,
+        track_status: StudentTrackStatus | None = None,
+        lessons: list[LessonSummaryView] | None = None,
+        skill_graph: SkillGraphView | None = None,
+        diag_sessions: list[DiagnosticSessionView] | None = None,
+        retention_overview: RetentionOverviewView | None = None,
     ) -> DailyPlanWorkspaceView:
         lang = resolve_user_language(user, language_slug)
         today = datetime.now(UTC).date()
@@ -449,7 +478,14 @@ class DailyPlanService:
             )
             default_minutes = min(max(default_minutes, 15), 240)
             track_slug, reason_en, reason_bn, ev_snap, tasks = await self._build_tasks(
-                user=user, available_minutes=default_minutes, language_slug=lang
+                user=user,
+                available_minutes=default_minutes,
+                language_slug=lang,
+                track_status=track_status,
+                lessons=lessons,
+                skill_graph=skill_graph,
+                diag_sessions=diag_sessions,
+                retention_overview=retention_overview,
             )
             active = await self._growth_repo.create_daily_plan(
                 student_id=user.id,

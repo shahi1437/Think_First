@@ -127,5 +127,11 @@ export function resolvePostLoginRedirect(
   if (safeNext === "/teacher" || safeNext.startsWith("/teacher/")) {
     return canAccessPortal(roles, "teacher") ? safeNext : defaultPath;
   }
+  if (
+    safeNext === "/accept-teacher-invite" ||
+    safeNext.startsWith("/accept-teacher-invite?")
+  ) {
+    return safeNext;
+  }
   return safeNext;
 }

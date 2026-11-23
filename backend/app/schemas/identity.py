@@ -117,3 +117,109 @@ class PortalVerifyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     portal: RoleName
+
+
+TeacherInvitationStatus = Literal["pending", "accepted", "revoked", "expired"]
+TeacherInvitationDeliveryStatus = Literal["sent", "delivery_blocked"]
+TeacherStatusKind = Literal[
+    "active_teacher",
+    "existing_user_not_teacher",
+    "pending_invitation",
+    "expired_invitation",
+    "revoked_invitation",
+    "not_found",
+]
+
+
+class TeacherInvitationView(BaseModel):
+    """Admin view of a teacher invitation record (never exposes raw token or token hash)."""
+
+    id: UUID
+    email: str
+    full_name: str = ""
+    status: TeacherInvitationStatus
+    delivery_status: TeacherInvitationDeliveryStatus
+    delivery_detail: str
+    token_preview: str
+    invited_by_id: UUID | None = None
+    invited_by_email: str | None = None
+    accepted_by_user_id: UUID | None = None
+    accepted_at: datetime | None = None
+    revoked_by_user_id: UUID | None = None
+    revoked_at: datetime | None = None
+    resend_count: int = 0
+    expires_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class TeacherInvitationCreateRequest(BaseModel):
+    """Admin request to invite a new Teacher by email (extra fields forbidden)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(..., min_length=5, max_length=254)
+    full_name: str = Field(default="", max_length=120)
+    expires_in_days: int = Field(default=7, ge=1, le=30)
+
+
+class TeacherInvitationMutationResponse(BaseModel):
+    """Result of creating, resending, or revoking a teacher invitation."""
+
+    invitation: TeacherInvitationView
+    invitation_token: str | None = None
+    accept_path: str | None = None
+    action: Literal[
+        "teacher.invitation_created",
+        "teacher.invitation_resent",
+        "teacher.invitation_revoked",
+    ]
+
+
+class TeacherLookupResponse(BaseModel):
+    """Unified Admin lookup of an email across existing accounts and teacher invitations."""
+
+    email: str
+    status: TeacherStatusKind
+    can_grant_directly: bool
+    can_invite: bool
+    existing_user: AdminUserSummary | None = None
+    latest_invitation: TeacherInvitationView | None = None
+    message: str
+
+
+class TeacherManagementOverviewResponse(BaseModel):
+    """Unified Teacher Management payload for Admin Dashboard."""
+
+    active_teachers: list[AdminUserSummary]
+    active_teachers_total: int
+    invitations: list[TeacherInvitationView]
+    pending_invitations_count: int
+
+
+class TeacherInvitationInspectResponse(BaseModel):
+    """Public/authenticated inspection of a teacher invitation token prior to acceptance."""
+
+    invitation_id: UUID
+    email: str
+    full_name: str = ""
+    status: TeacherInvitationStatus
+    expires_at: datetime
+    is_valid: bool
+    message: str
+
+
+class TeacherInvitationAcceptRequest(BaseModel):
+    """Authenticated request to accept a teacher invitation token (extra fields forbidden)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(..., min_length=16, max_length=256)
+
+
+class TeacherInvitationAcceptResponse(BaseModel):
+    """Verified teacher invitation acceptance response."""
+
+    invitation_id: UUID
+    user: UserMeResponse
+    action: Literal["teacher.invitation_accepted"] = "teacher.invitation_accepted"

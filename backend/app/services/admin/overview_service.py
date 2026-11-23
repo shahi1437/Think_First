@@ -28,8 +28,8 @@ class AdminOverviewService:
 
     async def get_overview(self) -> AdminDashboardOverview:
         problem_rows = await self._repo.get_latest_problem_status_rows()
-        lesson_rows = await self._repo.list_all_lessons_with_latest()
-        diagnostic_rows = await self._repo.list_all_diagnostic_questions()
+        lesson_rows = await self._repo.list_lesson_overview_rows()
+        diagnostic_published, diagnostic_stretch = await self._repo.get_diagnostic_question_counts()
         tracks = await self._repo.list_tracks()
         knowledge_approved, knowledge_total = await self._repo.list_knowledge_status_counts()
         skill_nodes_count = await self._repo.count_skill_nodes()
@@ -76,9 +76,8 @@ class AdminOverviewService:
         for track in tracks:
             l_cnt = sum(
                 1
-                for lsn, lv in lesson_rows
-                if lsn.current_published_version_id is not None
-                and track.slug in (lv.track_slugs or [])
+                for pub_ver_id, track_slugs in lesson_rows
+                if pub_ver_id is not None and track.slug in track_slugs
             )
             p_cnt = sum(
                 1
@@ -99,13 +98,7 @@ class AdminOverviewService:
                 )
             )
 
-        lessons_published = sum(
-            1 for lsn, _lv in lesson_rows if lsn.current_published_version_id is not None
-        )
-        diagnostic_published = sum(1 for q in diagnostic_rows if q.status == "published")
-        diagnostic_stretch = sum(
-            1 for q in diagnostic_rows if q.status == "published" and q.difficulty == "stretch"
-        )
+        lessons_published = sum(1 for pub_ver_id, _ts in lesson_rows if pub_ver_id is not None)
 
         recent_audits = [
             AdminAuditLogItem(

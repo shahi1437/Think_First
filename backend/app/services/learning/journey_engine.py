@@ -725,6 +725,10 @@ class LearningJourneyService:
         lessons: list[LessonSummaryView] | None = None,
         skill_graph: SkillGraphView | None = None,
         diag_sessions: list[DiagnosticSessionView] | None = None,
+        preloaded_transfers_and_problems: tuple[
+            list[TransferCandidate], list[PracticeProblemCandidate]
+        ]
+        | None = None,
     ) -> LearningJourneyView:
         lang = resolve_user_language(user, language_slug)
         prefs = user.preferences
@@ -756,9 +760,12 @@ class LearningJourneyService:
         now = datetime.now(UTC)
         urgent_assignments = await self._load_urgent_assignments(user.id, now)
         due_retentions = await self._load_due_retentions(user.id, lang, now)
-        unlocked_transfers, unsolved_problems = await self._load_problems_and_transfers(
-            user.id, lang
-        )
+        if preloaded_transfers_and_problems is not None:
+            unlocked_transfers, unsolved_problems = preloaded_transfers_and_problems
+        else:
+            unlocked_transfers, unsolved_problems = await self._load_problems_and_transfers(
+                user.id, lang
+            )
         pending_daily = await self._count_pending_daily_tasks(user.id, lang)
 
         return decide_learning_journey(

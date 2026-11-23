@@ -21,6 +21,7 @@ from app.schemas.growth import (
     LearningDnaProfileView,
     LearningDnaSnapshotSummaryView,
 )
+from app.schemas.learning import SkillGraphView, StudentTrackStatus
 from app.services.learning.lessons_service import (
     LessonsAndTracksService,
     resolve_user_language,
@@ -56,11 +57,20 @@ class LearningDnaService:
         self._skill_graph = skill_graph_service
 
     async def compute_and_persist_profile(
-        self, user: UserRecord, *, language_slug: str | None = None
+        self,
+        user: UserRecord,
+        *,
+        language_slug: str | None = None,
+        track_status: StudentTrackStatus | None = None,
+        skill_graph: SkillGraphView | None = None,
     ) -> LearningDnaProfileView:
         lang = resolve_user_language(user, language_slug)
-        track_status = await self._lessons.get_track_status(user, language_slug=lang)
-        skill_graph = await self._skill_graph.get_student_skill_graph(user.id, language_slug=lang)
+        if track_status is None:
+            track_status = await self._lessons.get_track_status(user, language_slug=lang)
+        if skill_graph is None:
+            skill_graph = await self._skill_graph.get_student_skill_graph(
+                user.id, language_slug=lang
+            )
 
         submissions = await self._growth_repo.list_student_submissions_all(
             student_id=user.id, language_slug=lang

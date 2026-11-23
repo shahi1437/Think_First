@@ -8,6 +8,7 @@ import {
   fetchRetentionOverview,
   fetchStudentAssignments,
   fetchStudentClasses,
+  fetchStudentDashboardBundle,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
@@ -28,23 +29,46 @@ export default async function StudentDashboardPage({
     redirect("/student/onboarding");
   }
 
-  const [
-    languageOverview,
+  const bundle = await fetchStudentDashboardBundle(accessToken).catch(
+    async () => {
+      const [
+        languageOverview,
+        dashboard,
+        dnaProfile,
+        dailyPlanWorkspace,
+        retentionOverview,
+        enrolledClasses,
+        studentAssignments,
+      ] = await Promise.all([
+        fetchLanguageProgressOverview(accessToken),
+        fetchLearningDashboard(accessToken),
+        fetchLearningDnaProfile(accessToken),
+        fetchDailyPlanWorkspace(accessToken),
+        fetchRetentionOverview(accessToken),
+        fetchStudentClasses(accessToken).catch(() => []),
+        fetchStudentAssignments(accessToken).catch(() => []),
+      ]);
+      return {
+        language_overview: languageOverview,
+        dashboard,
+        dna_profile: dnaProfile,
+        daily_plan_workspace: dailyPlanWorkspace,
+        retention_overview: retentionOverview,
+        enrolled_classes: enrolledClasses,
+        student_assignments: studentAssignments,
+      };
+    },
+  );
+
+  const {
+    language_overview: languageOverview,
     dashboard,
-    dnaProfile,
-    dailyPlanWorkspace,
-    retentionOverview,
-    enrolledClasses,
-    studentAssignments,
-  ] = await Promise.all([
-    fetchLanguageProgressOverview(accessToken),
-    fetchLearningDashboard(accessToken),
-    fetchLearningDnaProfile(accessToken),
-    fetchDailyPlanWorkspace(accessToken),
-    fetchRetentionOverview(accessToken),
-    fetchStudentClasses(accessToken).catch(() => []),
-    fetchStudentAssignments(accessToken).catch(() => []),
-  ]);
+    dna_profile: dnaProfile,
+    daily_plan_workspace: dailyPlanWorkspace,
+    retention_overview: retentionOverview,
+    enrolled_classes: enrolledClasses,
+    student_assignments: studentAssignments,
+  } = bundle;
 
   return (
     <div className="space-y-4">
@@ -68,7 +92,9 @@ export default async function StudentDashboardPage({
         studentName={user.full_name || user.email}
         initialDashboard={dashboard}
         languageOverview={languageOverview}
-        initialLanguage={user.preferences?.preferred_explanation_language ?? "en"}
+        initialLanguage={
+          user.preferences?.preferred_explanation_language ?? "en"
+        }
         dnaSummary={{
           verifiedCount: dnaProfile.dimensions.filter(
             (d) => d.evidence_band === "verified",
@@ -88,8 +114,9 @@ export default async function StudentDashboardPage({
           retainedSkillsCount: retentionOverview.retained_skills_count,
         }}
         classroomSummary={{
-          enrolledCount: enrolledClasses.filter((c) => c.membership_status === "active")
-            .length,
+          enrolledCount: enrolledClasses.filter(
+            (c) => c.membership_status === "active",
+          ).length,
           pendingAssignmentsCount: studentAssignments.filter(
             (a) =>
               a.workflow_status !== "graded" &&

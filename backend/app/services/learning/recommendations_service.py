@@ -13,7 +13,10 @@ Uses deterministic, auditable prerequisite rules — never fabricates AI persona
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from uuid import UUID
 
+from app.models.mentor import VerificationLink
+from app.models.problems import Problem, ProblemVersion
 from app.repositories.identity import UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
@@ -68,6 +71,13 @@ class AdaptiveRecommendationService:
         lessons: list[LessonSummaryView] | None = None,
         skill_graph: SkillGraphView | None = None,
         diag_sessions: list[DiagnosticSessionView] | None = None,
+        preloaded_candidates: tuple[
+            list[tuple[Problem, ProblemVersion]],
+            set[UUID],
+            dict[UUID, tuple[VerificationLink, Problem, ProblemVersion]],
+            set[str],
+        ]
+        | None = None,
     ) -> list[RecommendationItemView]:
         lang = resolve_user_language(user, language_slug)
         if track_status is None:
@@ -191,21 +201,30 @@ class AdaptiveRecommendationService:
             priority += 1
 
         # 3. Connect Phase 3 & Phase 4 Debugging + Transfer Verification problems for this language
-        problems, _ = await self._problem_repo.list_published_problems(
-            language=lang, limit=20, offset=0
-        )
-        if not problems:
-            problems, _ = await self._problem_repo.list_published_problems(limit=20, offset=0)
-        candidate_problems = [
-            (prob, ver) for prob, ver in problems if not prob.slug.startswith("transfer-")
-        ]
-        candidate_ids = [prob.id for prob, _ in candidate_problems]
-        accepted_ids = await self._mentor_repo.list_accepted_submit_problem_ids(
-            student_id=user.id, problem_ids=candidate_ids
-        )
-        links_by_source = await self._mentor_repo.list_active_verification_links_by_source(
-            candidate_ids
-        )
+        unverified_transfer_source_ids: set[str] | None = None
+        if preloaded_candidates is not None:
+            (
+                candidate_problems,
+                accepted_ids,
+                links_by_source,
+                unverified_transfer_source_ids,
+            ) = preloaded_candidates
+        else:
+            problems, _ = await self._problem_repo.list_published_problems(
+                language=lang, limit=20, offset=0
+            )
+            if not problems:
+                problems, _ = await self._problem_repo.list_published_problems(limit=20, offset=0)
+            candidate_problems = [
+                (prob, ver) for prob, ver in problems if not prob.slug.startswith("transfer-")
+            ]
+            candidate_ids = [prob.id for prob, _ in candidate_problems]
+            accepted_ids = await self._mentor_repo.list_accepted_submit_problem_ids(
+                student_id=user.id, problem_ids=candidate_ids
+            )
+            links_by_source = await self._mentor_repo.list_active_verification_links_by_source(
+                candidate_ids
+            )
         for prob, ver in candidate_problems:
             if len(recommendations) >= 4:
                 break
@@ -214,10 +233,16 @@ class AdaptiveRecommendationService:
 
             if is_accepted and link_tuple is not None:
                 link, _, transfer_ver = link_tuple
-                latest_att = await self._mentor_repo.get_latest_verification_attempt(
-                    student_id=user.id, verification_link_id=link.id
-                )
-                if latest_att is None or latest_att.outcome != "verified_independent":
+                if unverified_transfer_source_ids is not None:
+                    needs_transfer = str(prob.id) in unverified_transfer_source_ids
+                else:
+                    latest_att = await self._mentor_repo.get_latest_verification_attempt(
+                        student_id=user.id, verification_link_id=link.id
+                    )
+                    needs_transfer = (
+                        latest_att is None or latest_att.outcome != "verified_independent"
+                    )
+                if needs_transfer:
                     recommendations.append(
                         RecommendationItemView(
                             recommendation_type="transfer_challenge",
@@ -293,12 +318,70 @@ class AdaptiveRecommendationService:
     async def get_dashboard(
         self, user: UserRecord, *, language_slug: str | None = None
     ) -> LearningDashboardView:
+        from app.services.learning.journey_engine import (
+            PracticeProblemCandidate,
+            TransferCandidate,
+        )
+
         lang = resolve_user_language(user, language_slug)
-        track_status = await self._lessons.get_track_status(user, language_slug=lang)
-        lessons = await self._lessons.list_lessons(user=user, language_slug=lang)
-        skill_graph = await self._skill_graph.get_student_skill_graph(user.id, language_slug=lang)
         diag_sessions = await self._diagnostics.list_my_sessions(user=user, language_slug=lang)
         completed_diags = [s for s in diag_sessions if s.status == "completed"]
+        track_status = await self._lessons.get_track_status(
+            user,
+            language_slug=lang,
+            completed_diag_override=len(completed_diags) > 0,
+        )
+        lessons = await self._lessons.list_lessons(user=user, language_slug=lang)
+        skill_graph = await self._skill_graph.get_student_skill_graph(user.id, language_slug=lang)
+
+        problems, _ = await self._problem_repo.list_published_problems(
+            language=lang, limit=20, offset=0
+        )
+        if not problems:
+            problems, _ = await self._problem_repo.list_published_problems(limit=20, offset=0)
+        candidate_problems = [
+            (prob, ver) for prob, ver in problems if not prob.slug.startswith("transfer-")
+        ]
+        candidate_ids = [prob.id for prob, _ in candidate_problems]
+        accepted_ids = await self._mentor_repo.list_accepted_submit_problem_ids(
+            student_id=user.id, problem_ids=candidate_ids
+        )
+        links_by_source = await self._mentor_repo.list_active_verification_links_by_source(
+            candidate_ids
+        )
+
+        unlocked_transfers: list[TransferCandidate] = []
+        unsolved_problems: list[PracticeProblemCandidate] = []
+        for prob, ver in candidate_problems:
+            if prob.id in accepted_ids:
+                link_tuple = links_by_source.get(prob.id)
+                if link_tuple is not None:
+                    link, _, transfer_ver = link_tuple
+                    latest_att = await self._mentor_repo.get_latest_verification_attempt(
+                        student_id=user.id, verification_link_id=link.id
+                    )
+                    if latest_att is None or latest_att.outcome != "verified_independent":
+                        unlocked_transfers.append(
+                            TransferCandidate(
+                                source_problem_id=str(prob.id),
+                                source_problem_slug=prob.slug,
+                                source_problem_title=ver.title,
+                                transfer_problem_title=transfer_ver.title,
+                                skill_focus=link.skill_focus,
+                            )
+                        )
+            else:
+                unsolved_problems.append(
+                    PracticeProblemCandidate(
+                        problem_id=str(prob.id),
+                        slug=prob.slug,
+                        title=ver.title,
+                        mode=ver.mode,
+                        difficulty=ver.difficulty,
+                    )
+                )
+        unsolved_problems.sort(key=lambda p: (0 if p.mode == "debugging" else 1, p.difficulty))
+
         recommendations = await self.compute_recommendations(
             user,
             language_slug=lang,
@@ -306,6 +389,12 @@ class AdaptiveRecommendationService:
             lessons=lessons,
             skill_graph=skill_graph,
             diag_sessions=diag_sessions,
+            preloaded_candidates=(
+                candidate_problems,
+                accepted_ids,
+                links_by_source,
+                {t.source_problem_id for t in unlocked_transfers},
+            ),
         )
         journey = (
             await self._journey.evaluate(
@@ -315,6 +404,7 @@ class AdaptiveRecommendationService:
                 lessons=lessons,
                 skill_graph=skill_graph,
                 diag_sessions=diag_sessions,
+                preloaded_transfers_and_problems=(unlocked_transfers, unsolved_problems),
             )
             if self._journey is not None
             else None

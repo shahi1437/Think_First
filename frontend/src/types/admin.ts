@@ -172,6 +172,85 @@ export const adminOperationsHealthSchema = z.object({
   checks: z.array(operationalCheckStatusSchema),
 });
 
+export const teacherInvitationStatusSchema = z.enum([
+  "pending",
+  "accepted",
+  "revoked",
+  "expired",
+]);
+
+export const teacherInvitationDeliveryStatusSchema = z.enum([
+  "sent",
+  "delivery_blocked",
+]);
+
+export const teacherStatusKindSchema = z.enum([
+  "active_teacher",
+  "existing_user_not_teacher",
+  "pending_invitation",
+  "expired_invitation",
+  "revoked_invitation",
+  "not_found",
+]);
+
+export const teacherInvitationViewSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  full_name: z.string().default(""),
+  status: teacherInvitationStatusSchema,
+  delivery_status: teacherInvitationDeliveryStatusSchema,
+  delivery_detail: z.string(),
+  token_preview: z.string(),
+  invited_by_id: z.string().nullable().optional(),
+  invited_by_email: z.string().nullable().optional(),
+  accepted_by_user_id: z.string().nullable().optional(),
+  accepted_at: z.string().nullable().optional(),
+  revoked_by_user_id: z.string().nullable().optional(),
+  revoked_at: z.string().nullable().optional(),
+  resend_count: z.number().int().default(0),
+  expires_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const teacherInvitationMutationResponseSchema = z.object({
+  invitation: teacherInvitationViewSchema,
+  invitation_token: z.string().nullable().optional(),
+  accept_path: z.string().nullable().optional(),
+  action: z.enum([
+    "teacher.invitation_created",
+    "teacher.invitation_resent",
+    "teacher.invitation_revoked",
+  ]),
+});
+
+export const teacherLookupResponseSchema = z.object({
+  email: z.string(),
+  status: teacherStatusKindSchema,
+  can_grant_directly: z.boolean(),
+  can_invite: z.boolean(),
+  existing_user: adminUserSummarySchema.nullable().optional(),
+  latest_invitation: teacherInvitationViewSchema.nullable().optional(),
+  message: z.string(),
+});
+
+export const teacherManagementOverviewSchema = z.object({
+  active_teachers: z.array(adminUserSummarySchema),
+  active_teachers_total: z.number().int(),
+  invitations: z.array(teacherInvitationViewSchema),
+  pending_invitations_count: z.number().int(),
+});
+
+export const teacherInvitationInspectResponseSchema = z.object({
+  invitation_id: z.string(),
+  email: z.string(),
+  full_name: z.string().default(""),
+  status: teacherInvitationStatusSchema,
+  expires_at: z.string(),
+  is_valid: z.boolean(),
+  message: z.string(),
+});
+
 export type AdminAuditLogItem = z.infer<typeof adminAuditLogItemSchema>;
 export type AdminDashboardOverview = z.infer<typeof adminDashboardOverviewSchema>;
 export type AdminOperationsHealth = z.infer<typeof adminOperationsHealthSchema>;
@@ -184,3 +263,21 @@ export type AdminDiagnosticQuestionDetail = z.infer<
 >;
 export type KnowledgeDocumentItem = z.infer<typeof knowledgeDocumentSchema>;
 export type AdminUserSummary = z.infer<typeof adminUserSummarySchema>;
+export type TeacherInvitationStatus = z.infer<
+  typeof teacherInvitationStatusSchema
+>;
+export type TeacherInvitationDeliveryStatus = z.infer<
+  typeof teacherInvitationDeliveryStatusSchema
+>;
+export type TeacherStatusKind = z.infer<typeof teacherStatusKindSchema>;
+export type TeacherInvitationView = z.infer<typeof teacherInvitationViewSchema>;
+export type TeacherInvitationMutationResponse = z.infer<
+  typeof teacherInvitationMutationResponseSchema
+>;
+export type TeacherLookupResponse = z.infer<typeof teacherLookupResponseSchema>;
+export type TeacherManagementOverview = z.infer<
+  typeof teacherManagementOverviewSchema
+>;
+export type TeacherInvitationInspectResponse = z.infer<
+  typeof teacherInvitationInspectResponseSchema
+>;
