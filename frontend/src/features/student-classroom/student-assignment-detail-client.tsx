@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { CodeEditor } from "@/features/workspace/code-editor";
 import {
   createSubmission,
+  fetchSubmissionDetail,
   saveWorkspaceRevision,
   submitStudentAssignment,
 } from "@/lib/api-client";
@@ -82,13 +83,27 @@ export function StudentAssignmentDetailClient({
     setError(null);
     setRunningJudge0(true);
     try {
-      const res = await createSubmission(accessToken, {
+      let res = await createSubmission(accessToken, {
         problem_id: activeProblem.problem_id,
         language_slug: "python",
         submission_kind: "run",
         source_code: currentCode,
       });
       setLastRunResult(res);
+      const deadline = Date.now() + 65_000;
+      while (
+        (res.status === "queued" || res.status === "running") &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        res = await fetchSubmissionDetail(accessToken, res.id);
+        setLastRunResult(res);
+      }
+      if (res.status === "queued" || res.status === "running") {
+        setError(
+          "Code execution timed out while waiting for the local Judge0 runner. Please check the runner status and try again.",
+        );
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not run public tests.",

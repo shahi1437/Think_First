@@ -25,7 +25,11 @@ async def create_submission(
     service: ExecutionService = Depends(get_execution_service),
 ) -> SubmissionResponse:
     """Run public tests (`run`) or evaluate public + hidden tests (`submit`) via Judge0."""
-    return await service.execute_submission(user=current_user, payload=payload)
+    return await service.execute_submission(
+        user=current_user,
+        payload=payload,
+        wait_for_completion=False,
+    )
 
 
 @submissions_router.get("", response_model=PaginatedResponse[SubmissionSummaryItem])
@@ -53,6 +57,16 @@ async def get_submission(
 ) -> SubmissionResponse:
     """Fetch a single submission's sanitized execution results (owner or Admin only)."""
     return await service.get_submission(user=current_user, submission_id=submission_id)
+
+
+@submissions_router.post("/{submission_id}/cancel", response_model=SubmissionResponse)
+async def cancel_submission(
+    submission_id: UUID,
+    current_user: UserRecord = Depends(get_current_user),
+    service: ExecutionService = Depends(get_execution_service),
+) -> SubmissionResponse:
+    """Cancel a queued execution job before the worker starts running it."""
+    return await service.cancel_submission(user=current_user, submission_id=submission_id)
 
 
 @workspace_router.put("/revisions", response_model=RevisionResponse)

@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CodingWorkspace } from "@/features/workspace/coding-workspace";
+import { ApiClientError } from "@/lib/api-client";
 import type {
+  ExecutionAvailability,
   RevisionResponse,
   StudentProblemDetail,
   SubmissionResponse,
@@ -190,5 +192,116 @@ describe("CodingWorkspace", () => {
         expect.objectContaining({ revision_type: "manual" }),
       );
     });
+  });
+
+  it("renders Queued -> Running -> Completed async execution, compiler/runtime errors, and offline unavailable state", async () => {
+    const baseSub: SubmissionResponse = {
+      id: "11111111-1111-1111-1111-111111111111",
+      problem_id: debugProblem.problem_id,
+      problem_version_id: debugProblem.version_id,
+      language_slug: "python",
+      submission_kind: "run",
+      source_code: "print(12)",
+      prediction_text: null,
+      explanation_text: null,
+      status: "queued",
+      verdict: "pending",
+      passed_tests: 0,
+      total_tests: 1,
+      runtime_ms: null,
+      memory_kb: null,
+      execution_provider: "judge0",
+      execution_evidence: {},
+      results: [],
+      created_at: new Date().toISOString(),
+    };
+
+    const runningSub: SubmissionResponse = { ...baseSub, status: "running" };
+    const completedCompileErr: SubmissionResponse = {
+      ...baseSub,
+      status: "completed",
+      verdict: "compilation_error",
+      results: [
+        {
+          ordinal: 1,
+          name: "Small positive range",
+          is_hidden: false,
+          verdict: "compilation_error",
+          input_data: "3 5",
+          expected_output: "12",
+          stdout: null,
+          stderr: "ZeroDivisionError: division by zero",
+          compile_output: "main.cpp:3: error: expected ';'",
+          runtime_ms: 12,
+          memory_kb: 2048,
+        },
+      ],
+    };
+
+    const executeSpy = vi.fn().mockResolvedValueOnce(baseSub);
+    const pollSpy = vi
+      .fn()
+      .mockResolvedValueOnce(runningSub)
+      .mockResolvedValueOnce(completedCompileErr);
+
+    const onlineStatus: ExecutionAvailability = {
+      mode: "worker_queue",
+      available: true,
+      worker_online: true,
+      active_workers: 1,
+      queue_depth: 0,
+      last_heartbeat_at: new Date().toISOString(),
+      message: "Local Judge0 Code Runner is online.",
+    };
+
+    render(
+      <CodingWorkspace
+        accessToken="token-123"
+        problem={debugProblem}
+        initialSubmissions={[]}
+        initialRevisions={[]}
+        initialExecutionStatus={onlineStatus}
+        usePlainEditor
+        onExecuteCode={executeSpy}
+        onPollSubmission={pollSpy}
+      />,
+    );
+
+    expect(screen.getByText("Runner Online")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Run Code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Queued")).toBeInTheDocument();
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByText("Completed")).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+    expect(screen.getAllByText("Compilation Error").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("main.cpp:3: error: expected ';'"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("ZeroDivisionError: division by zero"),
+    ).toBeInTheDocument();
+
+    // Verify offline 503 renders Execution Unavailable without permanent spinner
+    executeSpy.mockRejectedValueOnce(
+      new ApiClientError(
+        "Code execution is currently unavailable because the local Judge0 runner is offline.",
+        503,
+        "EXECUTION_SERVICE_UNAVAILABLE",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Run Code/i }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/local Judge0 runner is offline/i),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /Run Code/i })).not.toBeDisabled();
   });
 });

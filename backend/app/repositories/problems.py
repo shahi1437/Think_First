@@ -525,6 +525,7 @@ class ProblemRepository:
         prediction_text: str | None,
         explanation_text: str | None,
         total_tests: int,
+        initial_status: str = "running",
     ) -> Submission:
         sub = Submission(
             student_id=student_id,
@@ -535,7 +536,7 @@ class ProblemRepository:
             source_code=source_code,
             prediction_text=prediction_text,
             explanation_text=explanation_text,
-            status="running",
+            status=initial_status,
             verdict="pending",
             passed_tests=0,
             total_tests=total_tests,

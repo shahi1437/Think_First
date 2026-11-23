@@ -15,6 +15,7 @@ from app.core.database import DatabaseManager, get_db_manager
 from app.core.errors import AppError
 from app.integrations.judge0.client import build_judge0_auth_headers, is_judge0_configured
 from app.integrations.piston.client import is_piston_configured
+from app.repositories.execution_queue import ExecutionQueueRepository
 from app.repositories.identity import UserRecord
 from app.schemas.admin import (
     AdminAuditLogItem,
@@ -24,6 +25,7 @@ from app.schemas.admin import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services.admin.overview_service import AdminOverviewService
+from app.services.execution.worker_service import is_worker_queue_mode
 
 admin_overview_router = APIRouter(prefix="/admin", tags=["Admin Dashboard & Audit"])
 
@@ -77,7 +79,26 @@ async def get_admin_operations_health(
     judge0_latency: float | None = None
     judge0_detail = "Judge0 endpoint unreachable."
     j_start = time.perf_counter()
-    if not is_judge0_configured(settings):
+    if is_worker_queue_mode(settings):
+        try:
+            async for db_sess in db_manager.session():
+                q_repo = ExecutionQueueRepository(db_sess)
+                active_workers, _, q_depth = await q_repo.get_online_workers_summary(
+                    heartbeat_ttl_seconds=settings.execution_worker_heartbeat_ttl_seconds
+                )
+                judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
+                judge0_ok = active_workers > 0
+                judge0_detail = (
+                    f"Outbound local Judge0 worker online "
+                    f"(workers={active_workers}, queue={q_depth})."
+                    if judge0_ok
+                    else f"Outbound local Judge0 worker offline (queue={q_depth})."
+                )
+                break
+        except Exception as exc:
+            judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
+            judge0_detail = f"Worker queue health check failed ({type(exc).__name__})."
+    elif not is_judge0_configured(settings):
         judge0_latency = 0.0
         judge0_detail = "Judge0 CE is disabled or not configured yet (code execution unavailable)."
     else:

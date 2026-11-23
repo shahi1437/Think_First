@@ -12,10 +12,12 @@ from app.core.errors import AppError
 from app.core.security import AuthenticatedPrincipal, SupabaseJWTVerifier
 from app.integrations.execution.router import ResilientExecutionClient
 from app.integrations.judge0.client import HttpJudge0Client, Judge0Client
+from app.integrations.judge0.worker_client import WorkerQueueJudge0Client
 from app.integrations.llm.client import SocraticLLMClient
 from app.integrations.piston.client import HttpPistonClient, is_piston_configured
 from app.repositories.admin import AdminRepository
 from app.repositories.classroom import ClassroomRepository
+from app.repositories.execution_queue import ExecutionQueueRepository
 from app.repositories.growth import GrowthRepository
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
 from app.repositories.learning import LearningRepository
@@ -29,6 +31,7 @@ from app.services.classroom.assignment_service import AssignmentService
 from app.services.classroom.course_service import ClassroomCourseService
 from app.services.classroom.grading_service import GradingService
 from app.services.execution.service import ExecutionService
+from app.services.execution.worker_service import ExecutionWorkerService, is_worker_queue_mode
 from app.services.growth.daily_plan_service import DailyPlanService
 from app.services.growth.dna_service import LearningDnaService
 from app.services.growth.history_service import LearningHistoryService
@@ -79,10 +82,25 @@ def get_jwt_verifier(
 def get_judge0_client(
     settings: Settings = Depends(get_settings),
 ) -> Judge0Client:
-    """Return resilient execution client: Judge0 CE primary with Piston fallback."""
+    """Return resilient execution client: outbound worker queue OR direct Judge0 + Piston."""
+    if is_worker_queue_mode(settings):
+        return WorkerQueueJudge0Client(settings)
     primary = HttpJudge0Client(settings)
     fallback = HttpPistonClient(settings) if is_piston_configured(settings) else None
     return ResilientExecutionClient(primary=primary, fallback=fallback, settings=settings)
+
+
+def get_execution_queue_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> ExecutionQueueRepository:
+    return ExecutionQueueRepository(session)
+
+
+def get_execution_worker_service(
+    repo: ExecutionQueueRepository = Depends(get_execution_queue_repository),
+    settings: Settings = Depends(get_settings),
+) -> ExecutionWorkerService:
+    return ExecutionWorkerService(repo=repo, settings=settings)
 
 
 def get_identity_repository(
@@ -112,10 +130,16 @@ def get_problem_service(
 
 def get_execution_service(
     repository: ProblemRepository = Depends(get_problem_repository),
+    queue_repository: ExecutionQueueRepository = Depends(get_execution_queue_repository),
     judge0: Judge0Client = Depends(get_judge0_client),
     settings: Settings = Depends(get_settings),
 ) -> ExecutionService:
-    return ExecutionService(repository=repository, judge0=judge0, settings=settings)
+    return ExecutionService(
+        repository=repository,
+        judge0=judge0,
+        settings=settings,
+        queue_repository=queue_repository,
+    )
 
 
 @lru_cache(maxsize=4)

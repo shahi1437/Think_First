@@ -159,6 +159,16 @@ export const paginatedSubmissionsSchema = z.object({
   offset: z.number().int(),
 });
 
+export const executionAvailabilitySchema = z.object({
+  mode: z.enum(["direct_judge0", "worker_queue", "disabled"]),
+  available: z.boolean(),
+  worker_online: z.boolean(),
+  active_workers: z.number().int(),
+  queue_depth: z.number().int(),
+  last_heartbeat_at: z.string().nullable().optional(),
+  message: z.string(),
+});
+
 export const revisionResponseSchema = z.object({
   id: z.string(),
   problem_version_id: z.string(),
@@ -320,6 +330,7 @@ export type StudentProblemListItem = z.infer<typeof studentProblemListItemSchema
 export type StudentProblemDetail = z.infer<typeof studentProblemDetailSchema>;
 export type SubmissionResponse = z.infer<typeof submissionResponseSchema>;
 export type SubmissionSummaryItem = z.infer<typeof submissionSummaryItemSchema>;
+export type ExecutionAvailability = z.infer<typeof executionAvailabilitySchema>;
 export type RevisionResponse = z.infer<typeof revisionResponseSchema>;
 export type AdminProblemListItem = z.infer<typeof adminProblemListItemSchema>;
 export type AdminProblemDetail = z.infer<typeof adminProblemDetailSchema>;

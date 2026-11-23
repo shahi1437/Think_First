@@ -10,6 +10,7 @@ import {
   adminProblemDetailSchema,
   adminProblemVersionsResponseSchema,
   adminValidationReportSchema,
+  executionAvailabilitySchema,
   languageItemSchema,
   paginatedAdminProblemsSchema,
   paginatedProblemsSchema,
@@ -23,6 +24,7 @@ import {
   type AdminProblemVersionsResponse,
   type AdminValidationReport,
   type Difficulty,
+  type ExecutionAvailability,
   type ProblemMode,
   type ProblemStatus,
   type RevisionResponse,
@@ -451,6 +453,39 @@ export async function fetchSubmissionDetail(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return submissionResponseSchema.parse(await response.json());
+}
+
+export async function cancelSubmission(
+  accessToken: string,
+  submissionId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<SubmissionResponse> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/submissions/${submissionId}/cancel`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return submissionResponseSchema.parse(await response.json());
+}
+
+export async function fetchExecutionStatus(
+  accessToken: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<ExecutionAvailability> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/execution/status`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+    HEALTH_TIMEOUT_MS,
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return executionAvailabilitySchema.parse(await response.json());
 }
 
 export async function saveWorkspaceRevision(

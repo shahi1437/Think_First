@@ -56,7 +56,8 @@ class Settings(BaseSettings):
 
     # Phase 3+ Judge0 CE isolated code execution settings
     judge0_base_url: str = "http://127.0.0.1:2359"
-    judge0_auth_mode: str = "auto"  # "auto" | "auth_token" | "rapidapi" | "disabled"
+    # Supported modes: "auto" | "auth_token" | "rapidapi" | "worker_queue" | "disabled"
+    judge0_auth_mode: str = "auto"
     judge0_auth_token: str | None = None
     judge0_rapidapi_key: str | None = None
     judge0_rapidapi_host: str = "judge0-ce.p.rapidapi.com"
@@ -64,6 +65,34 @@ class Settings(BaseSettings):
     judge0_poll_interval_seconds: float = 0.4
     judge0_poll_timeout_seconds: float = 20.0
     judge0_max_retries: int = 2
+    # Outbound local execution worker queue settings (used when judge0_auth_mode == "worker_queue")
+    execution_worker_token: str | None = None
+    execution_worker_heartbeat_ttl_seconds: int = 35
+    execution_job_ttl_seconds: int = 90
+    execution_job_lease_seconds: int = 45
+    execution_max_concurrent_jobs_per_user: int = 2
+    execution_max_queue_depth: int = 25
+    execution_sync_wait_timeout_seconds: float = 35.0
+    execution_allowed_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    @field_validator("execution_allowed_emails", mode="before")
+    @classmethod
+    def _parse_execution_allowed_emails(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(item).strip().lower() for item in parsed if str(item).strip()]
+            return [item.strip().lower() for item in raw.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip().lower() for item in value if str(item).strip()]
+        raise ValueError("EXECUTION_ALLOWED_EMAILS must be a JSON array or comma-separated emails.")
+
     # Phase 3+ Self-hosted Piston secure fallback execution settings
     execution_fallback_enabled: bool = True
     piston_enabled: bool = True
@@ -128,8 +157,17 @@ class Settings(BaseSettings):
         j0_mode = (self.judge0_auth_mode or "auto").strip().lower()
         if j0_mode == "disabled":
             issues.append("JUDGE0_AUTH_MODE is disabled (code execution unavailable)")
+        elif j0_mode == "worker_queue":
+            if len((self.execution_worker_token or "").strip()) < 24:
+                issues.append(
+                    "EXECUTION_WORKER_TOKEN is missing or too short (<24 chars) "
+                    "for worker_queue mode"
+                )
         elif j0_mode not in {"auto", "auth_token", "rapidapi"}:
-            issues.append("JUDGE0_AUTH_MODE must be one of: auto, auth_token, rapidapi, disabled")
+            issues.append(
+                "JUDGE0_AUTH_MODE must be one of: auto, auth_token, rapidapi, "
+                "worker_queue, disabled"
+            )
         else:
             if not j0 or "127.0.0.1" in j0 or "localhost" in j0:
                 issues.append("JUDGE0_BASE_URL points to local loopback in production")

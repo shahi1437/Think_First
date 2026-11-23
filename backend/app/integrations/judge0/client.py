@@ -95,18 +95,22 @@ def map_judge0_status_to_verdict(status_id: int, stderr: str | None) -> Verdict:
 
 
 def is_judge0_configured(settings: Settings) -> bool:
-    """Return True only when Judge0 execution is enabled and has a non-empty base URL."""
+    """Return True only when direct HTTP Judge0 execution is enabled with a non-empty base URL."""
     mode = (settings.judge0_auth_mode or "auto").strip().lower()
-    if mode == "disabled":
+    if mode in {"disabled", "worker_queue"}:
         return False
     return bool((settings.judge0_base_url or "").strip())
 
 
-def resolve_judge0_auth_mode(settings: Settings) -> Literal["auth_token", "rapidapi", "disabled"]:
+def resolve_judge0_auth_mode(
+    settings: Settings,
+) -> Literal["auth_token", "rapidapi", "worker_queue", "disabled"]:
     """Resolve effective Judge0 CE authentication mode without mutating config."""
     mode = (settings.judge0_auth_mode or "auto").strip().lower()
     if mode == "disabled":
         return "disabled"
+    if mode == "worker_queue":
+        return "worker_queue"
     if mode not in {"auto", "auth_token", "rapidapi"}:
         raise AppError(
             code="INVALID_EXECUTION_CONFIG",
@@ -128,7 +132,7 @@ def resolve_judge0_auth_mode(settings: Settings) -> Literal["auth_token", "rapid
 def build_judge0_auth_headers(settings: Settings) -> dict[str, str]:
     """Build Judge0 authentication headers for self-hosted X-Auth-Token or RapidAPI."""
     mode = resolve_judge0_auth_mode(settings)
-    if mode == "disabled" or not (settings.judge0_base_url or "").strip():
+    if mode in {"disabled", "worker_queue"} or not (settings.judge0_base_url or "").strip():
         raise AppError(
             code="EXECUTION_SERVICE_UNAVAILABLE",
             message=(

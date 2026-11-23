@@ -35,11 +35,15 @@ def test_resolve_auth_headers_self_hosted_and_rapidapi_modes() -> None:
     assert resolve_judge0_auth_mode(self_hosted) == "auth_token"
     assert build_judge0_auth_headers(self_hosted) == {"X-Auth-Token": "local-token-xyz"}
 
-    no_token_local = Settings(judge0_base_url="http://127.0.0.1:2359")
+    no_token_local = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        judge0_base_url="http://127.0.0.1:2359",
+    )
     assert resolve_judge0_auth_mode(no_token_local) == "auth_token"
     assert build_judge0_auth_headers(no_token_local) == {}
 
     rapid_auto = Settings(
+        _env_file=None,  # type: ignore[call-arg]
         judge0_base_url="https://judge0-ce.p.rapidapi.com",
         judge0_rapidapi_key="rapid-secret-demo-key",
     )

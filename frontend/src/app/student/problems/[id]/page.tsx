@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { CodingWorkspace } from "@/features/workspace/coding-workspace";
 import {
   ApiClientError,
+  fetchExecutionStatus,
   fetchMySubmissions,
   fetchProblemDetail,
   fetchTransferChallenge,
@@ -37,11 +38,13 @@ export default async function ProblemWorkspacePage({
     throw err;
   }
 
-  const [submissionsRes, revisions, transferChallenge] = await Promise.all([
-    fetchMySubmissions(accessToken, problem.problem_id),
-    fetchWorkspaceRevisions(accessToken, problem.version_id),
-    fetchTransferChallenge(accessToken, problem.problem_id).catch(() => null),
-  ]);
+  const [submissionsRes, revisions, transferChallenge, executionStatus] =
+    await Promise.all([
+      fetchMySubmissions(accessToken, problem.problem_id),
+      fetchWorkspaceRevisions(accessToken, problem.version_id),
+      fetchTransferChallenge(accessToken, problem.problem_id).catch(() => null),
+      fetchExecutionStatus(accessToken).catch(() => null),
+    ]);
 
   const initialTab =
     query.tab === "verify" || query.tab === "mentor" ? query.tab : undefined;
@@ -53,6 +56,7 @@ export default async function ProblemWorkspacePage({
       initialSubmissions={submissionsRes.items}
       initialRevisions={revisions}
       initialTransferChallenge={transferChallenge}
+      initialExecutionStatus={executionStatus}
       preferredLanguageSlug={user.preferences?.active_language_slug ?? "python"}
       initialBottomTab={initialTab}
     />

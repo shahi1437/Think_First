@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +15,7 @@ from app.integrations.judge0.client import (
 )
 from app.integrations.piston.client import is_piston_configured
 from app.models.problems import CodeRevision, ExecutionResult, Submission, TestCase
+from app.repositories.execution_queue import ExecutionQueueRepository
 from app.repositories.identity import UserRecord
 from app.repositories.problems import ProblemRepository
 from app.schemas.common import PaginatedResponse
@@ -25,6 +28,8 @@ from app.schemas.problems import (
     TestCaseExecutionView,
     Verdict,
 )
+from app.services.execution.queue_hub import ExecutionQueueHub, get_execution_queue_hub
+from app.services.execution.worker_service import is_worker_queue_mode
 
 _VERDICT_PRIORITY: dict[str, int] = {
     "compilation_error": 6,
@@ -142,17 +147,36 @@ class ExecutionService:
         repository: ProblemRepository,
         judge0: Judge0Client,
         settings: Settings,
+        *,
+        queue_repository: ExecutionQueueRepository | None = None,
+        queue_hub: ExecutionQueueHub | None = None,
     ) -> None:
         self._repo = repository
         self._judge0 = judge0
         self._settings = settings
+        self._queue_repo = queue_repository
+        self._queue_hub = queue_hub or get_execution_queue_hub()
 
     async def execute_submission(
         self,
         *,
         user: UserRecord,
         payload: SubmissionCreateRequest,
+        wait_for_completion: bool = True,
     ) -> SubmissionResponse:
+        # 0. Optional trusted-account restriction (when configured on personal-PC runner)
+        if self._settings.execution_allowed_emails:
+            allowed_emails = {e.lower() for e in self._settings.execution_allowed_emails}
+            if user.email.lower() not in allowed_emails and "admin" not in user.roles:
+                raise AppError(
+                    code="EXECUTION_RESTRICTED",
+                    message=(
+                        "Live code execution is currently restricted to approved accounts "
+                        "while running on the host PC sandbox."
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
         # 1. Validate source code byte size
         code_bytes = len(payload.source_code.encode("utf-8"))
         if code_bytes > self._settings.max_source_code_bytes:
@@ -217,6 +241,26 @@ class ExecutionService:
                 code="NO_TESTS_CONFIGURED",
                 message="No executable test cases configured for this problem.",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # 4a. Outbound Execution Worker Queue Mode (zero domain / local Windows Judge0)
+        if is_worker_queue_mode(self._settings):
+            if self._queue_repo is None:
+                raise AppError(
+                    code="EXECUTION_SERVICE_UNAVAILABLE",
+                    message="Execution queue repository is not initialized.",
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            return await self._execute_via_worker_queue(
+                user=user,
+                payload=payload,
+                problem_id=problem.id,
+                version=version,
+                language_slug=language.slug,
+                judge0_language_id=language.judge0_language_id,
+                sorted_tests=sorted_tests,
+                selected_tests=selected_tests,
+                wait_for_completion=wait_for_completion,
             )
 
         # 4b. Fail clearly before creating a submission row if execution engine(s) are disabled
@@ -397,6 +441,167 @@ class ExecutionService:
         test_map = {tc.id: tc for tc in sorted_tests}
         return _to_submission_response(finalized, test_map, reveal_hidden=False)
 
+    async def _execute_via_worker_queue(
+        self,
+        *,
+        user: UserRecord,
+        payload: SubmissionCreateRequest,
+        problem_id: UUID,
+        version: Any,
+        language_slug: str,
+        judge0_language_id: int,
+        sorted_tests: list[TestCase],
+        selected_tests: list[TestCase],
+        wait_for_completion: bool,
+    ) -> SubmissionResponse:
+        assert self._queue_repo is not None
+        await self._queue_repo.sweep_expired_and_stale_jobs()
+
+        # 1. Fail clearly before creating zombie rows when host PC runner is offline
+        active_workers, _, queue_depth = await self._queue_repo.get_online_workers_summary(
+            heartbeat_ttl_seconds=self._settings.execution_worker_heartbeat_ttl_seconds
+        )
+        if active_workers <= 0:
+            raise AppError(
+                code="EXECUTION_SERVICE_UNAVAILABLE",
+                message=(
+                    "Code execution is currently unavailable because the local Judge0 runner "
+                    "is offline. Start ThinkFirst Code Runner on the host PC and try again. "
+                    "Your draft can still be saved as a revision."
+                ),
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        test_map = {tc.id: tc for tc in sorted_tests}
+        dedup_raw = f"{problem_id}:{language_slug}:{payload.submission_kind}:{payload.source_code}"
+        dedup_hash = hashlib.sha256(dedup_raw.encode("utf-8")).hexdigest()
+
+        # 2. Prevent duplicate execution from accidental double-clicks on identical in-flight code
+        existing_sub_id = await self._queue_repo.find_active_duplicate_submission_id(
+            user_id=user.id,
+            dedup_hash=dedup_hash,
+            window_seconds=60,
+        )
+        if existing_sub_id is not None:
+            existing_sub = await self._repo.get_submission_by_id(existing_sub_id)
+            if existing_sub is not None:
+                if not wait_for_completion:
+                    return _to_submission_response(existing_sub, test_map, reveal_hidden=False)
+                existing_job = await self._queue_repo.get_job_for_submission(existing_sub.id)
+                if existing_job is not None:
+                    return await self._await_queued_submission(
+                        job_id=existing_job.id,
+                        submission_id=existing_sub.id,
+                        test_map=test_map,
+                    )
+
+        # 3. Enforce per-user concurrent active job limit & global queue depth cap
+        user_active = await self._queue_repo.count_user_active_jobs(user_id=user.id)
+        if user_active >= self._settings.execution_max_concurrent_jobs_per_user:
+            raise AppError(
+                code="CONCURRENT_EXECUTION_LIMIT",
+                message=(
+                    "You already have code running in the queue. Please wait a moment for your "
+                    "current run to finish."
+                ),
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        if queue_depth >= self._settings.execution_max_queue_depth:
+            raise AppError(
+                code="EXECUTION_QUEUE_FULL",
+                message="The execution queue is busy right now. Please try again in a few seconds.",
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # 4. Persist queued submission + revision snapshot + transactional execution job
+        submission = await self._repo.create_submission(
+            student_id=user.id,
+            problem_id=problem_id,
+            problem_version_id=version.id,
+            language_slug=language_slug,
+            submission_kind=payload.submission_kind,
+            source_code=payload.source_code,
+            prediction_text=payload.prediction_text,
+            explanation_text=payload.explanation_text,
+            total_tests=len(selected_tests),
+            initial_status="queued",
+        )
+        await self._repo.save_revision(
+            student_id=user.id,
+            problem_version_id=version.id,
+            language_slug=language_slug,
+            source_code=payload.source_code,
+            prediction_text=payload.prediction_text,
+            explanation_text=payload.explanation_text,
+            revision_type=payload.submission_kind,
+        )
+
+        job = await self._queue_repo.enqueue_job(
+            job_type="submission",
+            submission_id=submission.id,
+            requested_by=user.id,
+            language_slug=language_slug,
+            judge0_language_id=judge0_language_id,
+            dedup_hash=dedup_hash,
+            payload_json={
+                "source_code": payload.source_code,
+                "cpu_time_limit_seconds": version.time_limit_ms / 1000.0,
+                "memory_limit_kb": version.memory_limit_kb,
+                "meta": {"mode": version.mode},
+                "test_cases": [
+                    {
+                        "test_case_id": str(tc.id),
+                        "ordinal": tc.ordinal,
+                        "stdin": tc.input_data,
+                        "expected_output": tc.expected_output,
+                        "is_hidden": tc.is_hidden,
+                    }
+                    for tc in selected_tests
+                ],
+            },
+            ttl_seconds=self._settings.execution_job_ttl_seconds,
+            max_attempts=2,
+        )
+        self._queue_hub.notify_new_job()
+
+        if wait_for_completion:
+            return await self._await_queued_submission(
+                job_id=job.id,
+                submission_id=submission.id,
+                test_map=test_map,
+            )
+
+        loaded = await self._repo.get_submission_by_id(submission.id)
+        return _to_submission_response(loaded or submission, test_map, reveal_hidden=False)
+
+    async def _await_queued_submission(
+        self,
+        *,
+        job_id: UUID,
+        submission_id: UUID,
+        test_map: dict[UUID, TestCase],
+    ) -> SubmissionResponse:
+        assert self._queue_repo is not None
+        deadline = (
+            asyncio.get_running_loop().time() + self._settings.execution_sync_wait_timeout_seconds
+        )
+        while asyncio.get_running_loop().time() < deadline:
+            remaining = max(0.1, min(1.5, deadline - asyncio.get_running_loop().time()))
+            await self._queue_hub.wait_for_job_done(job_id, remaining)
+            await self._queue_repo.sweep_expired_and_stale_jobs()
+            sub = await self._repo.get_submission_by_id(submission_id)
+            if sub is not None and sub.status in ("completed", "failed"):
+                return _to_submission_response(sub, test_map, reveal_hidden=False)
+
+        raise AppError(
+            code="EXECUTION_TIMEOUT",
+            message=(
+                "Code execution timed out waiting for the local Judge0 runner. "
+                "Please verify ThinkFirst Code Runner is online and try again."
+            ),
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+        )
+
     async def get_submission(self, *, user: UserRecord, submission_id: UUID) -> SubmissionResponse:
         submission = await self._repo.get_submission_by_id(submission_id)
         if submission is None:
@@ -412,8 +617,41 @@ class ExecutionService:
                 message="You do not have permission to view this submission.",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
+        if submission.status in ("queued", "running") and self._queue_repo is not None:
+            changed = await self._queue_repo.sweep_expired_and_stale_jobs()
+            if changed > 0:
+                reloaded = await self._repo.get_submission_by_id(submission_id)
+                if reloaded is not None:
+                    submission = reloaded
         test_map = await self._repo.get_test_cases_map(submission.problem_version_id)
         return _to_submission_response(submission, test_map, reveal_hidden=is_admin)
+
+    async def cancel_submission(
+        self, *, user: UserRecord, submission_id: UUID
+    ) -> SubmissionResponse:
+        submission = await self._repo.get_submission_by_id(submission_id)
+        if submission is None:
+            raise AppError(
+                code="SUBMISSION_NOT_FOUND",
+                message="Submission not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        if submission.student_id != user.id and "admin" not in user.roles:
+            raise AppError(
+                code="FORBIDDEN",
+                message="You do not have permission to cancel this submission.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+        if self._queue_repo is not None and submission.status == "queued":
+            await self._queue_repo.cancel_submission_job(
+                submission_id=submission.id,
+                user_id=submission.student_id,
+            )
+            reloaded = await self._repo.get_submission_by_id(submission_id)
+            if reloaded is not None:
+                submission = reloaded
+        test_map = await self._repo.get_test_cases_map(submission.problem_version_id)
+        return _to_submission_response(submission, test_map, reveal_hidden=False)
 
     async def list_my_submissions(
         self,

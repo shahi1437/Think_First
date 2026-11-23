@@ -21,10 +21,13 @@ services:
         value: authenticated
       - key: CORS_ORIGINS
         sync: false
-      # Production code execution (Judge0 CE via dedicated VPS `auth_token` or RapidAPI `rapidapi`)
-      # Set JUDGE0_AUTH_MODE + JUDGE0_BASE_URL + JUDGE0_AUTH_TOKEN (or JUDGE0_RAPIDAPI_KEY) in Render Dashboard -> Environment.
-      # To boot temporarily without Judge0 while keeping auth/lessons/diagnostics active, set JUDGE0_AUTH_MODE=disabled.
+      # Production code execution:
+      # Supported modes: `worker_queue` (free outbound local Windows Judge0 runner), `auth_token` (VPS), `rapidapi`, or `disabled`.
       - key: JUDGE0_AUTH_MODE
+        sync: false
+      - key: EXECUTION_WORKER_TOKEN
+        sync: false
+      - key: EXECUTION_ALLOWED_EMAILS
         sync: false
       - key: JUDGE0_BASE_URL
         sync: false

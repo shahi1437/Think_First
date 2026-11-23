@@ -11,9 +11,13 @@ import {
   Loader2,
   Lock,
   Play,
+  RefreshCw,
   RotateCcw,
   Save,
   Send,
+  Wifi,
+  WifiOff,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +27,10 @@ import { MentorPanel } from "@/features/mentor/mentor-panel";
 import { TransferVerificationPanel } from "@/features/verification/transfer-verification-panel";
 import { CodeEditor } from "@/features/workspace/code-editor";
 import {
+  ApiClientError,
+  cancelSubmission,
   createSubmission,
+  fetchExecutionStatus,
   fetchSubmissionDetail,
   fetchTransferChallenge,
   saveWorkspaceRevision,
@@ -33,6 +40,7 @@ import type {
   TransferChallengeSummary,
 } from "@/types/mentor";
 import type {
+  ExecutionAvailability,
   RevisionResponse,
   StudentProblemDetail,
   SubmissionResponse,
@@ -41,6 +49,17 @@ import type {
 
 type MobileTab = "problem" | "editor" | "results" | "mentor" | "verify";
 type BottomTab = "results" | "mentor" | "verify" | "submissions" | "revisions";
+type ExecutionLifecycleState =
+  | "idle"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "unavailable";
+
+const EXECUTION_POLL_INTERVAL_MS = 1200;
+const EXECUTION_MAX_POLL_MS = 75_000;
 
 interface CodingWorkspaceProps {
   accessToken: string;
@@ -48,6 +67,7 @@ interface CodingWorkspaceProps {
   initialSubmissions: SubmissionSummaryItem[];
   initialRevisions: RevisionResponse[];
   initialTransferChallenge?: TransferChallengeSummary | null;
+  initialExecutionStatus?: ExecutionAvailability | null;
   preferredLanguageSlug?: string;
   initialBottomTab?: BottomTab;
   usePlainEditor?: boolean;
@@ -59,6 +79,8 @@ interface CodingWorkspaceProps {
     prediction_text?: string;
     explanation_text?: string;
   }) => Promise<SubmissionResponse>;
+  onPollSubmission?: (submissionId: string) => Promise<SubmissionResponse>;
+  onCancelSubmission?: (submissionId: string) => Promise<SubmissionResponse>;
   onSaveRevision?: (payload: {
     problem_version_id: string;
     language_slug: string;
@@ -75,10 +97,13 @@ export function CodingWorkspace({
   initialSubmissions,
   initialRevisions,
   initialTransferChallenge = null,
+  initialExecutionStatus = null,
   preferredLanguageSlug,
   initialBottomTab,
   usePlainEditor = false,
   onExecuteCode,
+  onPollSubmission,
+  onCancelSubmission,
   onSaveRevision,
 }: CodingWorkspaceProps) {
   const defaultVariant =
@@ -138,6 +163,12 @@ export function CodingWorkspace({
     useState<TransferChallengeSummary | null>(initialTransferChallenge);
 
   const [runningKind, setRunningKind] = useState<"run" | "submit" | null>(null);
+  const [executionPhase, setExecutionPhase] =
+    useState<ExecutionLifecycleState>("idle");
+  const [executionStatus, setExecutionStatus] =
+    useState<ExecutionAvailability | null>(initialExecutionStatus);
+  const [refreshingRunnerStatus, setRefreshingRunnerStatus] = useState(false);
+  const [cancellingExecution, setCancellingExecution] = useState(false);
   const [loadingSubId, setLoadingSubId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [autosaveState, setAutosaveState] = useState<
@@ -148,7 +179,34 @@ export function CodingWorkspace({
   );
 
   const lastSavedCodeRef = useRef<string>(code);
+  const activePollRunRef = useRef<number>(0);
+  const isMountedRef = useRef<boolean>(true);
   const isDebugging = problem.mode === "debugging";
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      activePollRunRef.current += 1;
+    };
+  }, []);
+
+  const refreshExecutionAvailability = useCallback(async () => {
+    if (onExecuteCode) return;
+    setRefreshingRunnerStatus(true);
+    try {
+      const next = await fetchExecutionStatus(accessToken);
+      if (isMountedRef.current) {
+        setExecutionStatus(next);
+      }
+    } catch {
+      // Keep previous availability state on transient probe error
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshingRunnerStatus(false);
+      }
+    }
+  }, [accessToken, onExecuteCode]);
 
   const persistRevision = useCallback(
     async (kind: "autosave" | "manual") => {
@@ -214,9 +272,115 @@ export function CodingWorkspace({
     setAutosaveState("dirty");
   }
 
+  function upsertSubmissionSummary(item: SubmissionResponse) {
+    const summary: SubmissionSummaryItem = {
+      id: item.id,
+      problem_id: item.problem_id,
+      problem_version_id: item.problem_version_id,
+      language_slug: item.language_slug,
+      submission_kind: item.submission_kind,
+      status: item.status,
+      verdict: item.verdict,
+      passed_tests: item.passed_tests,
+      total_tests: item.total_tests,
+      runtime_ms: item.runtime_ms,
+      memory_kb: item.memory_kb,
+      execution_provider: item.execution_provider ?? "judge0",
+      created_at: item.created_at,
+    };
+    setSubmissions((prev) => [summary, ...prev.filter((s) => s.id !== item.id)]);
+  }
+
+  function derivePhaseFromSubmission(
+    sub: SubmissionResponse,
+  ): ExecutionLifecycleState {
+    if (sub.status === "queued") return "queued";
+    if (sub.status === "running") return "running";
+    if (sub.status === "completed") {
+      return sub.verdict === "time_limit_exceeded" ? "timed_out" : "completed";
+    }
+    const engineErr =
+      typeof sub.execution_evidence?.engine_error === "string"
+        ? sub.execution_evidence.engine_error
+        : "";
+    if (
+      sub.verdict === "time_limit_exceeded" ||
+      engineErr.includes("timeout")
+    ) {
+      return "timed_out";
+    }
+    if (
+      engineErr.includes("unavailable") ||
+      engineErr.includes("disconnected") ||
+      engineErr.includes("stopped")
+    ) {
+      return "unavailable";
+    }
+    return "failed";
+  }
+
+  async function pollSubmissionUntilDone(
+    initial: SubmissionResponse,
+    runToken: number,
+  ): Promise<SubmissionResponse> {
+    let latest = initial;
+    const deadline = Date.now() + EXECUTION_MAX_POLL_MS;
+    while (
+      (latest.status === "queued" || latest.status === "running") &&
+      Date.now() < deadline
+    ) {
+      if (!isMountedRef.current || activePollRunRef.current !== runToken) {
+        return latest;
+      }
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, EXECUTION_POLL_INTERVAL_MS),
+      );
+      if (!isMountedRef.current || activePollRunRef.current !== runToken) {
+        return latest;
+      }
+      latest = onPollSubmission
+        ? await onPollSubmission(latest.id)
+        : await fetchSubmissionDetail(accessToken, latest.id);
+      if (!isMountedRef.current || activePollRunRef.current !== runToken) {
+        return latest;
+      }
+      setActiveSubmission(latest);
+      upsertSubmissionSummary(latest);
+      setExecutionPhase(derivePhaseFromSubmission(latest));
+    }
+    return latest;
+  }
+
+  async function handleCancelActiveExecution() {
+    if (!activeSubmission || activeSubmission.status !== "queued") return;
+    setCancellingExecution(true);
+    try {
+      const updated = onCancelSubmission
+        ? await onCancelSubmission(activeSubmission.id)
+        : await cancelSubmission(accessToken, activeSubmission.id);
+      activePollRunRef.current += 1;
+      setActiveSubmission(updated);
+      upsertSubmissionSummary(updated);
+      setExecutionPhase(derivePhaseFromSubmission(updated));
+      setRunningKind(null);
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Could not cancel execution.",
+      );
+    } finally {
+      setCancellingExecution(false);
+    }
+  }
+
   async function handleExecute(kind: "run" | "submit") {
+    const runToken = activePollRunRef.current + 1;
+    activePollRunRef.current = runToken;
     setErrorMessage(null);
     setRunningKind(kind);
+    setExecutionPhase("queued");
+    setBottomTab("results");
+    setMobileTab("results");
+
     try {
       const payload = {
         problem_id: problem.problem_id,
@@ -226,42 +390,73 @@ export function CodingWorkspace({
         prediction_text: predictionText.trim() || undefined,
         explanation_text: explanationText.trim() || undefined,
       };
-      const result = onExecuteCode
+      let result = onExecuteCode
         ? await onExecuteCode(payload)
         : await createSubmission(accessToken, payload);
 
+      if (!isMountedRef.current || activePollRunRef.current !== runToken) {
+        return;
+      }
+
       setActiveSubmission(result);
-      setSubmissions((prev) => [
-        {
-          id: result.id,
-          problem_id: result.problem_id,
-          problem_version_id: result.problem_version_id,
-          language_slug: result.language_slug,
-          submission_kind: result.submission_kind,
-          status: result.status,
-          verdict: result.verdict,
-          passed_tests: result.passed_tests,
-          total_tests: result.total_tests,
-          runtime_ms: result.runtime_ms,
-          memory_kb: result.memory_kb,
-          execution_provider: result.execution_provider ?? "judge0",
-          created_at: result.created_at,
-        },
-        ...prev,
-      ]);
+      upsertSubmissionSummary(result);
       lastSavedCodeRef.current = code;
       setAutosaveState("saved");
       setLastSavedAt(result.created_at);
-      setBottomTab("results");
-      setMobileTab("results");
+      setExecutionPhase(derivePhaseFromSubmission(result));
 
-      // Refresh linked independent transfer challenge unlock state after Submit Code passes
-      if (result.submission_kind === "submit" && result.verdict === "accepted") {
+      // Poll cleanly when backend enqueues work for the local outbound Judge0 runner
+      if (result.status === "queued" || result.status === "running") {
+        result = await pollSubmissionUntilDone(result, runToken);
+        if (!isMountedRef.current || activePollRunRef.current !== runToken) {
+          return;
+        }
+        if (result.status === "queued" || result.status === "running") {
+          setExecutionPhase("timed_out");
+          setErrorMessage(
+            "Timed out waiting for the local Judge0 runner to finish. Check that ThinkFirst Code Runner is running, or click 'Recheck Status' below.",
+          );
+          void refreshExecutionAvailability();
+          return;
+        }
+      }
+
+      if (result.status === "failed") {
+        const userMsg =
+          typeof result.execution_evidence?.user_message === "string"
+            ? result.execution_evidence.user_message
+            : "Code execution failed before completing all tests.";
+        setErrorMessage(userMsg);
+        void refreshExecutionAvailability();
+      } else if (
+        result.submission_kind === "submit" &&
+        result.verdict === "accepted"
+      ) {
+        // Refresh linked independent transfer challenge unlock state after Submit Code passes
         fetchTransferChallenge(accessToken, problem.problem_id)
-          .then((nextChallenge) => setTransferChallenge(nextChallenge))
+          .then((nextChallenge) => {
+            if (isMountedRef.current) setTransferChallenge(nextChallenge);
+          })
           .catch(() => undefined);
       }
     } catch (err) {
+      if (!isMountedRef.current || activePollRunRef.current !== runToken) {
+        return;
+      }
+      const isUnavailable =
+        err instanceof ApiClientError &&
+        (err.status === 503 || err.code === "EXECUTION_SERVICE_UNAVAILABLE");
+      const isTimedOut =
+        err instanceof ApiClientError &&
+        (err.status === 504 || err.code === "EXECUTION_TIMEOUT");
+      if (isUnavailable) {
+        setExecutionPhase("unavailable");
+        void refreshExecutionAvailability();
+      } else if (isTimedOut) {
+        setExecutionPhase("timed_out");
+      } else {
+        setExecutionPhase("failed");
+      }
       setErrorMessage(
         err instanceof Error
           ? err.message
@@ -270,7 +465,9 @@ export function CodingWorkspace({
       setBottomTab("results");
       setMobileTab("results");
     } finally {
-      setRunningKind(null);
+      if (isMountedRef.current && activePollRunRef.current === runToken) {
+        setRunningKind(null);
+      }
     }
   }
 
@@ -351,12 +548,49 @@ export function CodingWorkspace({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <Clock className="h-4 w-4" aria-hidden="true" />
-          <span>
-            Limit: {problem.time_limit_ms / 1000}s ·{" "}
-            {Math.round(problem.memory_limit_kb / 1024)} MB
-          </span>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+          {executionStatus ? (
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant={executionStatus.available ? "emerald" : "rose"}
+              >
+                {executionStatus.available ? (
+                  <Wifi className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                <span>
+                  {executionStatus.available
+                    ? "Runner Online"
+                    : "Execution Unavailable"}
+                </span>
+              </Badge>
+              {!executionStatus.available ? (
+                <button
+                  type="button"
+                  disabled={refreshingRunnerStatus}
+                  onClick={() => {
+                    void refreshExecutionAvailability();
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  title="Recheck local Judge0 runner availability"
+                >
+                  <RefreshCw
+                    className={`h-3 w-3 ${refreshingRunnerStatus ? "animate-spin" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span>Recheck</span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-4 w-4" aria-hidden="true" />
+            <span>
+              Limit: {problem.time_limit_ms / 1000}s ·{" "}
+              {Math.round(problem.memory_limit_kb / 1024)} MB
+            </span>
+          </div>
         </div>
       </div>
 
@@ -681,7 +915,11 @@ export function CodingWorkspace({
                     <Play className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
                   <span>
-                    {runningKind === "run" ? "Running..." : "Run Code"}
+                    {runningKind === "run"
+                      ? executionPhase === "queued"
+                        ? "Queued..."
+                        : "Running..."
+                      : "Run Code"}
                   </span>
                 </button>
 
@@ -699,7 +937,11 @@ export function CodingWorkspace({
                     <Send className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
                   <span>
-                    {runningKind === "submit" ? "Evaluating..." : "Submit Code"}
+                    {runningKind === "submit"
+                      ? executionPhase === "queued"
+                        ? "Queued..."
+                        : "Running..."
+                      : "Submit Code"}
                   </span>
                 </button>
               </div>
@@ -765,20 +1007,115 @@ export function CodingWorkspace({
 
               {bottomTab === "results" ? (
                 runningKind ? (
-                  <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-6 text-sm text-slate-700">
-                    <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-                    <span>
-                      Executing inside isolated Judge0 sandbox (
-                      {runningKind === "run"
-                        ? "public tests"
-                        : "public + hidden tests"}
-                      )...
-                    </span>
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/60 p-5 text-sm text-slate-800"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-5 w-5 shrink-0 animate-spin text-indigo-600" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              executionPhase === "running" ? "indigo" : "amber"
+                            }
+                          >
+                            {executionPhase === "running"
+                              ? "Running"
+                              : "Queued"}
+                          </Badge>
+                          <span className="font-semibold text-slate-900">
+                            {executionPhase === "running"
+                              ? "Running in isolated Judge0 sandbox"
+                              : "Queued for local Judge0 runner"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {executionPhase === "running"
+                            ? `Executing ${runningKind === "run" ? "public tests" : "public + hidden tests"} safely in Judge0...`
+                            : "Waiting for the authenticated local Judge0 runner to claim this job..."}
+                        </p>
+                      </div>
+                    </div>
+                    {activeSubmission?.status === "queued" ? (
+                      <button
+                        type="button"
+                        disabled={cancellingExecution}
+                        onClick={() => {
+                          void handleCancelActiveExecution();
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>
+                          {cancellingExecution ? "Cancelling..." : "Cancel"}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : executionPhase === "unavailable" && !activeSubmission ? (
+                  <div
+                    role="status"
+                    className="rounded-lg border border-amber-200 bg-amber-50/70 p-5 text-sm text-amber-950"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <WifiOff
+                          className="h-4 w-4 text-amber-700"
+                          aria-hidden="true"
+                        />
+                        <Badge variant="amber">Execution Unavailable</Badge>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={refreshingRunnerStatus}
+                        onClick={() => {
+                          void refreshExecutionAvailability();
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100/60"
+                      >
+                        <RefreshCw
+                          className={`h-3.5 w-3.5 ${refreshingRunnerStatus ? "animate-spin" : ""}`}
+                          aria-hidden="true"
+                        />
+                        <span>Recheck Runner</span>
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-amber-900">
+                      The local Judge0 runner is currently offline. Start{" "}
+                      <strong>ThinkFirst Code Runner</strong> on your Windows PC
+                      and click <strong>Run Code</strong> again. Your code draft
+                      can still be saved as a revision.
+                    </p>
                   </div>
                 ) : activeSubmission ? (
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
                       <div className="flex flex-wrap items-center gap-3">
+                        <Badge
+                          variant={
+                            activeSubmission.status === "completed"
+                              ? "emerald"
+                              : activeSubmission.status === "queued"
+                                ? "amber"
+                                : activeSubmission.status === "running"
+                                  ? "indigo"
+                                  : "rose"
+                          }
+                        >
+                          {activeSubmission.status === "completed"
+                            ? "Completed"
+                            : activeSubmission.status === "queued"
+                              ? "Queued"
+                              : activeSubmission.status === "running"
+                                ? "Running"
+                                : executionPhase === "timed_out"
+                                  ? "Timed Out"
+                                  : executionPhase === "unavailable"
+                                    ? "Execution Unavailable"
+                                    : "Execution Failed"}
+                        </Badge>
                         <VerdictBadge verdict={activeSubmission.verdict} />
                         <span className="text-sm font-semibold text-slate-900">
                           {activeSubmission.passed_tests} /{" "}
@@ -813,7 +1150,21 @@ export function CodingWorkspace({
                             ? `${activeSubmission.memory_kb} KB`
                             : "—"}
                         </span>
-                        {activeSubmission.verdict !== "accepted" ? (
+                        {activeSubmission.status === "queued" ||
+                        activeSubmission.status === "running" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleInspectSubmission(activeSubmission.id);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                            <span>Recheck Status</span>
+                          </button>
+                        ) : null}
+                        {activeSubmission.status === "completed" &&
+                        activeSubmission.verdict !== "accepted" ? (
                           <button
                             type="button"
                             onClick={() => {
@@ -824,7 +1175,8 @@ export function CodingWorkspace({
                           >
                             Ask Socratic AI Mentor →
                           </button>
-                        ) : transferChallenge?.unlocked ? (
+                        ) : activeSubmission.status === "completed" &&
+                          transferChallenge?.unlocked ? (
                           <button
                             type="button"
                             onClick={() => {
