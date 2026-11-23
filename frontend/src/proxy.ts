@@ -10,10 +10,20 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-function hasSupabaseAuthCookie(request: NextRequest): boolean {
+function getSupabaseAuthCookieNames(request: NextRequest): string[] {
   return request.cookies
     .getAll()
-    .some((cookie) => cookie.name.startsWith("sb-") && cookie.value.length > 0);
+    .filter((cookie) => cookie.name.startsWith("sb-") && cookie.value.length > 0)
+    .map((cookie) => cookie.name);
+}
+
+function applyNoStoreHeaders(response: NextResponse): NextResponse {
+  response.headers.set(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, private",
+  );
+  response.headers.set("Pragma", "no-cache");
+  return response;
 }
 
 export async function proxy(request: NextRequest) {
@@ -26,17 +36,19 @@ export async function proxy(request: NextRequest) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  const authCookieNames = getSupabaseAuthCookieNames(request);
 
   if (
     !supabaseUrl.startsWith("http") ||
     supabaseAnonKey.length <= 10 ||
     supabaseAnonKey.includes("replace-with") ||
-    !hasSupabaseAuthCookie(request)
+    authCookieNames.length === 0
   ) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = resolvePortalLoginPath(pathname);
+    loginUrl.search = "";
     loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    return applyNoStoreHeaders(NextResponse.redirect(loginUrl));
   }
 
   let supabaseResponse = NextResponse.next({ request });
@@ -66,11 +78,26 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = resolvePortalLoginPath(pathname);
+    loginUrl.search = "";
     loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    loginUrl.searchParams.set("error", "session_expired");
+    const redirectResponse = NextResponse.redirect(loginUrl);
+
+    // Propagate any cleared Supabase cookies and explicitly expire stale sb-* cookies to prevent redirect loops
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    authCookieNames.forEach((name) => {
+      redirectResponse.cookies.set(name, "", {
+        path: "/",
+        maxAge: 0,
+      });
+    });
+
+    return applyNoStoreHeaders(redirectResponse);
   }
 
-  return supabaseResponse;
+  return applyNoStoreHeaders(supabaseResponse);
 }
 
 export const config = {

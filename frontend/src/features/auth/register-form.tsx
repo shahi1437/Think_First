@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { publicEnv } from "@/lib/env";
+import { buildAuthCallbackUrl } from "@/lib/auth/auth-helpers";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const registerSchema = z
@@ -99,7 +99,7 @@ export function RegisterForm() {
         email: normalizedEmail,
         password: values.password,
         options: {
-          emailRedirectTo: `${publicEnv.NEXT_PUBLIC_APP_URL}/auth/callback?next=/student/onboarding`,
+          emailRedirectTo: buildAuthCallbackUrl("/student/onboarding"),
           data: {
             full_name: values.full_name.trim(),
           },
@@ -132,7 +132,7 @@ export function RegisterForm() {
         type: "signup",
         email: result.email,
         options: {
-          emailRedirectTo: `${publicEnv.NEXT_PUBLIC_APP_URL}/auth/callback?next=/student/onboarding`,
+          emailRedirectTo: buildAuthCallbackUrl("/student/onboarding"),
         },
       });
       if (error) {

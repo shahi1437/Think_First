@@ -1,21 +1,34 @@
 "use client";
 
+import { QueryClientContext } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import {
+  broadcastLogoutEvent,
+  clearClientAuthCaches,
+} from "@/lib/auth/auth-helpers";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export function LogoutButton() {
   const router = useRouter();
+  const queryClient = useContext(QueryClientContext);
   const [signingOut, setSigningOut] = useState(false);
 
   async function handleLogout() {
     setSigningOut(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut({ scope: "global" });
+      } catch {
+        await supabase.auth.signOut();
+      }
     } finally {
-      router.push("/login");
+      queryClient?.clear();
+      clearClientAuthCaches();
+      broadcastLogoutEvent();
+      router.replace("/login");
       router.refresh();
     }
   }

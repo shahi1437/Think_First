@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AuthPortalShell } from "@/components/auth-portal-shell";
 import { LoginForm } from "@/features/auth/login-form";
 import { fetchCurrentUser } from "@/lib/api-client";
+import { mapAuthPageError } from "@/lib/auth/auth-helpers";
 import { resolvePostLoginRedirect } from "@/lib/auth/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -11,19 +12,6 @@ export const dynamic = "force-dynamic";
 
 interface LoginPageProps {
   searchParams: Promise<{ next?: string; error?: string }>;
-}
-
-function mapLoginError(errorCode?: string): string | undefined {
-  if (errorCode === "auth_callback_failed") {
-    return "Authentication link verification failed or expired. Please sign in again.";
-  }
-  if (errorCode === "verification_unavailable") {
-    return "Unable to verify your account permissions right now. Please sign in again.";
-  }
-  if (errorCode === "supabase_unconfigured") {
-    return "Authentication service is not configured for this environment yet.";
-  }
-  return undefined;
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -91,7 +79,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       <LoginForm
         nextPath={params.next}
-        initialError={mapLoginError(params.error)}
+        initialError={mapAuthPageError(params.error)}
       />
     </AuthPortalShell>
   );
