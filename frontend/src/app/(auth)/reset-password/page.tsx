@@ -1,26 +1,19 @@
 import { KeyRound } from "lucide-react";
 import { AuthPortalShell } from "@/components/auth-portal-shell";
 import { ResetPasswordForm } from "@/features/auth/reset-password-form";
-import type { RoleName } from "@/types/identity";
+import { parsePortalParam } from "@/lib/auth/auth-helpers";
 
 export const dynamic = "force-dynamic";
 
 interface ResetPasswordPageProps {
-  searchParams: Promise<{ portal?: string }>;
-}
-
-function parsePortal(raw?: string): RoleName | undefined {
-  if (raw === "student" || raw === "teacher" || raw === "admin") {
-    return raw;
-  }
-  return undefined;
+  searchParams: Promise<{ portal?: string; error?: string }>;
 }
 
 export default async function ResetPasswordPage({
   searchParams,
 }: ResetPasswordPageProps) {
   const params = await searchParams;
-  const portal = parsePortal(params.portal);
+  const portal = parsePortalParam(params.portal);
 
   return (
     <AuthPortalShell
@@ -35,7 +28,7 @@ export default async function ResetPasswordPage({
         { href: "/login/admin", label: "Admin Login" },
       ]}
     >
-      <ResetPasswordForm portal={portal} />
+      <ResetPasswordForm portal={portal} initialErrorCode={params.error} />
     </AuthPortalShell>
   );
 }

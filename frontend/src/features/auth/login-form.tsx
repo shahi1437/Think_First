@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,6 +13,10 @@ import {
   fetchCurrentUser,
   verifyLoginPortal,
 } from "@/lib/api-client";
+import {
+  buildAuthCallbackUrl,
+  clearClientAuthCaches,
+} from "@/lib/auth/auth-helpers";
 import {
   getPortalMismatchMessage,
   isAuthorizedForLoginPortal,
@@ -36,15 +40,26 @@ interface LoginFormProps {
   portal?: RoleName;
   nextPath?: string;
   initialError?: string;
+  initialSuggestedPortal?: RoleName;
   onAuthenticate?: (values: LoginFormValues) => Promise<RoleName[] | void>;
 }
 
 const MAX_FAILED_ATTEMPTS = 5;
 const COOLDOWN_SECONDS = 30;
 
+function pickSuggestedPortal(roles: readonly RoleName[]): RoleName | null {
+  if (roles.includes("admin")) return "admin";
+  if (roles.includes("teacher")) return "teacher";
+  if (roles.includes("student")) return "student";
+  return null;
+}
+
 export function formatAuthError(rawMessage: string, portal?: RoleName): string {
   const normalized = rawMessage.toLowerCase();
-  if (normalized.includes("invalid login credentials")) {
+  if (
+    normalized.includes("invalid login credentials") ||
+    normalized.includes("invalid_credentials")
+  ) {
     if (portal === "teacher" || portal === "admin") {
       const label = PORTAL_LABELS[portal];
       return `Invalid email or password for this environment. Double-check your credentials or use "Forgot password?" below. If your ${label} account has not been provisioned on this server yet, contact an administrator.`;
@@ -52,7 +67,21 @@ export function formatAuthError(rawMessage: string, portal?: RoleName): string {
     return 'Invalid email or password. Please double-check your credentials, or use "Forgot password?" to reset your password.';
   }
   if (normalized.includes("email not confirmed")) {
-    return "Your email address is not confirmed yet. Please open the verification link sent to your inbox before signing in.";
+    return "Your email address is not confirmed yet. Please open the verification link sent to your inbox before signing in, or resend the confirmation email below.";
+  }
+  if (
+    normalized.includes("rate limit") ||
+    normalized.includes("too many requests") ||
+    normalized.includes("429")
+  ) {
+    return "Too many sign-in attempts were detected. Please wait a minute before trying again.";
+  }
+  if (
+    normalized.includes("failed to fetch") ||
+    normalized.includes("network") ||
+    normalized.includes("cors")
+  ) {
+    return "Unable to reach the authentication service. Please check your connection and try again.";
   }
   return rawMessage;
 }
@@ -61,13 +90,19 @@ export function LoginForm({
   portal,
   nextPath,
   initialError,
+  initialSuggestedPortal,
   onAuthenticate,
 }: LoginFormProps) {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(
     initialError ?? null,
   );
-  const [suggestedPortal, setSuggestedPortal] = useState<RoleName | null>(null);
+  const [suggestedPortal, setSuggestedPortal] = useState<RoleName | null>(
+    initialSuggestedPortal ?? null,
+  );
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resendingConfirmation, setResendingConfirmation] = useState(false);
+  const [resendFeedback, setResendFeedback] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
@@ -109,6 +144,33 @@ export function LoginForm({
     }
   }
 
+  async function handleResendConfirmation() {
+    if (!unconfirmedEmail || resendingConfirmation) return;
+    setResendingConfirmation(true);
+    setResendFeedback(null);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: unconfirmedEmail,
+        options: {
+          emailRedirectTo: buildAuthCallbackUrl("/student/onboarding"),
+        },
+      });
+      if (error) {
+        setResendFeedback(formatAuthError(error.message, portal));
+      } else {
+        setResendFeedback(
+          "A new confirmation email has been requested. Please check your inbox and spam folder.",
+        );
+      }
+    } catch {
+      setResendFeedback("Could not resend the confirmation email right now.");
+    } finally {
+      setResendingConfirmation(false);
+    }
+  }
+
   async function onSubmit(values: LoginFormValues) {
     if (cooldownUntil && Date.now() < cooldownUntil) {
       setServerError(
@@ -119,6 +181,8 @@ export function LoginForm({
 
     setServerError(null);
     setSuggestedPortal(null);
+    setUnconfirmedEmail(null);
+    setResendFeedback(null);
 
     try {
       if (onAuthenticate) {
@@ -130,24 +194,33 @@ export function LoginForm({
         if (portal && !isAuthorizedForLoginPortal(resolvedRoles, portal)) {
           recordFailedAttempt();
           setServerError(getPortalMismatchMessage(portal, resolvedRoles));
+          setSuggestedPortal(pickSuggestedPortal(resolvedRoles));
           return;
         }
         setFailedAttempts(0);
         const target = portal
-          ? resolvePostLoginRedirect(resolvedRoles, nextPath ?? PORTAL_PATHS[portal])
+          ? resolvePostLoginRedirect(
+              resolvedRoles,
+              nextPath ?? PORTAL_PATHS[portal],
+            )
           : resolvePostLoginRedirect(resolvedRoles, nextPath);
         router.push(target);
+        router.refresh();
         return;
       }
 
+      const normalizedEmail = values.email.trim().toLowerCase();
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithPassword({
-        email: values.email.trim().toLowerCase(),
+        email: normalizedEmail,
         password: values.password,
       });
 
       if (error) {
         recordFailedAttempt();
+        if (error.message.toLowerCase().includes("email not confirmed")) {
+          setUnconfirmedEmail(normalizedEmail);
+        }
         setServerError(formatAuthError(error.message, portal));
         return;
       }
@@ -172,7 +245,7 @@ export function LoginForm({
         if (user.roles.length === 0) {
           await supabase.auth.signOut();
           setServerError(
-            "No authorized role is assigned to this account yet. Please contact an administrator.",
+            "Your credentials were accepted, but no authorized role is assigned to this account yet. Please contact an administrator.",
           );
           return;
         }
@@ -181,31 +254,72 @@ export function LoginForm({
           await supabase.auth.signOut();
           recordFailedAttempt();
           setServerError(getPortalMismatchMessage(portal, user.roles));
-          if (user.roles.includes("admin")) {
-            setSuggestedPortal("admin");
-          } else if (user.roles.includes("teacher")) {
-            setSuggestedPortal("teacher");
-          } else {
-            setSuggestedPortal("student");
-          }
+          setSuggestedPortal(pickSuggestedPortal(user.roles));
           return;
         }
 
         setFailedAttempts(0);
+        clearClientAuthCaches();
         const target = portal
-          ? resolvePostLoginRedirect(user.roles, nextPath ?? PORTAL_PATHS[portal])
+          ? resolvePostLoginRedirect(
+              user.roles,
+              nextPath ?? PORTAL_PATHS[portal],
+            )
           : resolvePostLoginRedirect(user.roles, nextPath);
         router.push(target);
+        router.refresh();
       } catch (verifyErr) {
-        await supabase.auth.signOut();
         if (
           verifyErr instanceof ApiClientError &&
-          verifyErr.status === 403
+          verifyErr.status === 403 &&
+          portal
         ) {
+          let discoveredPortal: RoleName | null = null;
+          let hasNoRoles = false;
+          try {
+            const actualUser = await fetchCurrentUser(session.access_token);
+            if (actualUser.roles.length === 0) {
+              hasNoRoles = true;
+            } else {
+              discoveredPortal = pickSuggestedPortal(actualUser.roles);
+            }
+          } catch {
+            // Fall back cleanly to the backend denial message
+          } finally {
+            await supabase.auth.signOut();
+          }
+
+          recordFailedAttempt();
+          if (hasNoRoles) {
+            setServerError(
+              "Your password was accepted, but no authorized role is assigned to this account yet. Please contact an administrator.",
+            );
+            return;
+          }
+          if (discoveredPortal) {
+            setSuggestedPortal(discoveredPortal);
+          }
+          setServerError(
+            `Your password was accepted, but this account does not have ${PORTAL_LABELS[portal]} portal access. Please sign in through your authorized login portal.`,
+          );
+          return;
+        }
+
+        await supabase.auth.signOut();
+
+        if (verifyErr instanceof ApiClientError && verifyErr.status === 401) {
+          setServerError(
+            "Your sign-in session could not be verified by the learning server (invalid or expired authentication token). Please try signing in again.",
+          );
+          return;
+        }
+
+        if (verifyErr instanceof ApiClientError && verifyErr.status === 403) {
           recordFailedAttempt();
           setServerError(verifyErr.message);
           return;
         }
+
         if (verifyErr instanceof BackendUnavailableError) {
           setServerError(
             "Unable to verify your account permissions because the learning server is temporarily unreachable. Please try again in a moment.",
@@ -221,7 +335,9 @@ export function LoginForm({
     } catch (err) {
       recordFailedAttempt();
       setServerError(
-        err instanceof Error ? err.message : "Unable to sign in right now.",
+        err instanceof Error
+          ? formatAuthError(err.message, portal)
+          : "Unable to sign in right now.",
       );
     }
   }
@@ -283,6 +399,29 @@ export function LoginForm({
               </Link>
             </div>
           ) : null}
+          {unconfirmedEmail ? (
+            <div className="space-y-1.5 pl-6 pt-1">
+              <button
+                type="button"
+                disabled={resendingConfirmation}
+                onClick={() => {
+                  void handleResendConfirmation();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 transition hover:bg-rose-100/60 disabled:opacity-60"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${resendingConfirmation ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                {resendingConfirmation
+                  ? "Sending confirmation email..."
+                  : "Resend confirmation email"}
+              </button>
+              {resendFeedback ? (
+                <p className="text-xs text-slate-700">{resendFeedback}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -322,7 +461,9 @@ export function LoginForm({
             Password
           </label>
           <Link
-            href={portal ? `/forgot-password?portal=${portal}` : "/forgot-password"}
+            href={
+              portal ? `/forgot-password?portal=${portal}` : "/forgot-password"
+            }
             className="text-xs font-medium text-indigo-700 hover:underline"
           >
             Forgot password?

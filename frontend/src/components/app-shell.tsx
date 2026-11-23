@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AuthSessionSync } from "@/components/auth-session-sync";
 import { LogoutButton } from "@/components/logout-button";
 import { NavLinks } from "@/components/nav-links";
 import { getAuthorizedPortals, PORTAL_LABELS } from "@/lib/auth/roles";
@@ -25,6 +26,7 @@ export function AppShell({
 }: AppShellProps) {
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-slate-50 text-slate-900">
+      <AuthSessionSync activeRole={activeRole} />
       <header className="sticky top-0 z-30 border-b border-slate-800/90 bg-[#0b1221] text-white shadow-sm">
         <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-3">

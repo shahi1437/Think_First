@@ -3,11 +3,14 @@ import { redirect } from "next/navigation";
 import { AuthPortalShell } from "@/components/auth-portal-shell";
 import { LoginForm } from "@/features/auth/login-form";
 import { fetchCurrentUser } from "@/lib/api-client";
+import { mapAuthPageError } from "@/lib/auth/auth-helpers";
 import {
+  getPrimaryRole,
   isAuthorizedForLoginPortal,
   resolvePostLoginRedirect,
 } from "@/lib/auth/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { RoleName } from "@/types/identity";
 
 export const dynamic = "force-dynamic";
 
@@ -15,21 +18,12 @@ interface StudentLoginPageProps {
   searchParams: Promise<{ next?: string; error?: string }>;
 }
 
-function mapLoginError(errorCode?: string): string | undefined {
-  if (errorCode === "auth_callback_failed") {
-    return "Authentication link verification failed or expired. Please sign in again.";
-  }
-  if (errorCode === "supabase_unconfigured") {
-    return "Authentication service is not configured for this environment yet.";
-  }
-  return undefined;
-}
-
 export default async function StudentLoginPage({
   searchParams,
 }: StudentLoginPageProps) {
   const params = await searchParams;
-  let initialError = mapLoginError(params.error);
+  let initialError = mapAuthPageError(params.error);
+  let initialSuggestedPortal: RoleName | undefined;
 
   const supabase = await createSupabaseServerClient();
   if (supabase) {
@@ -50,6 +44,7 @@ export default async function StudentLoginPage({
               params.next ?? "/student",
             );
           } else {
+            initialSuggestedPortal = getPrimaryRole(user.roles);
             initialError =
               "You are currently signed in with a non-Student portal role. Sign out first or open your authorized portal.";
           }
@@ -82,6 +77,7 @@ export default async function StudentLoginPage({
         portal="student"
         nextPath={params.next}
         initialError={initialError}
+        initialSuggestedPortal={initialSuggestedPortal}
       />
     </AuthPortalShell>
   );

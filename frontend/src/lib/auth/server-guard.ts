@@ -16,7 +16,7 @@ export interface VerifiedSessionContext {
 type SessionResolution =
   | { status: "ok"; context: VerifiedSessionContext }
   | { status: "unconfigured" }
-  | { status: "unauthenticated" };
+  | { status: "unauthenticated"; reason?: "session_expired" };
 
 // Deduplicate identity verification within a single RSC request
 // (prevents duplicate round-trips across layout.tsx and page.tsx without caching across requests/users).
@@ -45,7 +45,22 @@ const resolveVerifiedSession = cache(async (): Promise<SessionResolution> => {
     };
   } catch (err) {
     if (err instanceof ApiClientError && err.status === 401) {
-      return { status: "unauthenticated" };
+      // Attempt one clean refresh-token rotation before treating the session as expired
+      try {
+        const { data: refreshed, error: refreshError } =
+          await supabase.auth.refreshSession();
+        const refreshedToken = refreshed.session?.access_token;
+        if (!refreshError && refreshedToken) {
+          const user = await fetchCurrentUser(refreshedToken);
+          return {
+            status: "ok",
+            context: { user, accessToken: refreshedToken },
+          };
+        }
+      } catch {
+        // Fall through to clean session_expired redirect
+      }
+      return { status: "unauthenticated", reason: "session_expired" };
     }
     throw err;
   }
@@ -56,16 +71,25 @@ export async function requireAuthenticatedUser(options?: {
   currentPath?: string;
 }): Promise<VerifiedSessionContext> {
   const loginPath = resolvePortalLoginPath(options?.currentPath);
-  const nextQuery = options?.currentPath
-    ? `?next=${encodeURIComponent(options.currentPath)}`
-    : "";
+
+  const buildLoginRedirect = (errorCode?: string) => {
+    const params = new URLSearchParams();
+    if (options?.currentPath) {
+      params.set("next", options.currentPath);
+    }
+    if (errorCode) {
+      params.set("error", errorCode);
+    }
+    const qs = params.toString();
+    return qs ? `${loginPath}?${qs}` : loginPath;
+  };
 
   const resolved = await resolveVerifiedSession();
   if (resolved.status === "unconfigured") {
-    redirect(`${loginPath}?error=supabase_unconfigured`);
+    redirect(buildLoginRedirect("supabase_unconfigured"));
   }
   if (resolved.status === "unauthenticated") {
-    redirect(`${loginPath}${nextQuery}`);
+    redirect(buildLoginRedirect(resolved.reason));
   }
 
   const { user, accessToken } = resolved.context;

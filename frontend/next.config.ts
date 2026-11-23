@@ -10,6 +10,14 @@ const securityHeaders = [
   },
 ];
 
+const noStoreHeaders = [
+  {
+    key: "Cache-Control",
+    value: "no-store, no-cache, must-revalidate, private",
+  },
+  { key: "Pragma", value: "no-cache" },
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -21,6 +29,26 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        source: "/student/:path*",
+        headers: noStoreHeaders,
+      },
+      {
+        source: "/teacher/:path*",
+        headers: noStoreHeaders,
+      },
+      {
+        source: "/admin/:path*",
+        headers: noStoreHeaders,
+      },
+      {
+        source: "/reset-password",
+        headers: noStoreHeaders,
+      },
+      {
+        source: "/auth/callback",
+        headers: noStoreHeaders,
       },
     ];
   },
