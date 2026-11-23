@@ -75,6 +75,40 @@ class AdminRepository:
         rows = (await self._session.execute(stmt)).all()
         return [(r[0], r[1]) for r in rows]
 
+    async def list_lesson_overview_rows(self) -> list[tuple[UUID | None, list[str]]]:
+        """Lightweight projection for Admin Overview (skips large markdown/exercise columns)."""
+        latest_subq = (
+            select(
+                LessonVersion.lesson_id,
+                func.max(LessonVersion.version_number).label("max_ver"),
+            )
+            .group_by(LessonVersion.lesson_id)
+            .subquery()
+        )
+        stmt = (
+            select(Lesson.current_published_version_id, LessonVersion.track_slugs)
+            .join(latest_subq, Lesson.id == latest_subq.c.lesson_id)
+            .join(
+                LessonVersion,
+                (LessonVersion.lesson_id == latest_subq.c.lesson_id)
+                & (LessonVersion.version_number == latest_subq.c.max_ver),
+            )
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [(r[0], list(r[1] or [])) for r in rows]
+
+    async def get_diagnostic_question_counts(self) -> tuple[int, int]:
+        """Aggregate published and stretch diagnostic counts in one SQL query."""
+        stmt = select(
+            func.count().filter(DiagnosticQuestion.status == "published"),
+            func.count().filter(
+                (DiagnosticQuestion.status == "published")
+                & (DiagnosticQuestion.difficulty == "stretch")
+            ),
+        ).select_from(DiagnosticQuestion)
+        row = (await self._session.execute(stmt)).one()
+        return int(row[0] or 0), int(row[1] or 0)
+
     async def get_lesson_latest(self, lesson_id: UUID) -> tuple[Lesson, LessonVersion] | None:
         stmt = (
             select(Lesson, LessonVersion)
@@ -192,9 +226,12 @@ class AdminRepository:
         return track
 
     async def list_knowledge_status_counts(self) -> tuple[int, int]:
-        docs = list((await self._session.execute(select(KnowledgeDocument))).scalars().all())
-        approved = sum(1 for d in docs if d.status == "approved")
-        return approved, len(docs)
+        stmt = select(
+            func.count().filter(KnowledgeDocument.status == "approved"),
+            func.count(),
+        ).select_from(KnowledgeDocument)
+        row = (await self._session.execute(stmt)).one()
+        return int(row[0] or 0), int(row[1] or 0)
 
     async def count_skill_nodes(self) -> int:
         return int(
@@ -211,42 +248,30 @@ class AdminRepository:
         ).all()
         role_map = {str(role): int(cnt) for role, cnt in role_rows}
 
-        courses_total = int(
-            (await self._session.execute(select(func.count()).select_from(Course))).scalar_one()
+        classroom_stmt = select(
+            select(func.count()).select_from(Course).scalar_subquery(),
+            select(func.count())
+            .select_from(Course)
+            .where(Course.status == "active")
+            .scalar_subquery(),
+            select(func.count())
+            .select_from(CourseMembership)
+            .where(CourseMembership.status == "active")
+            .scalar_subquery(),
+            select(func.count())
+            .select_from(Assignment)
+            .where(Assignment.status == "published")
+            .scalar_subquery(),
         )
-        courses_active = int(
-            (
-                await self._session.execute(
-                    select(func.count()).select_from(Course).where(Course.status == "active")
-                )
-            ).scalar_one()
-        )
-        enrollments_active = int(
-            (
-                await self._session.execute(
-                    select(func.count())
-                    .select_from(CourseMembership)
-                    .where(CourseMembership.status == "active")
-                )
-            ).scalar_one()
-        )
-        assignments_published = int(
-            (
-                await self._session.execute(
-                    select(func.count())
-                    .select_from(Assignment)
-                    .where(Assignment.status == "published")
-                )
-            ).scalar_one()
-        )
+        c_row = (await self._session.execute(classroom_stmt)).one()
         return {
             "students_count": role_map.get("student", 0),
             "teachers_count": role_map.get("teacher", 0),
             "admins_count": role_map.get("admin", 0),
-            "courses_total": courses_total,
-            "courses_active": courses_active,
-            "enrollments_active": enrollments_active,
-            "assignments_published": assignments_published,
+            "courses_total": int(c_row[0] or 0),
+            "courses_active": int(c_row[1] or 0),
+            "enrollments_active": int(c_row[2] or 0),
+            "assignments_published": int(c_row[3] or 0),
         }
 
     async def list_tracks(self) -> list[LearningTrack]:

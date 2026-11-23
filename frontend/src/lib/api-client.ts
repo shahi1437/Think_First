@@ -42,6 +42,10 @@ import {
   adminOperationsHealthSchema,
   adminUserSummarySchema,
   knowledgeDocumentSchema,
+  teacherInvitationInspectResponseSchema,
+  teacherInvitationMutationResponseSchema,
+  teacherLookupResponseSchema,
+  teacherManagementOverviewSchema,
   type AdminAuditLogItem,
   type AdminCurriculumValidateResponse,
   type AdminDashboardOverview,
@@ -50,6 +54,10 @@ import {
   type AdminOperationsHealth,
   type AdminUserSummary,
   type KnowledgeDocumentItem,
+  type TeacherInvitationInspectResponse,
+  type TeacherInvitationMutationResponse,
+  type TeacherLookupResponse,
+  type TeacherManagementOverview,
 } from "@/types/admin";
 import {
   learningEventViewSchema,
@@ -1907,4 +1915,172 @@ export async function fetchAdminOperationsHealth(
   });
   if (!response.ok) throw await parseErrorResponse(response);
   return adminOperationsHealthSchema.parse(await response.json());
+}
+
+// --- Admin Teacher Management & Verified Teacher Invitations ---
+
+export async function fetchAdminTeacherManagement(
+  accessToken: string,
+  params?: { q?: string; limit?: number },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherManagementOverview> {
+  const query = new URLSearchParams();
+  if (params?.q?.trim()) query.set("q", params.q.trim());
+  if (params?.limit) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/admin/teachers${qs ? `?${qs}` : ""}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherManagementOverviewSchema.parse(await response.json());
+}
+
+export async function lookupAdminTeacherByEmail(
+  accessToken: string,
+  email: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherLookupResponse> {
+  const query = new URLSearchParams({ email: email.trim() });
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/admin/teachers/lookup?${query.toString()}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherLookupResponseSchema.parse(await response.json());
+}
+
+export async function createAdminTeacherInvitation(
+  accessToken: string,
+  payload: { email: string; full_name?: string; expires_in_days?: number },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherInvitationMutationResponse> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/admin/teachers/invitations`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({
+        email: payload.email.trim(),
+        full_name: payload.full_name?.trim() ?? "",
+        expires_in_days: payload.expires_in_days ?? 7,
+      }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherInvitationMutationResponseSchema.parse(await response.json());
+}
+
+export async function resendAdminTeacherInvitation(
+  accessToken: string,
+  invitationId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherInvitationMutationResponse> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/admin/teachers/invitations/${invitationId}/resend`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherInvitationMutationResponseSchema.parse(await response.json());
+}
+
+export async function revokeAdminTeacherInvitation(
+  accessToken: string,
+  invitationId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherInvitationMutationResponse> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/admin/teachers/invitations/${invitationId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherInvitationMutationResponseSchema.parse(await response.json());
+}
+
+export async function inspectTeacherInvitation(
+  token: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherInvitationInspectResponse> {
+  const query = new URLSearchParams({ token: token.trim() });
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/users/teacher-invitations/inspect?${query.toString()}`,
+    {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherInvitationInspectResponseSchema.parse(await response.json());
+}
+
+export async function acceptTeacherInvitation(
+  accessToken: string,
+  token: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<{ invitation_id: string; user: UserMeResponse; action: string }> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/users/me/accept-teacher-invitation`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify({ token: token.trim() }),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return z
+    .object({
+      invitation_id: z.string(),
+      user: userMeResponseSchema,
+      action: z.string(),
+    })
+    .parse(await response.json());
+}
+
+export interface StudentDashboardBundle {
+  language_overview: LanguageProgressOverview;
+  dashboard: LearningDashboardView;
+  dna_profile: LearningDnaProfileView;
+  daily_plan_workspace: DailyPlanWorkspaceView;
+  retention_overview: RetentionOverviewView;
+  enrolled_classes: StudentEnrolledCourseView[];
+  student_assignments: StudentAssignmentListItemView[];
+}
+
+const studentDashboardBundleSchema = z.object({
+  language_overview: languageProgressOverviewSchema,
+  dashboard: learningDashboardViewSchema,
+  dna_profile: learningDnaProfileViewSchema,
+  daily_plan_workspace: dailyPlanWorkspaceViewSchema,
+  retention_overview: retentionOverviewViewSchema,
+  enrolled_classes: z.array(studentEnrolledCourseViewSchema),
+  student_assignments: z.array(studentAssignmentListItemViewSchema),
+});
+
+export async function fetchStudentDashboardBundle(
+  accessToken: string,
+  language?: LanguageSlug,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<StudentDashboardBundle> {
+  const qs = language ? `?language=${encodeURIComponent(language)}` : "";
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/learning/dashboard-bundle${qs}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return studentDashboardBundleSchema.parse(await response.json());
 }

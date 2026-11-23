@@ -78,6 +78,7 @@ class InMemoryIdentityRepository:
     def __init__(self) -> None:
         self.users: dict[UUID, UserRecord] = {}
         self.audit_logs: list[AuditRecord] = []
+        self.audit_events_with_time: list[tuple[AuditRecord, datetime]] = []
 
     def seed_user(
         self,
@@ -103,6 +104,13 @@ class InMemoryIdentityRepository:
 
     async def get_user_by_id(self, user_id: UUID) -> UserRecord | None:
         return self.users.get(user_id)
+
+    async def get_user_by_email(self, email: str) -> UserRecord | None:
+        needle = email.strip().lower()
+        for user in self.users.values():
+            if user.email.lower() == needle:
+                return user
+        return None
 
     async def ensure_student_profile(
         self, user_id: UUID, email: str, full_name: str = ""
@@ -188,6 +196,17 @@ class InMemoryIdentityRepository:
 
     async def record_audit_log(self, event: AuditRecord) -> None:
         self.audit_logs.append(event)
+        self.audit_events_with_time.append((event, datetime.now(UTC)))
+
+    async def list_audit_events_by_target_type(
+        self, target_type: str, limit: int = 300
+    ) -> list[tuple[AuditRecord, datetime, str | None]]:
+        out: list[tuple[AuditRecord, datetime, str | None]] = []
+        for ev, ts in self.audit_events_with_time:
+            if ev.target_type == target_type:
+                actor = self.users.get(ev.actor_user_id) if ev.actor_user_id else None
+                out.append((ev, ts, actor.email if actor else None))
+        return out[:limit]
 
 
 @pytest.fixture
@@ -502,3 +521,271 @@ async def test_portal_verification_blocks_cross_role_login_and_audits_attempts(
     )
     assert search_res.status_code == 200
     assert [u["email"] for u in search_res.json()["items"]] == ["stu@example.edu"]
+
+
+async def test_teacher_management_existing_user_lookup_invite_accept_security_and_revocation(
+    auth_client: AsyncClient,
+    rsa_keys: EphemeralRSAKeys,
+    identity_repo: InMemoryIdentityRepository,
+) -> None:
+    admin_id = uuid4()
+    student_id = uuid4()
+    other_student_id = uuid4()
+    invited_teacher_id = uuid4()
+
+    identity_repo.seed_user(
+        user_id=admin_id,
+        email="admin@thinkfirst.test",
+        roles=["student", "admin"],
+        full_name="Platform Admin",
+    )
+    identity_repo.seed_user(
+        user_id=student_id,
+        email="existing.user@thinkfirst.test",
+        roles=["student"],
+        full_name="Existing Candidate",
+    )
+    identity_repo.seed_user(
+        user_id=other_student_id,
+        email="intruder@thinkfirst.test",
+        roles=["student"],
+        full_name="Intruder Student",
+    )
+
+    adm_tok = _sign_token(keys=rsa_keys, sub=admin_id, email="admin@thinkfirst.test")
+    stu_tok = _sign_token(keys=rsa_keys, sub=student_id, email="existing.user@thinkfirst.test")
+    intruder_tok = _sign_token(
+        keys=rsa_keys, sub=other_student_id, email="intruder@thinkfirst.test"
+    )
+
+    # 1. Student cannot call any Admin Teacher Management endpoints
+    for method, path in [
+        ("GET", "/api/v1/admin/teachers"),
+        ("GET", "/api/v1/admin/teachers/lookup?email=new@thinkfirst.test"),
+        ("POST", "/api/v1/admin/teachers/invitations"),
+    ]:
+        kwargs = {"json": {"email": "new@thinkfirst.test"}} if method == "POST" else {}
+        res = await auth_client.request(
+            method, path, headers={"Authorization": f"Bearer {stu_tok}"}, **kwargs
+        )
+        assert res.status_code == 403
+
+    # 2. Case A: Admin looks up an existing user -> confirms & grants Teacher role
+    lookup_existing = await auth_client.get(
+        "/api/v1/admin/teachers/lookup?email=existing.user@thinkfirst.test",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert lookup_existing.status_code == 200
+    assert lookup_existing.json()["status"] == "existing_user_not_teacher"
+    assert lookup_existing.json()["can_grant_directly"] is True
+    assert lookup_existing.json()["existing_user"]["id"] == str(student_id)
+
+    # Attempting to create a new-user invitation for an existing account returns 409
+    inv_existing = await auth_client.post(
+        "/api/v1/admin/teachers/invitations",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"email": "existing.user@thinkfirst.test"},
+    )
+    assert inv_existing.status_code == 409
+    assert inv_existing.json()["code"] == "EXISTING_ACCOUNT_FOUND"
+
+    # Grant Teacher role to existing account via authorized Admin API
+    grant_resp = await auth_client.post(
+        f"/api/v1/admin/users/{student_id}/roles",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"role": "teacher"},
+    )
+    assert grant_resp.status_code == 200
+    assert grant_resp.json()["roles"] == ["student", "teacher"]
+
+    lookup_after_grant = await auth_client.get(
+        "/api/v1/admin/teachers/lookup?email=existing.user@thinkfirst.test",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert lookup_after_grant.status_code == 200
+    assert lookup_after_grant.json()["status"] == "active_teacher"
+
+    # Promoted Teacher cannot access Admin endpoints or self-promote to Admin
+    assert (
+        await auth_client.get(
+            "/api/v1/admin/teachers", headers={"Authorization": f"Bearer {stu_tok}"}
+        )
+    ).status_code == 403
+    assert (
+        await auth_client.post(
+            f"/api/v1/admin/users/{student_id}/roles",
+            headers={"Authorization": f"Bearer {stu_tok}"},
+            json={"role": "admin"},
+        )
+    ).status_code == 403
+
+    # 3. Case B: Admin looks up and invites a brand-new Teacher email
+    new_email = "new.instructor@thinkfirst.test"
+    lookup_new = await auth_client.get(
+        f"/api/v1/admin/teachers/lookup?email={new_email}",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert lookup_new.status_code == 200
+    assert lookup_new.json()["status"] == "not_found"
+    assert lookup_new.json()["can_invite"] is True
+
+    create_inv = await auth_client.post(
+        "/api/v1/admin/teachers/invitations",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"email": new_email, "full_name": "Dr. New Instructor"},
+    )
+    assert create_inv.status_code == 201
+    inv_data = create_inv.json()
+    inv_id = inv_data["invitation"]["id"]
+    first_token = inv_data["invitation_token"]
+    assert first_token and first_token.startswith("tfi_")
+    assert inv_data["invitation"]["status"] == "pending"
+    assert inv_data["invitation"]["delivery_status"] == "delivery_blocked"
+
+    # 4. Duplicate pending invitation is blocked with 409 DUPLICATE_PENDING_INVITATION
+    dup_inv = await auth_client.post(
+        "/api/v1/admin/teachers/invitations",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"email": new_email},
+    )
+    assert dup_inv.status_code == 409
+    assert dup_inv.json()["code"] == "DUPLICATE_PENDING_INVITATION"
+
+    # 5. Resending invitation rotates token and invalidates the old token
+    resend_inv = await auth_client.post(
+        f"/api/v1/admin/teachers/invitations/{inv_id}/resend",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert resend_inv.status_code == 200
+    rotated_token = resend_inv.json()["invitation_token"]
+    assert rotated_token and rotated_token != first_token
+    assert resend_inv.json()["invitation"]["resend_count"] == 1
+
+    # Old rotated token is rejected with 404 INVITATION_INVALID
+    old_inspect = await auth_client.get(
+        f"/api/v1/users/teacher-invitations/inspect?token={first_token}"
+    )
+    assert old_inspect.status_code == 404
+    assert old_inspect.json()["code"] == "INVITATION_INVALID"
+
+    # New rotated token inspects cleanly
+    valid_inspect = await auth_client.get(
+        f"/api/v1/users/teacher-invitations/inspect?token={rotated_token}"
+    )
+    assert valid_inspect.status_code == 200
+    assert valid_inspect.json()["is_valid"] is True
+    assert valid_inspect.json()["email"] == new_email
+
+    # 6. Wrong user (email mismatch) cannot accept the invitation
+    mismatch_accept = await auth_client.post(
+        "/api/v1/users/me/accept-teacher-invitation",
+        headers={"Authorization": f"Bearer {intruder_tok}"},
+        json={"token": rotated_token},
+    )
+    assert mismatch_accept.status_code == 403
+    assert mismatch_accept.json()["code"] == "INVITATION_EMAIL_MISMATCH"
+    assert identity_repo.users[other_student_id].roles == ["student"]
+
+    # 7. Invited Teacher registers/signs in with matching email and accepts invitation
+    invited_tok = _sign_token(keys=rsa_keys, sub=invited_teacher_id, email=new_email)
+    accept_res = await auth_client.post(
+        "/api/v1/users/me/accept-teacher-invitation",
+        headers={"Authorization": f"Bearer {invited_tok}"},
+        json={"token": rotated_token},
+    )
+    assert accept_res.status_code == 200
+    assert accept_res.json()["user"]["roles"] == ["student", "teacher"]
+    assert "admin" not in accept_res.json()["user"]["roles"]
+
+    # Replay of already-accepted token is rejected with 409 INVITATION_ALREADY_USED
+    replay_res = await auth_client.post(
+        "/api/v1/users/me/accept-teacher-invitation",
+        headers={"Authorization": f"Bearer {invited_tok}"},
+        json={"token": rotated_token},
+    )
+    assert replay_res.status_code == 409
+    assert replay_res.json()["code"] == "INVITATION_ALREADY_USED"
+
+    # Accepted Teacher can now log in via Teacher Portal & access /api/v1/teacher/me
+    assert (
+        await auth_client.post(
+            "/api/v1/users/me/verify-portal",
+            headers={"Authorization": f"Bearer {invited_tok}"},
+            json={"portal": "teacher"},
+        )
+    ).status_code == 200
+    assert (
+        await auth_client.get(
+            "/api/v1/teacher/me",
+            headers={"Authorization": f"Bearer {invited_tok}"},
+        )
+    ).status_code == 200
+
+    # 8. Revoking active Teacher access removes Teacher portal & Teacher API access
+    revoke_role_res = await auth_client.delete(
+        f"/api/v1/admin/users/{invited_teacher_id}/roles/teacher",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert revoke_role_res.status_code == 200
+    assert revoke_role_res.json()["roles"] == ["student"]
+    assert (
+        await auth_client.get(
+            "/api/v1/teacher/me",
+            headers={"Authorization": f"Bearer {invited_tok}"},
+        )
+    ).status_code == 403
+    assert (
+        await auth_client.post(
+            "/api/v1/users/me/verify-portal",
+            headers={"Authorization": f"Bearer {invited_tok}"},
+            json={"portal": "teacher"},
+        )
+    ).status_code == 403
+
+    # 9. Expired & Revoked invitation tokens are rejected
+    rev_inv_create = await auth_client.post(
+        "/api/v1/admin/teachers/invitations",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"email": "revoke.me@thinkfirst.test"},
+    )
+    rev_inv_id = rev_inv_create.json()["invitation"]["id"]
+    rev_inv_tok = rev_inv_create.json()["invitation_token"]
+
+    revoke_inv_res = await auth_client.delete(
+        f"/api/v1/admin/teachers/invitations/{rev_inv_id}",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert revoke_inv_res.status_code == 200
+    assert revoke_inv_res.json()["invitation"]["status"] == "revoked"
+
+    rev_user_tok = _sign_token(keys=rsa_keys, sub=uuid4(), email="revoke.me@thinkfirst.test")
+    rev_accept = await auth_client.post(
+        "/api/v1/users/me/accept-teacher-invitation",
+        headers={"Authorization": f"Bearer {rev_user_tok}"},
+        json={"token": rev_inv_tok},
+    )
+    assert rev_accept.status_code == 410
+    assert rev_accept.json()["code"] == "INVITATION_REVOKED"
+
+    # 10. Expired invitation is rejected with 410 INVITATION_EXPIRED
+    from app.schemas.identity import TeacherInvitationCreateRequest
+    from app.services.identity.service import IdentityService
+
+    id_service = IdentityService(identity_repo)
+    expired_mut = await id_service.create_teacher_invitation(
+        actor=identity_repo.users[admin_id],
+        payload=TeacherInvitationCreateRequest(
+            email="expired.invite@thinkfirst.test", full_name="Expired Prof"
+        ),
+        request_id="req-exp-1",
+        expires_at_override=datetime.now(UTC) - timedelta(hours=2),
+    )
+    assert expired_mut.invitation.status == "expired"
+    exp_user_tok = _sign_token(keys=rsa_keys, sub=uuid4(), email="expired.invite@thinkfirst.test")
+    exp_accept = await auth_client.post(
+        "/api/v1/users/me/accept-teacher-invitation",
+        headers={"Authorization": f"Bearer {exp_user_tok}"},
+        json={"token": expired_mut.invitation_token},
+    )
+    assert exp_accept.status_code == 410
+    assert exp_accept.json()["code"] == "INVITATION_EXPIRED"

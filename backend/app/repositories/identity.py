@@ -60,6 +60,8 @@ class IdentityRepository(Protocol):
 
     async def get_user_by_id(self, user_id: UUID) -> UserRecord | None: ...
 
+    async def get_user_by_email(self, email: str) -> UserRecord | None: ...
+
     async def ensure_student_profile(
         self, user_id: UUID, email: str, full_name: str = ""
     ) -> UserRecord: ...
@@ -105,6 +107,10 @@ class IdentityRepository(Protocol):
     async def count_users_with_role(self, role: RoleName) -> int: ...
 
     async def record_audit_log(self, event: AuditRecord) -> None: ...
+
+    async def list_audit_events_by_target_type(
+        self, target_type: str, limit: int = 300
+    ) -> list[tuple[AuditRecord, datetime, str | None]]: ...
 
 
 def _to_user_record(profile: Profile) -> UserRecord:
@@ -157,6 +163,17 @@ class SQLAlchemyIdentityRepository:
 
     async def get_user_by_id(self, user_id: UUID) -> UserRecord | None:
         profile = await self._load_profile(user_id)
+        return _to_user_record(profile) if profile is not None else None
+
+    async def get_user_by_email(self, email: str) -> UserRecord | None:
+        normalized = email.strip().lower()
+        stmt = (
+            select(Profile)
+            .where(func.lower(Profile.email) == normalized)
+            .options(selectinload(Profile.roles), selectinload(Profile.preferences))
+            .execution_options(populate_existing=True)
+        )
+        profile = (await self._session.execute(stmt)).scalar_one_or_none()
         return _to_user_record(profile) if profile is not None else None
 
     async def ensure_student_profile(
@@ -289,13 +306,28 @@ class SQLAlchemyIdentityRepository:
         total = int((await self._session.execute(total_stmt)).scalar_one())
 
         rows_stmt = (
-            base.options(selectinload(Profile.roles), selectinload(Profile.preferences))
+            base.options(selectinload(Profile.roles))
             .order_by(Profile.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
         profiles = list((await self._session.execute(rows_stmt)).scalars().all())
-        return [_to_user_record(p) for p in profiles], total
+        return [
+            UserRecord(
+                id=p.id,
+                email=p.email,
+                full_name=p.full_name,
+                avatar_url=p.avatar_url,
+                roles=sorted(
+                    {r.role for r in p.roles if r.role in ("student", "teacher", "admin")}  # type: ignore[misc]
+                ),
+                onboarding_completed=p.onboarding_completed,
+                onboarding_completed_at=p.onboarding_completed_at,
+                created_at=p.created_at,
+                preferences=None,
+            )
+            for p in profiles
+        ], total
 
     async def grant_role(
         self, *, user_id: UUID, role: RoleName, granted_by: UUID
@@ -340,3 +372,27 @@ class SQLAlchemyIdentityRepository:
         )
         self._session.add(log)
         await self._session.commit()
+
+    async def list_audit_events_by_target_type(
+        self, target_type: str, limit: int = 300
+    ) -> list[tuple[AuditRecord, datetime, str | None]]:
+        stmt = (
+            select(AuditLog, Profile.email)
+            .outerjoin(Profile, AuditLog.actor_user_id == Profile.id)
+            .where(AuditLog.target_type == target_type)
+            .order_by(AuditLog.created_at.asc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        out: list[tuple[AuditRecord, datetime, str | None]] = []
+        for log, actor_email in rows:
+            rec = AuditRecord(
+                actor_user_id=log.actor_user_id,
+                action=log.action,
+                target_type=log.target_type,
+                target_id=log.target_id,
+                metadata=dict(log.metadata_json or {}),
+                request_id=log.request_id,
+            )
+            out.append((rec, log.created_at, actor_email))
+        return out

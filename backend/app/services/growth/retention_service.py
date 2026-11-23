@@ -13,6 +13,7 @@ Core pedagogical invariants:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from fastapi import status
@@ -30,6 +31,7 @@ from app.schemas.growth import (
     RetentionScheduleView,
     SubmitRetentionAttemptRequest,
 )
+from app.schemas.learning import SkillGraphView
 from app.schemas.problems import SubmissionCreateRequest
 from app.services.execution.service import ExecutionService
 from app.services.learning.lessons_service import resolve_user_language
@@ -81,22 +83,29 @@ class RetentionVerificationService:
         return problems[0][0].id
 
     async def sync_schedules_for_student(
-        self, user: UserRecord, *, language_slug: str | None = None
+        self,
+        user: UserRecord,
+        *,
+        language_slug: str | None = None,
+        already_synced_evidence: bool = False,
     ) -> list[RetentionSchedule]:
         """Auto-schedule delayed retention checks for independently verified/transferred skills."""
         lang = resolve_user_language(user, language_slug)
-        await self._skill_graph.sync_phase3_and_phase4_evidence(user.id, language_slug=lang)
+        if not already_synced_evidence:
+            await self._skill_graph.sync_phase3_and_phase4_evidence(user.id, language_slug=lang)
         skill_states = await self._learning_repo.list_student_skill_states(
             user.id, language_slug=lang
         )
         existing = await self._growth_repo.list_retention_schedules(user.id, language_slug=lang)
         existing_by_skill = {s.skill_slug: s for s in existing}
         now = datetime.now(UTC)
+        mutated = False
 
         # Refresh `scheduled` -> `due` when due_at has arrived
         for sched in existing:
             if sched.status == "scheduled" and sched.due_at <= now:
                 await self._growth_repo.update_retention_schedule(schedule=sched, status="due")
+                mutated = True
 
         # Create a 24h retention schedule for each skill that reached guided/independent/transferred
         for st in skill_states:
@@ -127,22 +136,40 @@ class RetentionVerificationService:
                 due_at=due_at,
                 interval_hours=24,
             )
+            mutated = True
 
+        if not mutated:
+            return existing
         return await self._growth_repo.list_retention_schedules(user.id, language_slug=lang)
 
     async def get_retention_overview(
-        self, user: UserRecord, *, language_slug: str | None = None
+        self,
+        user: UserRecord,
+        *,
+        language_slug: str | None = None,
+        already_synced_evidence: bool = False,
+        preloaded_skill_graph: SkillGraphView | None = None,
     ) -> RetentionOverviewView:
         lang = resolve_user_language(user, language_slug)
-        schedules = await self.sync_schedules_for_student(user, language_slug=lang)
+        schedules = await self.sync_schedules_for_student(
+            user,
+            language_slug=lang,
+            already_synced_evidence=already_synced_evidence,
+        )
         attempts = await self._growth_repo.list_retention_attempts(
             student_id=user.id, limit=25, language_slug=lang
         )
-        skill_nodes = {n.slug: n for n in await self._learning_repo.list_skill_nodes()}
-        skill_states = await self._learning_repo.list_student_skill_states(
-            user.id, language_slug=lang
-        )
-        retained_skills_count = sum(1 for s in skill_states if s.state == "retained")
+        if preloaded_skill_graph is not None:
+            skill_nodes: dict[str, Any] = {n.slug: n for n in preloaded_skill_graph.nodes}
+            retained_skills_count = sum(
+                1 for n in preloaded_skill_graph.nodes if n.state == "retained"
+            )
+        else:
+            skill_nodes = {n.slug: n for n in await self._learning_repo.list_skill_nodes()}
+            skill_states = await self._learning_repo.list_student_skill_states(
+                user.id, language_slug=lang
+            )
+            retained_skills_count = sum(1 for s in skill_states if s.state == "retained")
 
         now = datetime.now(UTC)
         schedule_views: list[RetentionScheduleView] = []

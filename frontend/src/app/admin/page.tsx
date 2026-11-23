@@ -2,6 +2,7 @@ import { SystemStatusCard } from "@/components/system-status-card";
 import {
   fetchAdminOperationsHealth,
   fetchAdminOverview,
+  fetchAdminTeacherManagement,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 import { AdminDashboardClient } from "@/features/admin/admin-dashboard-client";
@@ -14,9 +15,10 @@ export default async function AdminDashboardPage() {
     currentPath: "/admin",
   });
 
-  const [overview, operationsHealth] = await Promise.all([
+  const [overview, operationsHealth, teacherMgmt] = await Promise.all([
     fetchAdminOverview(accessToken),
     fetchAdminOperationsHealth(accessToken).catch(() => null),
+    fetchAdminTeacherManagement(accessToken).catch(() => null),
   ]);
 
   return (
@@ -25,6 +27,9 @@ export default async function AdminDashboardPage() {
         adminName={user.full_name || user.email}
         overview={overview}
         operationsHealth={operationsHealth}
+        accessToken={accessToken}
+        initialActiveTeachers={teacherMgmt?.active_teachers ?? []}
+        initialTeacherInvitations={teacherMgmt?.invitations ?? []}
       />
       <SystemStatusCard />
     </div>

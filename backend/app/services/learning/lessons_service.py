@@ -151,15 +151,22 @@ class LessonsAndTracksService:
         )
 
     async def get_track_status(
-        self, user: UserRecord, *, language_slug: str | None = None
+        self,
+        user: UserRecord,
+        *,
+        language_slug: str | None = None,
+        completed_diag_override: bool | None = None,
     ) -> StudentTrackStatus:
         lang = resolve_user_language(user, language_slug)
         tracks = await self._learning_repo.list_tracks()
         enrollment = await self._learning_repo.get_track_enrollment(user.id, language_slug=lang)
-        diag_sessions = await self._learning_repo.list_student_diagnostic_sessions(
-            student_id=user.id, limit=5, language_slug=lang
-        )
-        completed_diag = any(s.status == "completed" for s in diag_sessions)
+        if completed_diag_override is not None:
+            completed_diag = completed_diag_override
+        else:
+            diag_sessions = await self._learning_repo.list_student_diagnostic_sessions(
+                student_id=user.id, limit=5, language_slug=lang
+            )
+            completed_diag = any(s.status == "completed" for s in diag_sessions)
 
         if enrollment is None:
             initial_slug, reason = _initial_track_from_onboarding(user)

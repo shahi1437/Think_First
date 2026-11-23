@@ -1,5 +1,6 @@
 """Admin-only Phase 8 Overview, Audit Log & Phase 9 Operations Health routes."""
 
+import asyncio
 import time
 
 import httpx
@@ -48,126 +49,128 @@ async def get_admin_operations_health(
     """Measure live PostgreSQL, ML artifact, Judge0 CE, and LLM readiness without leaking keys."""
     checks: list[OperationalCheckStatus] = []
 
-    db_start = time.perf_counter()
-    db_ok = await db_manager.check_health()
-    db_latency = round((time.perf_counter() - db_start) * 1000, 2)
-    checks.append(
-        OperationalCheckStatus(
+    async def _probe_db() -> tuple[bool, OperationalCheckStatus]:
+        db_start = time.perf_counter()
+        ok = await db_manager.check_health()
+        lat = round((time.perf_counter() - db_start) * 1000, 2)
+        return ok, OperationalCheckStatus(
             name="postgresql",
-            status="ok" if db_ok else "unavailable",
-            latency_ms=db_latency,
+            status="ok" if ok else "unavailable",
+            latency_ms=lat,
             detail="Primary PostgreSQL + pgvector connection healthy."
-            if db_ok
+            if ok
             else "Database connectivity check failed.",
         )
+
+    async def _probe_judge0() -> tuple[bool, OperationalCheckStatus]:
+        ok = False
+        lat: float | None = None
+        detail = "Judge0 endpoint unreachable."
+        j_start = time.perf_counter()
+        if is_worker_queue_mode(settings):
+            try:
+                async for db_sess in db_manager.session():
+                    q_repo = ExecutionQueueRepository(db_sess)
+                    active_workers, _, q_depth = await q_repo.get_online_workers_summary(
+                        heartbeat_ttl_seconds=settings.execution_worker_heartbeat_ttl_seconds
+                    )
+                    lat = round((time.perf_counter() - j_start) * 1000, 2)
+                    ok = active_workers > 0
+                    detail = (
+                        f"Outbound local Judge0 worker online "
+                        f"(workers={active_workers}, queue={q_depth})."
+                        if ok
+                        else f"Outbound local Judge0 worker offline (queue={q_depth})."
+                    )
+                    break
+            except Exception as exc:
+                lat = round((time.perf_counter() - j_start) * 1000, 2)
+                detail = f"Worker queue health check failed ({type(exc).__name__})."
+        elif not is_judge0_configured(settings):
+            lat = 0.0
+            detail = "Judge0 CE is disabled or not configured yet (code execution unavailable)."
+        else:
+            try:
+                headers = build_judge0_auth_headers(settings) or None
+                async with httpx.AsyncClient(timeout=1.5) as client:
+                    resp = await client.get(
+                        f"{settings.judge0_base_url.rstrip('/')}/about",
+                        headers=headers,
+                    )
+                    lat = round((time.perf_counter() - j_start) * 1000, 2)
+                    if resp.status_code == 200:
+                        ok = True
+                        version = resp.json().get("version", "unknown")
+                        detail = f"Judge0 CE online (version={version})."
+                    else:
+                        detail = f"Judge0 CE returned HTTP {resp.status_code}."
+            except AppError as exc:
+                lat = round((time.perf_counter() - j_start) * 1000, 2)
+                detail = exc.message
+            except Exception as exc:
+                lat = round((time.perf_counter() - j_start) * 1000, 2)
+                detail = f"Judge0 check failed ({type(exc).__name__})."
+        return ok, OperationalCheckStatus(
+            name="judge0",
+            status="ok" if ok else "unavailable",
+            latency_ms=lat,
+            detail=detail,
+        )
+
+    async def _probe_piston() -> tuple[bool, OperationalCheckStatus]:
+        ok = False
+        lat: float | None = None
+        detail = "Piston fallback disabled."
+        p_start = time.perf_counter()
+        if not is_piston_configured(settings):
+            lat = 0.0
+        else:
+            try:
+                async with httpx.AsyncClient(timeout=1.2) as client:
+                    p_resp = await client.get(
+                        f"{settings.piston_base_url.rstrip('/')}/api/v2/runtimes"
+                    )
+                    lat = round((time.perf_counter() - p_start) * 1000, 2)
+                    if p_resp.status_code == 200:
+                        runtimes = p_resp.json()
+                        rt_count = len(runtimes) if isinstance(runtimes, list) else 0
+                        ok = rt_count > 0
+                        detail = (
+                            f"Self-hosted Piston online ({rt_count} runtime(s) installed)."
+                            if ok
+                            else "Piston online but no language runtimes installed yet."
+                        )
+                    else:
+                        detail = f"Piston returned HTTP {p_resp.status_code}."
+            except Exception as exc:
+                lat = round((time.perf_counter() - p_start) * 1000, 2)
+                detail = f"Piston check failed ({type(exc).__name__})."
+        piston_status = (
+            "ok" if ok else ("degraded" if is_piston_configured(settings) else "unavailable")
+        )
+        return ok, OperationalCheckStatus(
+            name="piston_fallback",
+            status=piston_status,
+            latency_ms=lat,
+            detail=detail,
+        )
+
+    (db_ok, db_check), (judge0_ok, judge0_check), (piston_ok, piston_check) = await asyncio.gather(
+        _probe_db(),
+        _probe_judge0(),
+        _probe_piston(),
     )
 
     ml_status = get_ml_classifier_service(settings).get_status_summary()
-    checks.append(
-        OperationalCheckStatus(
-            name="ml_classifier",
-            status="ok" if ml_status["loaded"] else "degraded",
-            latency_ms=None,
-            detail=(
-                f"version={ml_status['model_version']} "
-                f"artifact_exists={ml_status['artifact_exists']}"
-            ),
-        )
+    ml_check = OperationalCheckStatus(
+        name="ml_classifier",
+        status="ok" if ml_status["loaded"] else "degraded",
+        latency_ms=None,
+        detail=(
+            f"version={ml_status['model_version']} artifact_exists={ml_status['artifact_exists']}"
+        ),
     )
-
-    judge0_ok = False
-    judge0_latency: float | None = None
-    judge0_detail = "Judge0 endpoint unreachable."
-    j_start = time.perf_counter()
-    if is_worker_queue_mode(settings):
-        try:
-            async for db_sess in db_manager.session():
-                q_repo = ExecutionQueueRepository(db_sess)
-                active_workers, _, q_depth = await q_repo.get_online_workers_summary(
-                    heartbeat_ttl_seconds=settings.execution_worker_heartbeat_ttl_seconds
-                )
-                judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-                judge0_ok = active_workers > 0
-                judge0_detail = (
-                    f"Outbound local Judge0 worker online "
-                    f"(workers={active_workers}, queue={q_depth})."
-                    if judge0_ok
-                    else f"Outbound local Judge0 worker offline (queue={q_depth})."
-                )
-                break
-        except Exception as exc:
-            judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-            judge0_detail = f"Worker queue health check failed ({type(exc).__name__})."
-    elif not is_judge0_configured(settings):
-        judge0_latency = 0.0
-        judge0_detail = "Judge0 CE is disabled or not configured yet (code execution unavailable)."
-    else:
-        try:
-            headers = build_judge0_auth_headers(settings) or None
-            async with httpx.AsyncClient(timeout=2.5) as client:
-                resp = await client.get(
-                    f"{settings.judge0_base_url.rstrip('/')}/about",
-                    headers=headers,
-                )
-                judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-                if resp.status_code == 200:
-                    judge0_ok = True
-                    version = resp.json().get("version", "unknown")
-                    judge0_detail = f"Judge0 CE online (version={version})."
-                else:
-                    judge0_detail = f"Judge0 CE returned HTTP {resp.status_code}."
-        except AppError as exc:
-            judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-            judge0_detail = exc.message
-        except Exception as exc:
-            judge0_latency = round((time.perf_counter() - j_start) * 1000, 2)
-            judge0_detail = f"Judge0 check failed ({type(exc).__name__})."
-
-    checks.append(
-        OperationalCheckStatus(
-            name="judge0",
-            status="ok" if judge0_ok else "unavailable",
-            latency_ms=judge0_latency,
-            detail=judge0_detail,
-        )
-    )
-
-    piston_ok = False
-    piston_latency: float | None = None
-    piston_detail = "Piston fallback disabled."
-    p_start = time.perf_counter()
-    if not is_piston_configured(settings):
-        piston_latency = 0.0
-    else:
-        try:
-            async with httpx.AsyncClient(timeout=2.5) as client:
-                p_resp = await client.get(f"{settings.piston_base_url.rstrip('/')}/api/v2/runtimes")
-                piston_latency = round((time.perf_counter() - p_start) * 1000, 2)
-                if p_resp.status_code == 200:
-                    runtimes = p_resp.json()
-                    rt_count = len(runtimes) if isinstance(runtimes, list) else 0
-                    piston_ok = rt_count > 0
-                    piston_detail = (
-                        f"Self-hosted Piston online ({rt_count} runtime(s) installed)."
-                        if piston_ok
-                        else "Piston online but no language runtimes installed yet."
-                    )
-                else:
-                    piston_detail = f"Piston returned HTTP {p_resp.status_code}."
-        except Exception as exc:
-            piston_latency = round((time.perf_counter() - p_start) * 1000, 2)
-            piston_detail = f"Piston check failed ({type(exc).__name__})."
-
-    checks.append(
-        OperationalCheckStatus(
-            name="piston_fallback",
-            status="ok"
-            if piston_ok
-            else ("degraded" if is_piston_configured(settings) else "unavailable"),
-            latency_ms=piston_latency,
-            detail=piston_detail,
-        )
-    )
+    checks.extend([db_check, ml_check, judge0_check, piston_check])
 
     has_live_llm = (
         settings.llm_provider != "none"

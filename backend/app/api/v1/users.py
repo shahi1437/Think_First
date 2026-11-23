@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.api.v1.deps import get_current_user, get_identity_service, require_roles
 from app.repositories.identity import UserRecord
 from app.schemas.identity import (
     OnboardingSubmitRequest,
     PortalVerifyRequest,
+    TeacherInvitationAcceptRequest,
+    TeacherInvitationAcceptResponse,
+    TeacherInvitationInspectResponse,
     TeacherScopeResponse,
     UserMeResponse,
     UserPreferencesUpdate,
@@ -58,6 +61,37 @@ async def patch_users_me_preferences(
 ) -> UserMeResponse:
     """Update authenticated user's learning preferences."""
     return await service.update_preferences(user=current_user, payload=payload)
+
+
+@users_router.get(
+    "/teacher-invitations/inspect",
+    response_model=TeacherInvitationInspectResponse,
+)
+async def get_inspect_teacher_invitation(
+    token: str = Query(..., min_length=16, max_length=256),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherInvitationInspectResponse:
+    """Inspect a teacher invitation token prior to acceptance."""
+    return await service.inspect_teacher_invitation(raw_token=token)
+
+
+@users_router.post(
+    "/me/accept-teacher-invitation",
+    response_model=TeacherInvitationAcceptResponse,
+)
+async def post_accept_teacher_invitation(
+    payload: TeacherInvitationAcceptRequest,
+    request: Request,
+    current_user: UserRecord = Depends(get_current_user),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherInvitationAcceptResponse:
+    """Accept a verified teacher invitation token and activate DB-backed Teacher role."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.accept_teacher_invitation(
+        user=current_user,
+        raw_token=payload.token,
+        request_id=request_id,
+    )
 
 
 @teacher_identity_router.get("/me", response_model=TeacherScopeResponse)

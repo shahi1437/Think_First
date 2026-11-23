@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.api.v1.deps import get_identity_service, require_roles
 from app.repositories.identity import UserRecord
@@ -10,10 +10,15 @@ from app.schemas.identity import (
     AdminRoleMutationResponse,
     AdminUserSummary,
     RoleName,
+    TeacherInvitationCreateRequest,
+    TeacherInvitationMutationResponse,
+    TeacherLookupResponse,
+    TeacherManagementOverviewResponse,
 )
 from app.services.identity.service import IdentityService
 
 admin_users_router = APIRouter(prefix="/admin/users", tags=["Admin Users & Roles"])
+admin_teachers_router = APIRouter(prefix="/admin/teachers", tags=["Admin Teacher Management"])
 
 
 @admin_users_router.get("", response_model=PaginatedResponse[AdminUserSummary])
@@ -61,5 +66,84 @@ async def revoke_user_role(
         actor=admin_user,
         target_user_id=user_id,
         role=role,
+        request_id=request_id,
+    )
+
+
+@admin_teachers_router.get("", response_model=TeacherManagementOverviewResponse)
+async def get_admin_teacher_management(
+    q: str | None = Query(default=None, max_length=120),
+    limit: int = Query(default=50, ge=1, le=100),
+    _admin_user: UserRecord = Depends(require_roles("admin")),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherManagementOverviewResponse:
+    """List active Teachers and pending/historical Teacher Invitations (Admin only)."""
+    return await service.get_teacher_management_overview(q=q, limit=limit)
+
+
+@admin_teachers_router.get("/lookup", response_model=TeacherLookupResponse)
+async def lookup_admin_teacher_by_email(
+    email: str = Query(..., min_length=3, max_length=254),
+    _admin_user: UserRecord = Depends(require_roles("admin")),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherLookupResponse:
+    """Check if an email belongs to an active teacher, an existing user, or a pending invite."""
+    return await service.lookup_teacher_by_email(email=email)
+
+
+@admin_teachers_router.post(
+    "/invitations",
+    response_model=TeacherInvitationMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_admin_teacher_invitation(
+    payload: TeacherInvitationCreateRequest,
+    request: Request,
+    admin_user: UserRecord = Depends(require_roles("admin")),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherInvitationMutationResponse:
+    """Create a secure pending Teacher Invitation for a new instructor email (Admin only)."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.create_teacher_invitation(
+        actor=admin_user,
+        payload=payload,
+        request_id=request_id,
+    )
+
+
+@admin_teachers_router.post(
+    "/invitations/{invitation_id}/resend",
+    response_model=TeacherInvitationMutationResponse,
+)
+async def resend_admin_teacher_invitation(
+    invitation_id: UUID,
+    request: Request,
+    admin_user: UserRecord = Depends(require_roles("admin")),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherInvitationMutationResponse:
+    """Rotate token and resend/extend a pending or expired Teacher Invitation (Admin only)."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.resend_teacher_invitation(
+        actor=admin_user,
+        invitation_id=invitation_id,
+        request_id=request_id,
+    )
+
+
+@admin_teachers_router.delete(
+    "/invitations/{invitation_id}",
+    response_model=TeacherInvitationMutationResponse,
+)
+async def revoke_admin_teacher_invitation(
+    invitation_id: UUID,
+    request: Request,
+    admin_user: UserRecord = Depends(require_roles("admin")),
+    service: IdentityService = Depends(get_identity_service),
+) -> TeacherInvitationMutationResponse:
+    """Revoke a pending Teacher Invitation so its token can never be accepted (Admin only)."""
+    request_id = getattr(request.state, "request_id", None)
+    return await service.revoke_teacher_invitation(
+        actor=admin_user,
+        invitation_id=invitation_id,
         request_id=request_id,
     )

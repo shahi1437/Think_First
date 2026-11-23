@@ -14,21 +14,30 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { TeacherManagementSection } from "@/features/admin/teacher-management-section";
 import type {
   AdminDashboardOverview,
   AdminOperationsHealth,
+  AdminUserSummary,
+  TeacherInvitationView,
 } from "@/types/admin";
 
 interface AdminDashboardClientProps {
   adminName: string;
   overview: AdminDashboardOverview;
   operationsHealth?: AdminOperationsHealth | null;
+  accessToken?: string;
+  initialActiveTeachers?: AdminUserSummary[];
+  initialTeacherInvitations?: TeacherInvitationView[];
 }
 
 export function AdminDashboardClient({
   adminName,
   overview,
   operationsHealth = null,
+  accessToken = "",
+  initialActiveTeachers = [],
+  initialTeacherInvitations = [],
 }: AdminDashboardClientProps) {
   return (
     <div className="space-y-6">
@@ -190,6 +199,12 @@ export function AdminDashboardClient({
       ) : null}
 
       {/* Primary KPI Grid */}
+      <TeacherManagementSection
+        accessToken={accessToken}
+        initialActiveTeachers={initialActiveTeachers}
+        initialInvitations={initialTeacherInvitations}
+      />
+
       <section
         aria-label="Platform content statistics"
         className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
