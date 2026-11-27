@@ -41,37 +41,37 @@ export function AdminDashboardClient({
 }: AdminDashboardClientProps) {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <section className="tf-animate-enter rounded-2xl border border-slate-800 bg-gradient-to-br from-[#0b1221] via-[#111b31] to-[#0f172a] p-6 text-white shadow-md sm:p-8">
+      {/* Executive Control Center Header */}
+      <section className="tf-animate-enter rounded-2xl border border-slate-200 bg-white p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">
+            <p className="text-xs font-semibold text-teal-700">
               Authorized Admin Studio
             </p>
-            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-[34px]">
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
               Curriculum &amp; Assessment Control Center — {adminName}
             </h1>
-            <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-300">
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-600">
               All user counts, course oversight metrics, and system health probes
               below are queried live from PostgreSQL with strict Admin RBAC.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/audit"
-              className="rounded-xl bg-teal-400 px-4 py-2.5 text-[15px] font-semibold text-slate-950 transition hover:bg-teal-300"
+              className="rounded-lg bg-[#0b1221] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
             >
               Manage Users &amp; Roles
             </Link>
             <Link
               href="/admin/problems"
-              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-indigo-500"
+              className="rounded-lg bg-teal-700 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800"
             >
               Open Problem Studio
             </Link>
             <Link
               href="/admin/curriculum"
-              className="rounded-xl border border-slate-600 bg-slate-900/70 px-4 py-2.5 text-[15px] font-semibold text-white transition hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50"
             >
               Manage Lessons &amp; Tracks
             </Link>
@@ -80,48 +80,48 @@ export function AdminDashboardClient({
 
         {/* Real Platform Users & Course Oversight Counters */}
         <div className="mt-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+          <div className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4">
+            <div className="flex items-center justify-between text-xs font-medium text-slate-500">
               <span>Students</span>
-              <GraduationCap className="h-4 w-4 text-teal-300" aria-hidden="true" />
+              <GraduationCap className="h-4 w-4 text-teal-700" aria-hidden="true" />
             </div>
-            <p className="mt-1.5 text-3xl font-bold text-white">
+            <p className="mt-1.5 text-3xl font-bold text-slate-950 tabular-nums">
               {overview.students_count ?? 0}
             </p>
-            <p className="mt-1 text-xs text-slate-400">DB-backed student role</p>
+            <p className="mt-1 text-xs text-slate-500">DB-backed student role</p>
           </div>
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+          <div className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4">
+            <div className="flex items-center justify-between text-xs font-medium text-slate-500">
               <span>Teachers</span>
-              <Users className="h-4 w-4 text-indigo-300" aria-hidden="true" />
+              <Users className="h-4 w-4 text-teal-700" aria-hidden="true" />
             </div>
-            <p className="mt-1.5 text-3xl font-bold text-white">
+            <p className="mt-1.5 text-3xl font-bold text-slate-950 tabular-nums">
               {overview.teachers_count ?? 0}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Approved instructors</p>
+            <p className="mt-1 text-xs text-slate-500">Approved instructors</p>
           </div>
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+          <div className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4">
+            <div className="flex items-center justify-between text-xs font-medium text-slate-500">
               <span>Admins</span>
-              <ShieldCheck className="h-4 w-4 text-amber-300" aria-hidden="true" />
+              <ShieldCheck className="h-4 w-4 text-slate-700" aria-hidden="true" />
             </div>
-            <p className="mt-1.5 text-3xl font-bold text-white">
+            <p className="mt-1.5 text-3xl font-bold text-slate-950 tabular-nums">
               {overview.admins_count ?? 0}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Authorized governors</p>
+            <p className="mt-1 text-xs text-slate-500">Authorized governors</p>
           </div>
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-400">
+          <div className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4">
+            <div className="flex items-center justify-between text-xs font-medium text-slate-500">
               <span>Courses &amp; Enrollments</span>
-              <BookOpen className="h-4 w-4 text-teal-300" aria-hidden="true" />
+              <BookOpen className="h-4 w-4 text-teal-700" aria-hidden="true" />
             </div>
-            <p className="mt-1.5 text-3xl font-bold text-white">
+            <p className="mt-1.5 text-3xl font-bold text-slate-950 tabular-nums">
               {overview.courses_active ?? 0}
-              <span className="ml-1.5 text-sm font-normal text-slate-400">
+              <span className="ml-1.5 text-sm font-normal text-slate-500">
                 / {overview.courses_total ?? 0} active
               </span>
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500 tabular-nums">
               {overview.enrollments_active ?? 0} enrollments ·{" "}
               {overview.assignments_published ?? 0} published assignments
             </p>

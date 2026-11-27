@@ -120,16 +120,12 @@ class LearningRepository:
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def list_student_skill_states(
-        self, student_id: UUID, language_slug: str = "python"
+        self, student_id: UUID, language_slug: str | None = "python"
     ) -> list[StudentSkillState]:
-        stmt = (
-            select(StudentSkillState)
-            .where(
-                StudentSkillState.student_id == student_id,
-                StudentSkillState.language_slug == language_slug,
-            )
-            .execution_options(populate_existing=True)
-        )
+        stmt = select(StudentSkillState).where(StudentSkillState.student_id == student_id)
+        if language_slug is not None:
+            stmt = stmt.where(StudentSkillState.language_slug == language_slug)
+        stmt = stmt.execution_options(populate_existing=True)
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def get_student_skill_state(

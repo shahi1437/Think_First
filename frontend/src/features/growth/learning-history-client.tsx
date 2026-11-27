@@ -11,8 +11,10 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { DebuggingTimelinePanel } from "@/features/growth/debugging-timeline-panel";
 import { fetchLearningHistory } from "@/lib/api-client";
 import type {
+  DebuggingTimelineResponseView,
   HistoryCategory,
   LearningHistoryResponseView,
 } from "@/types/growth";
@@ -20,6 +22,7 @@ import type {
 interface LearningHistoryClientProps {
   accessToken: string;
   initialHistory: LearningHistoryResponseView;
+  initialDebuggingTimeline?: DebuggingTimelineResponseView | null;
   initialLanguage?: "en" | "bn";
 }
 
@@ -60,6 +63,7 @@ const CATEGORY_VARIANT: Record<
 export function LearningHistoryClient({
   accessToken,
   initialHistory,
+  initialDebuggingTimeline = null,
   initialLanguage = "en",
 }: LearningHistoryClientProps) {
   const [lang, setLang] = useState<"en" | "bn">(initialLanguage);
@@ -231,6 +235,14 @@ export function LearningHistoryClient({
           </div>
         ) : null}
       </section>
+
+      {/* Phase 11 Feature 1: Per-Problem AI Debugging Timeline */}
+      {initialDebuggingTimeline ? (
+        <DebuggingTimelinePanel
+          timeline={initialDebuggingTimeline}
+          language={lang}
+        />
+      ) : null}
 
       {/* Timeline Feed */}
       <section aria-label="Learning timeline events" className="space-y-3">

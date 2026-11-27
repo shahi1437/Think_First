@@ -40,7 +40,7 @@ export function LogoutButton() {
         void handleLogout();
       }}
       disabled={signingOut}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-60"
+      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 disabled:opacity-60"
     >
       <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
       {signingOut ? "Signing out..." : "Sign out"}

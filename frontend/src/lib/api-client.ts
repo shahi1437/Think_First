@@ -99,19 +99,34 @@ import {
 import {
   dailyLearningPlanViewSchema,
   dailyPlanWorkspaceViewSchema,
+  debuggingTimelineResponseViewSchema,
   learningDnaProfileViewSchema,
   learningHistoryResponseViewSchema,
   retentionAttemptViewSchema,
   retentionOverviewViewSchema,
+  verifiedLearningProgressViewSchema,
   type DailyLearningPlanView,
   type DailyPlanWorkspaceView,
   type DailyTaskStatus,
+  type DebuggingTimelineResponseView,
   type HistoryCategory,
   type LearningDnaProfileView,
   type LearningHistoryResponseView,
   type RetentionAttemptView,
   type RetentionOverviewView,
+  type VerifiedLearningProgressView,
 } from "@/types/growth";
+import {
+  markAllReadResponseSchema,
+  notificationItemSchema,
+  notificationListResponseSchema,
+  teacherAnnouncementResponseSchema,
+  type MarkAllReadResponse,
+  type NotificationCategory,
+  type NotificationItemView,
+  type NotificationListResponse,
+  type TeacherAnnouncementResponse,
+} from "@/types/notifications";
 import {
   assignmentSummaryViewSchema,
   classInvitationViewSchema,
@@ -1129,6 +1144,131 @@ export async function submitRetentionAttempt(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return retentionAttemptViewSchema.parse(await response.json());
+}
+
+// =============================================================================
+// Phase 11: AI Debugging Timeline, Verified Learning Progress & Notifications
+// =============================================================================
+
+export async function fetchDebuggingTimeline(
+  accessToken: string,
+  params: {
+    language_slug?: string;
+    limit?: number;
+  } = {},
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<DebuggingTimelineResponseView> {
+  const sp = new URLSearchParams();
+  if (params.language_slug) sp.set("language_slug", params.language_slug);
+  if (params.limit) sp.set("limit", String(params.limit));
+  const qs = sp.toString();
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/growth/debugging-timeline${qs ? `?${qs}` : ""}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return debuggingTimelineResponseViewSchema.parse(await response.json());
+}
+
+export async function fetchVerifiedLearningProgress(
+  accessToken: string,
+  params: {
+    language_slug?: string;
+  } = {},
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<VerifiedLearningProgressView> {
+  const sp = new URLSearchParams();
+  if (params.language_slug) sp.set("language_slug", params.language_slug);
+  const qs = sp.toString();
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/growth/verified-progress${qs ? `?${qs}` : ""}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return verifiedLearningProgressViewSchema.parse(await response.json());
+}
+
+export async function fetchNotifications(
+  accessToken: string,
+  params: {
+    role?: "student" | "teacher" | "admin";
+    category?: NotificationCategory | "";
+    unread_only?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {},
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<NotificationListResponse> {
+  const sp = new URLSearchParams();
+  if (params.role) sp.set("role", params.role);
+  if (params.category) sp.set("category", params.category);
+  if (params.unread_only) sp.set("unread_only", "true");
+  if (params.limit) sp.set("limit", String(params.limit));
+  if (params.offset) sp.set("offset", String(params.offset));
+  const qs = sp.toString();
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/notifications${qs ? `?${qs}` : ""}`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return notificationListResponseSchema.parse(await response.json());
+}
+
+export async function markNotificationRead(
+  accessToken: string,
+  notificationId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<NotificationItemView> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/notifications/${notificationId}/read`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return notificationItemSchema.parse(await response.json());
+}
+
+export async function markAllNotificationsRead(
+  accessToken: string,
+  role?: "student" | "teacher" | "admin",
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<MarkAllReadResponse> {
+  const response = await safeFetch(`${baseUrl}/api/v1/notifications/read-all`, {
+    method: "POST",
+    headers: authHeaders(accessToken, true),
+    body: JSON.stringify({ role: role ?? null }),
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return markAllReadResponseSchema.parse(await response.json());
+}
+
+export async function postTeacherClassAnnouncement(
+  accessToken: string,
+  courseId: string,
+  payload: { title: string; body: string },
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherAnnouncementResponse> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}/announcements`,
+    {
+      method: "POST",
+      headers: authHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherAnnouncementResponseSchema.parse(await response.json());
 }
 
 // =============================================================================

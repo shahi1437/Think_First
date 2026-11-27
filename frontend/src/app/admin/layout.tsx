@@ -12,15 +12,16 @@ export default async function AdminLayout({
   children: ReactNode;
 }) {
   let user;
+  let accessToken;
   try {
-    ({ user } = await requireAuthenticatedUser({
+    ({ user, accessToken } = await requireAuthenticatedUser({
       allowedRoles: ["admin"],
       currentPath: "/admin",
     }));
   } catch (err) {
     if (err instanceof BackendUnavailableError) {
       return (
-        <main className="min-h-screen bg-slate-50">
+        <main className="min-h-screen bg-[#f7f8fa]">
           <ServiceUnavailableState title="Admin Console Temporarily Unavailable" />
         </main>
       );
@@ -31,6 +32,7 @@ export default async function AdminLayout({
   return (
     <AppShell
       user={user}
+      accessToken={accessToken}
       activeRole="admin"
       navLinks={[
         { href: "/admin", label: "Overview" },

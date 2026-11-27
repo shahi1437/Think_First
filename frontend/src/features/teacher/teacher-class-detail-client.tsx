@@ -6,7 +6,9 @@ import {
   CheckCircle2,
   KeyRound,
   Loader2,
+  Megaphone,
   Plus,
+  Send,
   UserCheck,
   UserMinus,
   Users,
@@ -17,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   createClassInvitation,
   manageClassMembership,
+  postTeacherClassAnnouncement,
   revokeClassInvitation,
   updateTeacherClass,
 } from "@/lib/api-client";
@@ -44,6 +47,39 @@ export function TeacherClassDetailClient({
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [annTitle, setAnnTitle] = useState("");
+  const [annBody, setAnnBody] = useState("");
+  const [sendingAnn, setSendingAnn] = useState(false);
+  const [annSuccess, setAnnSuccess] = useState<string | null>(null);
+
+  async function handleSendAnnouncement(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setAnnSuccess(null);
+    if (annTitle.trim().length < 2 || annBody.trim().length < 4) {
+      setError("Please enter an announcement title and message.");
+      return;
+    }
+    setSendingAnn(true);
+    try {
+      const res = await postTeacherClassAnnouncement(
+        accessToken,
+        detail.course.id,
+        { title: annTitle.trim(), body: annBody.trim() },
+      );
+      setAnnTitle("");
+      setAnnBody("");
+      setAnnSuccess(
+        `Announcement "${res.title}" delivered to ${res.recipients_notified} active student(s).`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not send announcement.",
+      );
+    } finally {
+      setSendingAnn(false);
+    }
+  }
 
   async function handleSaveCourse(e: React.FormEvent) {
     e.preventDefault();
@@ -241,6 +277,95 @@ export function TeacherClassDetailClient({
             <span>{error}</span>
           </div>
         ) : null}
+      </section>
+
+      {/* Class Announcement Composer -> In-App Student Notification Center */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Megaphone className="h-4 w-4 text-teal-700" aria-hidden="true" />
+              <span>Send Class Announcement</span>
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-600">
+              Delivers an immediate in-app notification to all active students
+              in {detail.course.code}.
+            </p>
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => void handleSendAnnouncement(e)}
+          data-testid="teacher-announcement-form"
+          className="mt-3 space-y-3"
+        >
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-1">
+              <label
+                htmlFor="class-announcement-title"
+                className="block text-xs font-medium text-slate-700"
+              >
+                Title
+              </label>
+              <input
+                id="class-announcement-title"
+                type="text"
+                value={annTitle}
+                onChange={(e) => setAnnTitle(e.target.value)}
+                placeholder="e.g. Lab 3 deadline reminder"
+                maxLength={140}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-600 focus:outline-none"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label
+                htmlFor="class-announcement-body"
+                className="block text-xs font-medium text-slate-700"
+              >
+                Message
+              </label>
+              <input
+                id="class-announcement-body"
+                type="text"
+                value={annBody}
+                onChange={(e) => setAnnBody(e.target.value)}
+                placeholder="Share lab instructions, office hours, or deadline updates..."
+                maxLength={800}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-600 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {annSuccess ? (
+              <p
+                role="status"
+                data-testid="teacher-announcement-success"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{annSuccess}</span>
+              </p>
+            ) : (
+              <span className="text-[11px] text-slate-500">
+                Visible in enrolled students&apos; Notification Center.
+              </span>
+            )}
+            <button
+              type="submit"
+              disabled={sendingAnn}
+              data-testid="teacher-announcement-submit"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0b1221] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-60"
+            >
+              {sendingAnn ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>{sendingAnn ? "Sending..." : "Post Announcement"}</span>
+            </button>
+          </div>
+        </form>
       </section>
 
       {/* Invitation Codes & Student Roster */}

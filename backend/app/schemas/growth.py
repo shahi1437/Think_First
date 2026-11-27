@@ -221,3 +221,107 @@ class SubmitRetentionAttemptRequest(BaseModel):
     language_slug: str = Field(default="python", min_length=1, max_length=32)
     source_code: str = Field(..., min_length=1, max_length=65536)
     student_explanation: str = Field(..., min_length=10, max_length=3000)
+
+
+# ---------------------------------------------------------------------------
+# E. AI Debugging Timeline (Feature 1 — Persisted Per-Problem Chronology)
+# ---------------------------------------------------------------------------
+
+DebuggingStepKind = Literal[
+    "problem_started",
+    "initial_attempt",
+    "error_diagnosed",
+    "ai_hint",
+    "student_correction",
+    "successful_execution",
+    "learning_outcome",
+]
+
+
+class DebuggingTimelineStepView(BaseModel):
+    """Single factual chronological step inside a student's debugging journey."""
+
+    id: str
+    step_kind: DebuggingStepKind
+    title: str
+    detail: str
+    code_excerpt: str | None = None
+    verdict_or_status: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime
+
+
+class DebuggingJourneyView(BaseModel):
+    """Grouped chronological debugging story for one coding problem from real DB records."""
+
+    problem_id: UUID
+    problem_slug: str
+    problem_title: str
+    language_slug: str
+    href: str
+    outcome_status: Literal["verified_transfer", "solved", "in_progress"]
+    attempts_count: int
+    hints_used: int
+    diagnoses_count: int
+    started_at: datetime
+    latest_event_at: datetime
+    steps: list[DebuggingTimelineStepView]
+
+
+class DebuggingTimelineResponseView(BaseModel):
+    """Paginated AI Debugging Timeline response built strictly from persisted events."""
+
+    journeys: list[DebuggingJourneyView]
+    total_journeys: int
+    solved_journeys: int
+    limit: int
+    offset: int
+
+
+# ---------------------------------------------------------------------------
+# F. Verified Learning Progress (Feature 2 — Verified vs Estimated Evidence)
+# ---------------------------------------------------------------------------
+
+
+class VerifiedLanguageBreakdownView(BaseModel):
+    language_slug: str
+    problems_attempted: int
+    problems_solved_verified: int
+    lessons_completed: int
+    total_submissions: int
+
+
+class DailyActivityPointView(BaseModel):
+    day: date
+    submissions_count: int
+    accepted_count: int
+    lessons_completed: int
+
+
+class VerifiedLearningProgressView(BaseModel):
+    """Strict separation of execution-verified achievements vs estimated indicators."""
+
+    # Execution & Assessment-Verified Achievements
+    problems_attempted: int
+    problems_solved_verified: int
+    total_submissions: int
+    accepted_submissions: int
+    languages_used: list[VerifiedLanguageBreakdownView]
+    concepts_mastered_verified: list[str]
+    concepts_in_progress: list[str]
+    assignments_completed_verified: int
+    assignments_total: int
+    average_published_grade_pct: float | None = None
+    transfer_verifications_passed: int
+    retention_checks_passed: int
+    consistency_active_days_14d: int
+    daily_activity_14d: list[DailyActivityPointView]
+    improvement_trend: Literal["improving", "steady", "needs_focus", "insufficient_data"]
+    early_acceptance_rate_pct: float | None = None
+    recent_acceptance_rate_pct: float | None = None
+
+    # Clearly Labeled Estimated / In-Progress Indicators
+    estimated_lessons_completed: int
+    estimated_diagnostic_sessions: int
+    estimated_guided_skills_count: int
+    methodology_note: str

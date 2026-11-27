@@ -117,17 +117,17 @@ export function NavLinks({
     return (
       <>
         {/* Desktop Sidebar Navigation */}
-        <div className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-slate-200/90 md:bg-white">
+        <div className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-slate-200 md:bg-white">
           <div className="sticky top-16 flex max-h-[calc(100vh-4rem)] flex-col overflow-y-auto px-3.5 py-5">
             {showPortalSwitcher ? (
               <div className="mb-5">
-                <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <p className="mb-2 px-2 text-xs font-medium text-slate-500">
                   Authorized Portals
                 </p>
                 <div
                   role="group"
                   aria-label="Portal switcher"
-                  className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-100/90 p-1"
+                  className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-100/80 p-1"
                 >
                   {portals.map((portal) => {
                     const isActivePortal = activeRole === portal;
@@ -137,13 +137,13 @@ export function NavLinks({
                         href={PORTAL_PATHS[portal]}
                         onClick={() => handleNavClick(PORTAL_PATHS[portal])}
                         aria-current={isActivePortal ? "true" : undefined}
-                        className={`rounded-lg px-2 py-1.5 text-center text-xs font-semibold transition ${
+                        className={`rounded-md px-2 py-1.5 text-center text-xs font-semibold transition-colors ${
                           isActivePortal
                             ? portal === "admin"
-                              ? "bg-indigo-600 text-white shadow-sm"
+                              ? "bg-slate-900 text-white shadow-xs"
                               : portal === "teacher"
-                                ? "bg-teal-600 text-white shadow-sm"
-                                : "bg-[#0b1221] text-white shadow-sm"
+                                ? "bg-teal-700 text-white shadow-xs"
+                                : "bg-[#0b1221] text-white shadow-xs"
                             : "text-slate-600 hover:bg-white hover:text-slate-900"
                         }`}
                       >
@@ -155,12 +155,12 @@ export function NavLinks({
               </div>
             ) : null}
 
-            <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <p className="mb-2 px-2 text-xs font-medium text-slate-500">
               {PORTAL_LABELS[activeRole]} Workspace
             </p>
             <nav
               aria-label="Primary navigation"
-              className="flex flex-col gap-1"
+              className="flex flex-col gap-0.5"
             >
               {navLinks.map((item) => {
                 const active = isNavLinkActive(pathname, item.href);
@@ -173,19 +173,19 @@ export function NavLinks({
                     onClick={() => handleNavClick(item.href)}
                     aria-current={active ? "page" : undefined}
                     aria-busy={isPending || undefined}
-                    className={`group flex items-center justify-between gap-2.5 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition ${
+                    className={`group flex items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                       active
-                        ? "bg-[#0b1221] text-white shadow-sm"
+                        ? "bg-teal-50/90 text-teal-950 ring-1 ring-inset ring-teal-200"
                         : isPending
-                          ? "bg-teal-50 text-teal-900 ring-1 ring-teal-200"
-                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                          ? "bg-slate-100 text-slate-900"
+                          : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-950"
                     }`}
                   >
-                    <span className="flex items-center gap-3">
+                    <span className="flex items-center gap-2.5">
                       <Icon
-                        className={`h-[18px] w-[18px] shrink-0 transition ${
+                        className={`h-4 w-4 shrink-0 transition-colors ${
                           active
-                            ? "text-teal-300"
+                            ? "text-teal-700"
                             : isPending
                               ? "text-teal-700"
                               : "text-slate-400 group-hover:text-slate-700"
@@ -196,7 +196,7 @@ export function NavLinks({
                     </span>
                     {isPending ? (
                       <Loader2
-                        className="h-4 w-4 animate-spin text-teal-600"
+                        className="h-3.5 w-3.5 animate-spin text-teal-700"
                         aria-hidden="true"
                       />
                     ) : null}
@@ -212,7 +212,7 @@ export function NavLinks({
           {pendingHref ? (
             <div
               aria-hidden="true"
-              className="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-teal-500"
+              className="absolute inset-x-0 top-0 h-0.5 bg-teal-600"
             />
           ) : null}
           <div className="flex items-center justify-between gap-2">
