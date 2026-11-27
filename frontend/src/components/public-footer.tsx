@@ -6,7 +6,7 @@ export function PublicFooter() {
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
         <div className="lg:col-span-2">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-indigo-500 text-xs font-bold text-slate-950">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-teal-400 font-mono text-xs font-bold text-slate-950">
               TF
             </span>
             <div>
@@ -15,17 +15,18 @@ export function PublicFooter() {
               </span>
             </div>
           </div>
-          <p className="mt-3 text-sm font-semibold text-teal-300">
+          <p className="mt-3 text-sm font-medium text-teal-300">
             Think First. Code Better.
           </p>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-400">
-            A structured Python learning and debugging platform designed for
-            students, instructors, and academic programs.
+            A structured multi-language programming and debugging platform
+            (Python, JavaScript, C, C++, Java) designed for students,
+            instructors, and academic programs.
           </p>
         </div>
 
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h3 className="text-xs font-semibold text-slate-300">
             Platform
           </h3>
           <ul className="mt-3 space-y-2 text-sm">
@@ -53,7 +54,7 @@ export function PublicFooter() {
         </div>
 
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h3 className="text-xs font-semibold text-slate-300">
             Authorized Portals
           </h3>
           <ul className="mt-3 space-y-2 text-sm">

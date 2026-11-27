@@ -52,25 +52,21 @@ export function AuthPortalShell({
   const panelHighlights = highlights ?? DEFAULT_HIGHLIGHTS[accent];
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-100 via-slate-50 to-white text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#f7f8fa] text-slate-900">
       <PublicNavbar />
 
       <main className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-14">
         <div className="w-full max-w-5xl space-y-6">
-          <div className="grid overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/60 lg:grid-cols-12">
+          <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-12">
             {/* Left Informational Brand Panel */}
-            <aside className="relative flex flex-col justify-between bg-[#0b1221] p-8 text-white sm:p-10 lg:col-span-5">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(45,212,191,0.18),_transparent_55%)]"
-              />
-              <div className="relative space-y-5">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-400/15 text-teal-300 ring-1 ring-teal-400/30">
-                  <Icon className="h-6 w-6" aria-hidden="true" />
+            <aside className="flex flex-col justify-between bg-[#0b1221] p-8 text-white sm:p-10 lg:col-span-5">
+              <div className="space-y-5">
+                <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-teal-400/25 bg-teal-400/10 text-teal-300">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
                 </div>
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-teal-300">
+                  <p className="text-xs font-medium text-teal-300">
                     Think First. Code Better.
                   </p>
                   <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">

@@ -12,15 +12,16 @@ export default async function StudentLayout({
   children: ReactNode;
 }) {
   let user;
+  let accessToken;
   try {
-    ({ user } = await requireAuthenticatedUser({
+    ({ user, accessToken } = await requireAuthenticatedUser({
       allowedRoles: ["student", "teacher", "admin"],
       currentPath: "/student",
     }));
   } catch (err) {
     if (err instanceof BackendUnavailableError) {
       return (
-        <main className="min-h-screen bg-slate-50">
+        <main className="min-h-screen bg-[#f7f8fa]">
           <ServiceUnavailableState />
         </main>
       );
@@ -31,6 +32,7 @@ export default async function StudentLayout({
   return (
     <AppShell
       user={user}
+      accessToken={accessToken}
       activeRole="student"
       navLinks={[
         { href: "/student", label: "Dashboard" },

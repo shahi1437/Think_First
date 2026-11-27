@@ -12,15 +12,16 @@ export default async function TeacherLayout({
   children: ReactNode;
 }) {
   let user;
+  let accessToken;
   try {
-    ({ user } = await requireAuthenticatedUser({
+    ({ user, accessToken } = await requireAuthenticatedUser({
       allowedRoles: ["teacher", "admin"],
       currentPath: "/teacher",
     }));
   } catch (err) {
     if (err instanceof BackendUnavailableError) {
       return (
-        <main className="min-h-screen bg-slate-50">
+        <main className="min-h-screen bg-[#f7f8fa]">
           <ServiceUnavailableState title="Teacher Portal Temporarily Unavailable" />
         </main>
       );
@@ -31,6 +32,7 @@ export default async function TeacherLayout({
   return (
     <AppShell
       user={user}
+      accessToken={accessToken}
       activeRole="teacher"
       navLinks={[
         { href: "/teacher", label: "Dashboard" },

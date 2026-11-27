@@ -18,7 +18,7 @@ export function PublicNavbar() {
     <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-[#0b1221]/95 text-white backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-indigo-500 text-sm font-bold text-slate-950 shadow-sm">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-teal-400 font-mono text-xs font-bold tracking-tight text-slate-950">
             TF
           </span>
           <div className="leading-tight">

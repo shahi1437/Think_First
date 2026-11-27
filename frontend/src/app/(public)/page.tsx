@@ -127,57 +127,93 @@ const steps = [
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#f7f8fa] text-slate-900">
       <PublicNavbar />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-[#0b1221] text-white">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(45,212,191,0.16),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(79,70,229,0.18),_transparent_55%)]"
-        />
+      <section className="border-b border-slate-800 bg-[#0b1221] text-white">
+        <div className="tf-animate-enter mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
+          <div className="grid items-start gap-10 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <span className="inline-flex items-center gap-2 rounded-md border border-teal-400/30 bg-teal-500/10 px-3 py-1 text-xs font-medium text-teal-300">
+                Think First. Code Better.
+              </span>
 
-        <div className="tf-animate-enter relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:py-24">
-          <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-500/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-teal-300">
-              Think First. Code Better.
-            </span>
+              <h1 className="mt-5 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-[50px] lg:leading-[1.08]">
+                Master Python programming through practice, error diagnosis, and
+                guided reasoning.
+              </h1>
 
-            <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-[52px] lg:leading-[1.1]">
-              Master Python programming through practice, error diagnosis, and
-              guided reasoning.
-            </h1>
+              <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
+                Think_First (CodeMentor AI) guides university and school
+                learners from beginner to advanced across Python, JavaScript, C,
+                C++, and Java—combining adaptive lessons, real sandbox
+                execution, AI debugging timelines, and classroom assignments in
+                one focused workspace.
+              </p>
 
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-[18px]">
-              Think_First (CodeMentor AI) guides university and school learners
-              from beginner to advanced across Python, JavaScript, C, C++, and
-              Java—combining adaptive lessons, real sandbox practice, mistake
-              diagnosis, and classroom assignments in one focused workspace.
-            </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-3.5">
-              <Link
-                href="/register"
-                prefetch={true}
-                className="tf-btn-press inline-flex min-h-[48px] items-center gap-2 rounded-xl bg-teal-400 px-6 py-3.5 text-base font-semibold text-slate-950 shadow-sm transition hover:bg-teal-300"
-              >
-                <GraduationCap className="h-4 w-4" aria-hidden="true" />
-                Create Student Account
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-              <a
-                href="#how-it-works"
-                className="tf-btn-press inline-flex min-h-[48px] items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/60 px-6 py-3.5 text-base font-semibold text-slate-100 transition hover:border-slate-400 hover:bg-slate-800"
-              >
-                <Compass className="h-4 w-4 text-teal-300" aria-hidden="true" />
-                See How It Works
-              </a>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link
+                  href="/register"
+                  prefetch={true}
+                  className="tf-btn-press inline-flex min-h-[46px] items-center gap-2 rounded-lg bg-teal-400 px-5 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-teal-300 sm:text-base"
+                >
+                  <GraduationCap className="h-4 w-4" aria-hidden="true" />
+                  Create Student Account
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <a
+                  href="#how-it-works"
+                  className="tf-btn-press inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:border-slate-500 hover:bg-slate-800 sm:text-base"
+                >
+                  <Compass
+                    className="h-4 w-4 text-teal-300"
+                    aria-hidden="true"
+                  />
+                  See How It Works
+                </a>
+              </div>
             </div>
+
+            {/* Structured Engineering Summary Card (real capabilities, zero fluff) */}
+            <aside className="rounded-xl border border-slate-800 bg-slate-900/70 p-5 lg:col-span-4">
+              <p className="text-xs font-medium text-teal-300">
+                Verified Execution Architecture
+              </p>
+              <dl className="mt-4 space-y-3.5 text-sm">
+                <div className="border-b border-slate-800 pb-3">
+                  <dt className="text-xs text-slate-400">
+                    Supported Sandbox Languages
+                  </dt>
+                  <dd className="mt-1 font-mono text-xs text-slate-100">
+                    Python · JavaScript · C · C++ · Java
+                  </dd>
+                </div>
+                <div className="border-b border-slate-800 pb-3">
+                  <dt className="text-xs text-slate-400">
+                    Evidence-Based Mastery
+                  </dt>
+                  <dd className="mt-1 text-slate-200">
+                    Predict → Run → Diagnose → Guided Hint → Independent
+                    Transfer
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-400">
+                    Academic Governance
+                  </dt>
+                  <dd className="mt-1 text-slate-200">
+                    Strict Student, Teacher, and Admin separation with isolated
+                    code execution
+                  </dd>
+                </div>
+              </dl>
+            </aside>
           </div>
 
           {/* Three Dedicated Role Login Portals */}
-          <div id="portals" className="mt-14">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <div id="portals" className="mt-14 border-t border-slate-800/80 pt-10">
+            <p className="text-xs font-medium text-slate-400">
               Choose Your Authorized Portal
             </p>
             <div className="mt-3.5 grid gap-5 md:grid-cols-3">
@@ -186,20 +222,20 @@ export default function LandingPage() {
                 return (
                   <div
                     key={portal.role}
-                    className={`flex flex-col justify-between rounded-2xl border p-6 transition duration-200 ${portal.cardBorder}`}
+                    className={`flex flex-col justify-between rounded-xl border p-6 transition-colors ${portal.cardBorder}`}
                   >
                     <div>
                       <div className="flex items-center gap-3">
                         <div
-                          className={`flex h-11 w-11 items-center justify-center rounded-xl ${portal.iconBg}`}
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${portal.iconBg}`}
                         >
                           <Icon className="h-5 w-5" aria-hidden="true" />
                         </div>
-                        <h2 className="text-base font-bold tracking-wide text-white">
+                        <h2 className="text-sm font-bold tracking-wide text-white">
                           {portal.role}
                         </h2>
                       </div>
-                      <p className="mt-3.5 text-[15px] leading-relaxed text-slate-300">
+                      <p className="mt-3 text-sm leading-relaxed text-slate-300">
                         {portal.description}
                       </p>
                     </div>
@@ -207,7 +243,7 @@ export default function LandingPage() {
                     <Link
                       href={portal.href}
                       prefetch={true}
-                      className={`mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-[15px] font-semibold transition ${portal.buttonStyle}`}
+                      className={`mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${portal.buttonStyle}`}
                     >
                       <Icon className="h-4 w-4" aria-hidden="true" />
                       <span>{portal.role}</span>
@@ -229,12 +265,12 @@ export default function LandingPage() {
           className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20"
         >
           <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-wider text-teal-700">
+            <p className="text-xs font-semibold text-teal-700">
               Platform Capabilities
             </p>
             <h2
               id="features-heading"
-              className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+              className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl"
             >
               Everything learners and instructors need for coding mastery
             </h2>
@@ -244,21 +280,21 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
                 <article
                   key={feature.title}
-                  className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md"
+                  className="group rounded-xl border border-slate-200 bg-white p-6 transition-colors hover:border-teal-300"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-teal-300 transition group-hover:bg-teal-600 group-hover:text-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-teal-700 transition-colors group-hover:border-teal-200 group-hover:bg-teal-50">
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </div>
-                  <h3 className="mt-4 text-lg font-bold text-slate-900 sm:text-[20px]">
+                  <h3 className="mt-4 text-base font-semibold text-slate-950">
                     {feature.title}
                   </h3>
-                  <p className="mt-2 text-base leading-relaxed text-slate-600">
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
                     {feature.description}
                   </p>
                 </article>
@@ -275,27 +311,27 @@ export default function LandingPage() {
         >
           <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
             <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
+              <p className="text-xs font-semibold text-teal-700">
                 How It Works
               </p>
               <h2
                 id="how-it-works-heading"
-                className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+                className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl"
               >
                 A clear four-step path from first line to confident coding
               </h2>
             </div>
 
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {steps.map((item) => (
                 <div
                   key={item.step}
-                  className="relative rounded-2xl border border-slate-200 bg-slate-50/70 p-6"
+                  className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-6"
                 >
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#0b1221] text-xs font-bold text-teal-300">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#0b1221] font-mono text-xs font-bold text-teal-300 tabular-nums">
                     {item.step}
                   </span>
-                  <h3 className="mt-4 text-base font-bold text-slate-900">
+                  <h3 className="mt-4 text-base font-semibold text-slate-950">
                     {item.title}
                   </h3>
                   <p className="mt-2 text-sm leading-relaxed text-slate-600">
@@ -313,14 +349,14 @@ export default function LandingPage() {
           aria-labelledby="about-heading"
           className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20"
         >
-          <div className="grid items-center gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-12 lg:p-10">
+          <div className="grid items-center gap-8 rounded-2xl border border-slate-200 bg-white p-8 lg:grid-cols-12 lg:p-10">
             <div className="lg:col-span-7">
-              <p className="text-xs font-semibold uppercase tracking-wider text-teal-700">
+              <p className="text-xs font-semibold text-teal-700">
                 About Think_First
               </p>
               <h2
                 id="about-heading"
-                className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+                className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl"
               >
                 Built for deep comprehension, not shortcut copying
               </h2>
