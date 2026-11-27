@@ -74,11 +74,20 @@ async def revoke_user_role(
 async def get_admin_teacher_management(
     q: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    invitations_limit: int | None = Query(default=None, ge=1, le=100),
+    invitations_offset: int | None = Query(default=None, ge=0),
     _admin_user: UserRecord = Depends(require_roles("admin")),
     service: IdentityService = Depends(get_identity_service),
 ) -> TeacherManagementOverviewResponse:
     """List active Teachers and pending/historical Teacher Invitations (Admin only)."""
-    return await service.get_teacher_management_overview(q=q, limit=limit)
+    return await service.get_teacher_management_overview(
+        q=q,
+        limit=limit,
+        offset=offset,
+        invitations_limit=invitations_limit,
+        invitations_offset=invitations_offset,
+    )
 
 
 @admin_teachers_router.get("/lookup", response_model=TeacherLookupResponse)

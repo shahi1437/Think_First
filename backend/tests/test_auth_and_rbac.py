@@ -79,6 +79,8 @@ class InMemoryIdentityRepository:
         self.users: dict[UUID, UserRecord] = {}
         self.audit_logs: list[AuditRecord] = []
         self.audit_events_with_time: list[tuple[AuditRecord, datetime]] = []
+        self.full_fold_queries: int = 0
+        self.target_fold_queries: int = 0
 
     def seed_user(
         self,
@@ -199,14 +201,26 @@ class InMemoryIdentityRepository:
         self.audit_events_with_time.append((event, datetime.now(UTC)))
 
     async def list_audit_events_by_target_type(
-        self, target_type: str, limit: int = 300
+        self, target_type: str, limit: int = 1000, offset: int = 0
     ) -> list[tuple[AuditRecord, datetime, str | None]]:
+        self.full_fold_queries += 1
         out: list[tuple[AuditRecord, datetime, str | None]] = []
         for ev, ts in self.audit_events_with_time:
             if ev.target_type == target_type:
                 actor = self.users.get(ev.actor_user_id) if ev.actor_user_id else None
                 out.append((ev, ts, actor.email if actor else None))
-        return out[:limit]
+        return out[offset : offset + limit]
+
+    async def list_audit_events_for_target(
+        self, target_type: str, target_id: str
+    ) -> list[tuple[AuditRecord, datetime, str | None]]:
+        self.target_fold_queries += 1
+        out: list[tuple[AuditRecord, datetime, str | None]] = []
+        for ev, ts in self.audit_events_with_time:
+            if ev.target_type == target_type and ev.target_id == target_id:
+                actor = self.users.get(ev.actor_user_id) if ev.actor_user_id else None
+                out.append((ev, ts, actor.email if actor else None))
+        return out
 
 
 @pytest.fixture
@@ -789,3 +803,140 @@ async def test_teacher_management_existing_user_lookup_invite_accept_security_an
     )
     assert exp_accept.status_code == 410
     assert exp_accept.json()["code"] == "INVITATION_EXPIRED"
+
+
+async def test_teacher_invitation_no_duplicate_folds_no_truncation_and_pagination(
+    auth_client: AsyncClient,
+    rsa_keys: EphemeralRSAKeys,
+    identity_repo: InMemoryIdentityRepository,
+) -> None:
+    """Verify Correction 4 invariants:
+    1. create/resend/revoke mutations never execute duplicate full-table folds.
+    2. Folding streams across >2,000 events with zero silent newest-event truncation.
+    3. GET /api/v1/admin/teachers supports proper offset/limit pagination and totals.
+    """
+    admin_id = uuid4()
+    identity_repo.seed_user(
+        user_id=admin_id,
+        email="admin.scale@thinkfirst.test",
+        roles=["student", "admin"],
+        full_name="Scale Admin",
+    )
+    adm_tok = _sign_token(keys=rsa_keys, sub=admin_id, email="admin.scale@thinkfirst.test")
+
+    # 1. Verify no duplicate fold queries on create, resend, revoke
+    identity_repo.full_fold_queries = 0
+    identity_repo.target_fold_queries = 0
+
+    created = await auth_client.post(
+        "/api/v1/admin/teachers/invitations",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"email": "first.teacher@thinkfirst.test", "full_name": "First Teacher"},
+    )
+    assert created.status_code == 201
+    inv_id = created.json()["invitation"]["id"]
+    assert identity_repo.full_fold_queries == 1  # single duplicate check, no post-write reload
+
+    identity_repo.full_fold_queries = 0
+    identity_repo.target_fold_queries = 0
+    resent = await auth_client.post(
+        f"/api/v1/admin/teachers/invitations/{inv_id}/resend",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert resent.status_code == 200
+    assert resent.json()["invitation"]["resend_count"] == 1
+    assert identity_repo.full_fold_queries == 0  # targeted lookup only
+    assert identity_repo.target_fold_queries == 1
+
+    identity_repo.full_fold_queries = 0
+    identity_repo.target_fold_queries = 0
+    revoked = await auth_client.delete(
+        f"/api/v1/admin/teachers/invitations/{inv_id}",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["invitation"]["status"] == "revoked"
+    assert identity_repo.full_fold_queries == 0  # targeted lookup only
+    assert identity_repo.target_fold_queries == 1
+
+    # 2. Seed >2,000 historical invitation events to prove zero silent truncation
+    from app.services.identity.service import (
+        TEACHER_INVITATION_TARGET_TYPE,
+        hash_teacher_invite_token,
+    )
+
+    base_time = datetime.now(UTC) - timedelta(hours=3)
+    for idx in range(2050):
+        hist_id = uuid4()
+        ev_time = base_time + timedelta(seconds=idx)
+        identity_repo.audit_events_with_time.append(
+            (
+                AuditRecord(
+                    actor_user_id=admin_id,
+                    action="teacher.invitation_created",
+                    target_type=TEACHER_INVITATION_TARGET_TYPE,
+                    target_id=str(hist_id),
+                    metadata={
+                        "email": f"historical.{idx:04d}@thinkfirst.test",
+                        "full_name": f"Historical {idx:04d}",
+                        "token_hash": hash_teacher_invite_token(f"tfi_hist_token_{idx:08d}_xyz"),
+                        "token_preview": "tfi_hist...xyz",
+                        "delivery_status": "delivery_blocked",
+                        "expires_at": (datetime.now(UTC) + timedelta(days=5)).isoformat(),
+                    },
+                ),
+                ev_time,
+            )
+        )
+
+    # Create a brand-new invitation AFTER >2,050 prior events
+    newest = await auth_client.post(
+        "/api/v1/admin/teachers/invitations",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+        json={"email": "newest.beyond2000@thinkfirst.test", "full_name": "Newest Prof"},
+    )
+    assert newest.status_code == 201
+    newest_token = newest.json()["invitation_token"]
+
+    # Newest invitation MUST NOT be truncated and MUST be inspectable
+    inspect_newest = await auth_client.get(
+        f"/api/v1/users/teacher-invitations/inspect?token={newest_token}"
+    )
+    assert inspect_newest.status_code == 200
+    assert inspect_newest.json()["email"] == "newest.beyond2000@thinkfirst.test"
+    assert inspect_newest.json()["is_valid"] is True
+
+    # 3. Verify proper pagination (limit, offset, invitations_total, independent invitations_offset)
+    page1 = await auth_client.get(
+        "/api/v1/admin/teachers?limit=2&offset=0",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert page1.status_code == 200
+    p1 = page1.json()
+    assert p1["invitations_total"] == 2052  # 1 revoked + 2050 historical + 1 newest
+    assert p1["invitations_limit"] == 2
+    assert p1["invitations_offset"] == 0
+    assert len(p1["invitations"]) == 2
+    assert p1["invitations"][0]["email"] == "newest.beyond2000@thinkfirst.test"
+    assert p1["pending_invitations_count"] == 2051
+
+    page2 = await auth_client.get(
+        "/api/v1/admin/teachers?limit=2&offset=2",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert page2.status_code == 200
+    p2 = page2.json()
+    assert p2["invitations_offset"] == 2
+    assert len(p2["invitations"]) == 2
+    assert p2["invitations"][0]["email"] != p1["invitations"][0]["email"]
+
+    indep_page = await auth_client.get(
+        "/api/v1/admin/teachers?limit=50&offset=0&invitations_limit=3&invitations_offset=1",
+        headers={"Authorization": f"Bearer {adm_tok}"},
+    )
+    assert indep_page.status_code == 200
+    ip = indep_page.json()
+    assert ip["invitations_limit"] == 3
+    assert ip["invitations_offset"] == 1
+    assert len(ip["invitations"]) == 3
+    assert ip["invitations"][0]["email"] == p1["invitations"][1]["email"]

@@ -17,11 +17,11 @@ Vercel — Next.js 16 Frontend (Root Directory: frontend/, Node.js 22.x)
    │  • Calls FastAPI over HTTPS via NEXT_PUBLIC_API_BASE_URL
    ▼
 Render — FastAPI Docker Service (Context: . , Dockerfile: infrastructure/docker/backend.Dockerfile)
-   │  • Entrypoint: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+   │  • Entrypoint: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-proxy-headers
    │  • Asymmetric JWKS JWT verification (RS256/ES256/EdDSA) + DB-backed RBAC
    │  • Bundled scikit-learn ML classifier (/app/ml/artifacts/error_classifier_v1.joblib)
    │  • Sliding-window rate limiter + 2 MiB body guard + strict production CORS
-   ├──► Supabase Cloud PostgreSQL 17 + Auth + pgvector (55/55 FORCE RLS, 140 FKs)
+   ├──► Supabase Cloud PostgreSQL 17 + Auth + pgvector (57/57 FORCE RLS)
    ├──► Judge0 CE Production Execution Plane (Managed RapidAPI OR Dedicated Hardened Linux VPS)
    └──► Google Gemini API (Socratic AI Mentor, server-side LLM_API_KEY only)
 ```
@@ -36,7 +36,7 @@ Render — FastAPI Docker Service (Context: . , Dockerfile: infrastructure/docke
 ## 2. Target Repository & Branch
 
 - **Repository:** `https://github.com/shahi1437/Think_First`
-- **Target Branch:** `feat/phase4-adaptive-learning-flow-premium-ui`
+- **Target Branch:** `develop`
 - **Existing Cloud Resources Identified During Audit:**
   - **Supabase Cloud Project Ref:** `vsmrwfoqqjvomtjpypyv` (`https://vsmrwfoqqjvomtjpypyv.supabase.co`, Project Name: `THINKFIRST`)
   - **Vercel Production Domain:** `https://think-first-pi.vercel.app` (Project: `staysafe/think-first`)
@@ -48,7 +48,7 @@ Render — FastAPI Docker Service (Context: . , Dockerfile: infrastructure/docke
 
 Deploy in this exact order so URLs, migrations, CORS, and Auth callbacks wire cleanly on the first try:
 
-1. **Step 1 — Supabase Cloud Backup & Ordered SQL Migrations (`0001..0009`)**
+1. **Step 1 — Supabase Cloud Backup & Ordered SQL Migrations (`0001..0010`)**
 2. **Step 2 — Judge0 Production Execution Setup (Option A: Managed RapidAPI OR Option B: Dedicated Linux VPS)**
 3. **Step 3 — Render FastAPI Backend Deployment (Docker from Repo Root)**
 4. **Step 4 — Vercel Next.js Frontend Deployment (`frontend/` Root Directory)**
@@ -63,7 +63,7 @@ Deploy in this exact order so URLs, migrations, CORS, and Auth callbacks wire cl
 ### 4.1 Safety & Backup Before Any Migration
 - **NEVER run `supabase db reset`, `DROP TABLE`, or `TRUNCATE` on production.**
 - Before applying migrations to Supabase Cloud (`vsmrwfoqqjvomtjpypyv`), take a manual snapshot/backup from **Supabase Dashboard → Database → Backups** (or `pg_dump --schema=public --no-owner --no-privileges` into encrypted local storage).
-- All 9 SQL migrations in `supabase/migrations/` are strictly additive and ordered:
+- All 10 SQL migrations in `supabase/migrations/` are strictly additive and ordered:
   1. `20261120000001_identity_roles_and_audit.sql` (enables `pgcrypto` + `vector` extensions, identity, RBAC, audit logs)
   2. `20261120000002_problems_and_execution.sql`
   3. `20261120000003_ai_mentor_rag_and_verification.sql`
@@ -73,6 +73,7 @@ Deploy in this exact order so URLs, migrations, CORS, and Auth callbacks wire cl
   7. `20261120000007_admin_studio_curriculum_governance.sql`
   8. `20261120000008_phase9_performance_indexes.sql`
   9. `20261122000009_multilanguage_learning_and_execution.sql` *(adds 5-language support, `active_language_slug`, per-language isolation, and `execution_provider` without modifying or removing any existing Python data)*
+  10. `20261123000010_execution_worker_queue.sql` *(adds `execution_workers` and `execution_jobs` with `FORCE ROW LEVEL SECURITY` for the free outbound local Judge0 worker queue; total `57/57` `FORCE RLS` public tables)*
 
 ### 4.2 Dry-Run & Apply Migrations
 ```powershell
@@ -89,7 +90,7 @@ npx supabase db push --dry-run
 npx supabase db push
 ```
 
-### 4.3 Verify Extensions & 55/55 FORCE RLS in Supabase SQL Editor
+### 4.3 Verify Extensions & 57/57 FORCE RLS in Supabase SQL Editor
 ```sql
 SELECT extname FROM pg_extension WHERE extname IN ('pgcrypto', 'vector') ORDER BY extname;
 
@@ -99,7 +100,7 @@ SELECT
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r';
--- Expected: total_tables = 55, force_rls_tables = 55
+-- Expected: total_tables = 57, force_rls_tables = 57
 
 SELECT slug, display_name, judge0_language_id, is_enabled
 FROM public.supported_languages
@@ -145,16 +146,16 @@ The repository root includes [`render.yaml`](./render.yaml) wired directly to [`
 |---|---|
 | Service Type | Web Service (Docker) |
 | Repository | `https://github.com/shahi1437/Think_First` |
-| Branch | `feat/phase4-adaptive-learning-flow-premium-ui` |
+| Branch | `develop` |
 | **Docker Build Context** | **`.` (Repository Root — REQUIRED because Dockerfile copies both `backend/` and `ml/`)** |
 | **Dockerfile Path** | **`./infrastructure/docker/backend.Dockerfile`** |
-| Start Command | *(Leave default — Dockerfile runs `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`)* |
+| Start Command | *(Leave default — Dockerfile runs `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-proxy-headers`)* |
 | Health Check Path | `/health/ready` |
 | Memory Footprint | ~192 MiB verified locally with ML classifier warmed up (fits Render Free 512 MiB; Starter 512 MiB+ recommended to avoid cold-start sleep) |
 
 ### 5.2 Render Deployment Steps
 1. Open **Render Dashboard → New → Blueprint** (or **New → Web Service**).
-2. Connect GitHub repository `shahi1437/Think_First` and select branch **`feat/phase4-adaptive-learning-flow-premium-ui`**.
+2. Connect GitHub repository `shahi1437/Think_First` and select branch **`develop`**.
 3. If creating manually (not via Blueprint), verify **Root Directory is blank / `.`**, **Runtime = Docker**, **Dockerfile Path = `infrastructure/docker/backend.Dockerfile`**, and **Health Check Path = `/health/ready`**.
 4. Enter all private environment variables listed in Section 7.1.
 5. Click **Deploy** and record the exact production URL returned by Render (e.g., `https://<actual-render-service>.onrender.com`).
@@ -174,7 +175,7 @@ The `frontend/` directory includes [`frontend/vercel.json`](./frontend/vercel.js
 | Setting | Required Value |
 |---|---|
 | Repository | `shahi1437/Think_First` |
-| Production / Preview Branch | `feat/phase4-adaptive-learning-flow-premium-ui` |
+| Production / Preview Branch | `develop` |
 | **Root Directory** | **`frontend`** |
 | Framework Preset | **Next.js** |
 | Node.js Version | **22.x** |
@@ -216,11 +217,15 @@ Every variable below was audited directly against `backend/app/core/config.py` a
 | `PISTON_ENABLED` | Yes | `false` (auto-defaults to `false` when `APP_ENV=production`) | No |
 | `PISTON_ISOLATED_HOST_VERIFIED` | Yes | `false` (set `true` ONLY if running dedicated isolated Piston VM) | No |
 | `ML_MODEL_ARTIFACT_PATH` | Yes | `/app/ml/artifacts/error_classifier_v1.joblib` (pre-set in Dockerfile) | No |
+| `RAG_SIMILARITY_THRESHOLD` | Optional | `0.22` (verified multi-language OOD rejection threshold) | No |
 | `LLM_PROVIDER` | Recommended | `gemini` (or `none` for deterministic fallback) | No |
 | `LLM_MODEL` | Recommended | `gemini-2.5-flash-lite` | No |
 | `LLM_API_KEY` | Recommended | Google AI Studio Gemini API key | **YES** |
 | `LLM_TIMEOUT_SECONDS` | Optional | `30.0` | No |
 | `RATE_LIMIT_ENABLED` | Yes | `true` | No |
+| `TRUSTED_PROXY_CIDRS` | Recommended | Comma-separated or JSON CIDR allowlist of verified reverse proxies (empty = use socket peer IP only) | No |
+| `TRUSTED_PROXY_HOPS` | Optional | `1` (number of trusted reverse-proxy hops at the right end of `X-Forwarded-For`) | No |
+| `TRUSTED_PROXY_CLIENT_IP_HEADER` | Optional | Unset by default (`cf-connecting-ip`, `true-client-ip`, or `x-real-ip` ONLY if direct peer matches `TRUSTED_PROXY_CIDRS`) | No |
 | `MAX_REQUEST_BODY_BYTES` | Optional | `2097152` (2 MiB) | No |
 
 *\*If deploying the backend before Judge0 is provisioned, set `JUDGE0_AUTH_MODE=disabled` temporarily so auth, onboarding, lessons, diagnostics, RAG, ML, and Teacher/Admin portals stay online while code execution honestly returns `503 EXECUTION_SERVICE_UNAVAILABLE`.*
@@ -294,7 +299,7 @@ Key hardening requirements enforced:
 
 ### Safe Redeployment
 1. Run local quality gates before pushing:
-   - Backend: `ruff check . && ruff format --check . && mypy app && pytest -k "not live"` and `python -m pytest ml/tests`
+   - Backend: `ruff check app worker tests scripts && ruff format --check app worker tests scripts && mypy app worker && pytest -v -m "not live"` and `pytest -c pyproject.toml -v ../ml/tests`
    - Frontend: `npm ci && npm run lint && npm run typecheck && npm test && npm run build`
 2. Push reviewed commits normally (never `--force`) to the target branch.
 3. Apply any new additive SQL migrations via `npx supabase db push --dry-run` -> `npx supabase db push` **before** rolling out dependent backend code.
@@ -311,7 +316,7 @@ Key hardening requirements enforced:
 ## 12. Backup & Recovery Guidance
 
 - **Supabase Cloud Automated Backups:** Enable Daily Backups / PITR in **Supabase Dashboard → Database → Backups**.
-- **Automated Backup + Restore Parity Verification:** Run `backend/scripts/backup_verify.py` locally/staging to verify full dump, restore with `ON_ERROR_STOP=1`, row-count parity across all 13 critical educational/governance tables, and `55/55` `FORCE ROW LEVEL SECURITY` enforcement.
+- **Automated Backup + Restore Parity Verification:** Run `backend/scripts/backup_verify.py` locally/staging to verify full dump, restore with `ON_ERROR_STOP=1`, row-count parity across all 13 critical educational/governance tables, and `57/57` `FORCE ROW LEVEL SECURITY` enforcement.
 - **First Admin Bootstrap (New Cloud Environment Only):**
   1. Register the intended admin user normally at `https://<your-vercel-domain>/register` (assigns `student` role only).
   2. Run with explicit confirmation:

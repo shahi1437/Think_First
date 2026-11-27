@@ -19,11 +19,11 @@
 ## 2. Deployment Architecture & Security Controls
 - **Browser -> Next.js (`:3100` / Vercel/Container):** Enforces HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `poweredByHeader: false`).
 - **Next.js / Browser -> FastAPI (`:8100`):** Asymmetric JWKS verification (`RS256`/`ES256`/`EdDSA`), DB-backed RBAC (`student`, `teacher`, `admin`), sliding-window IP rate limiter, 2 MiB body guard, `Cache-Control: no-store` on `/api/*`, structured JSON logs + slow-request warnings (`>= 2500 ms`).
-- **FastAPI -> PostgreSQL (`pgvector`):** `FORCE ROW LEVEL SECURITY` enabled on **55/55** tables in `public`.
-- **FastAPI -> Judge0 CE:** Untrusted learner code runs exclusively inside Judge0 sandboxes — never via `eval`/`exec`.
+- **FastAPI -> PostgreSQL (`pgvector`):** `FORCE ROW LEVEL SECURITY` enabled on **57/57** tables in `public`.
+- **FastAPI -> Judge0 CE:** Untrusted learner code runs exclusively inside Judge0 sandboxes (including via the outbound `worker_queue` bridge) — never via `eval`/`exec`.
 
 ## 3. Migration Safety & Rollback Plan
-- All schema changes live strictly in ordered files `supabase/migrations/20261120000001..0008.sql` and are additive/idempotent where practical (`CREATE INDEX IF NOT EXISTS`).
+- All schema changes live strictly in ordered files `supabase/migrations/20261120000001..20261123000010.sql` and are additive/idempotent where practical (`CREATE INDEX IF NOT EXISTS`).
 - **Rollback Plan:**
   1. Application rollback: revert to previous tagged release commit (`git checkout <tag>`) while keeping forward-compatible columns intact.
   2. Index rollback: drop newly added Phase 9 indexes individually with `DROP INDEX IF EXISTS` without downtime.

@@ -70,6 +70,212 @@ async def test_rate_limiter_enforces_429_on_mutating_api_routes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rate_limiter_ignores_all_spoofed_headers_from_untrusted_peer() -> None:
+    app = create_app(
+        Settings(
+            app_env="test",
+            rate_limit_enabled=True,
+            class_join_rate_limit_per_minute=1,
+            trusted_proxy_cidrs=[],
+        )
+    )
+    app.dependency_overrides[get_current_user] = lambda: _fake_user("student")
+
+    transport = ASGITransport(app=app, client=("198.51.100.5", 50000))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r1 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "AB"},
+            headers={
+                "CF-Connecting-IP": "203.0.113.1",
+                "True-Client-IP": "203.0.113.2",
+                "X-Real-IP": "203.0.113.3",
+                "X-Forwarded-For": "203.0.113.4",
+            },
+        )
+        # Rotating every forwarding header from an untrusted direct peer MUST NOT bypass limit
+        r2 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "CD"},
+            headers={"CF-Connecting-IP": "203.0.113.99"},
+        )
+        r3 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "EF"},
+            headers={"True-Client-IP": "203.0.113.98"},
+        )
+        r4 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "GH"},
+            headers={"X-Forwarded-For": "203.0.113.97"},
+        )
+
+    assert r1.status_code != 429
+    for blocked in (r2, r3, r4):
+        assert blocked.status_code == 429
+        assert blocked.json()["code"] == "RATE_LIMITED"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_single_trusted_proxy_resists_spoofing_and_separates_users() -> None:
+    app = create_app(
+        Settings(
+            app_env="test",
+            rate_limit_enabled=True,
+            class_join_rate_limit_per_minute=1,
+            trusted_proxy_cidrs=["10.0.0.0/8"],
+            trusted_proxy_hops=1,
+        )
+    )
+    app.dependency_overrides[get_current_user] = lambda: _fake_user("student")
+
+    transport = ASGITransport(app=app, client=("10.0.0.5", 443))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # User A sends spoofed leftmost XFF and spoofed CF-Connecting-IP / True-Client-IP
+        r1 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "AB"},
+            headers={
+                "CF-Connecting-IP": "198.51.100.1",
+                "True-Client-IP": "198.51.100.2",
+                "X-Forwarded-For": "198.51.100.10, 203.0.113.77",
+            },
+        )
+        # Same User A rotates spoofed CF/True-Client-IP & leftmost XFF -> still 203.0.113.77
+        r2 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "CD"},
+            headers={
+                "CF-Connecting-IP": "198.51.100.55",
+                "True-Client-IP": "198.51.100.56",
+                "X-Forwarded-For": "198.51.100.99, 203.0.113.77",
+            },
+        )
+        # Distinct User B behind the same trusted proxy is NOT collaterally throttled
+        r_user_b = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "EF"},
+            headers={"X-Forwarded-For": "203.0.113.88"},
+        )
+
+    assert r1.status_code != 429
+    assert r2.status_code == 429
+    assert r2.json()["code"] == "RATE_LIMITED"
+    assert r_user_b.status_code != 429
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_multihop_proxy_chain_separates_users_and_blocks_spoofing() -> None:
+    app = create_app(
+        Settings(
+            app_env="test",
+            rate_limit_enabled=True,
+            class_join_rate_limit_per_minute=1,
+            trusted_proxy_cidrs=["10.0.0.0/8", "172.68.0.0/16"],
+            trusted_proxy_hops=2,
+        )
+    )
+    app.dependency_overrides[get_current_user] = lambda: _fake_user("student")
+
+    # Direct peer is Render proxy (10.0.0.5); Cloudflare edge (172.68.1.1) is the rightmost XFF hop
+    transport = ASGITransport(app=app, client=("10.0.0.5", 443))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        u1_first = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "AB"},
+            headers={"X-Forwarded-For": "198.51.100.1, 203.0.113.10, 172.68.1.1"},
+        )
+        # Distinct user behind same Cloudflare+Render chain must NOT be collaterally throttled
+        u2_first = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "CD"},
+            headers={"X-Forwarded-For": "203.0.113.20, 172.68.1.1"},
+        )
+        # User 1 rotating spoofed leftmost XFF (including fake Cloudflare hop) is still throttled
+        u1_spoof = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "EF"},
+            headers={"X-Forwarded-For": "198.51.100.9, 172.68.9.9, 203.0.113.10, 172.68.1.1"},
+        )
+
+    assert u1_first.status_code != 429
+    assert u2_first.status_code != 429
+    assert u1_spoof.status_code == 429
+    assert u1_spoof.json()["code"] == "RATE_LIMITED"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_explicit_edge_header_requires_trusted_peer() -> None:
+    app = create_app(
+        Settings(
+            app_env="test",
+            rate_limit_enabled=True,
+            class_join_rate_limit_per_minute=1,
+            trusted_proxy_cidrs=["10.0.0.0/8"],
+            trusted_proxy_client_ip_header="CF-Connecting-IP",
+        )
+    )
+    app.dependency_overrides[get_current_user] = lambda: _fake_user("student")
+
+    # Trusted proxy peer: configured CF-Connecting-IP header is honored
+    trusted_transport = ASGITransport(app=app, client=("10.0.0.9", 443))
+    async with AsyncClient(transport=trusted_transport, base_url="http://test") as client:
+        t1 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "AB"},
+            headers={"CF-Connecting-IP": "203.0.113.31"},
+        )
+        t2 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "CD"},
+            headers={"CF-Connecting-IP": "203.0.113.32"},
+        )
+        t3 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "EF"},
+            headers={"CF-Connecting-IP": "203.0.113.31"},
+        )
+
+    assert t1.status_code != 429
+    assert t2.status_code != 429
+    assert t3.status_code == 429
+
+    # Untrusted peer: CF-Connecting-IP is STILL ignored even when configured
+    untrusted_transport = ASGITransport(app=app, client=("198.51.100.44", 51000))
+    async with AsyncClient(transport=untrusted_transport, base_url="http://test") as client:
+        u1 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "AB"},
+            headers={"CF-Connecting-IP": "203.0.113.41"},
+        )
+        u2 = await client.post(
+            "/api/v1/student/classes/join",
+            json={"invitation_code": "CD"},
+            headers={"CF-Connecting-IP": "203.0.113.42"},
+        )
+
+    assert u1.status_code != 429
+    assert u2.status_code == 429
+
+
+def test_trusted_proxy_settings_validation_rejects_invalid_cidr_or_header() -> None:
+    s = Settings(
+        app_env="test",
+        trusted_proxy_cidrs="10.0.0.0/8, 172.68.0.0/16",
+        trusted_proxy_hops=2,
+        trusted_proxy_client_ip_header="CF-Connecting-IP",
+    )
+    assert s.trusted_proxy_cidrs == ["10.0.0.0/8", "172.68.0.0/16"]
+    assert len(s.parsed_trusted_proxy_networks()) == 2
+
+    with pytest.raises(ValueError):
+        Settings(app_env="test", trusted_proxy_cidrs=["not-a-cidr"])
+
+    with pytest.raises(ValueError):
+        Settings(app_env="test", trusted_proxy_client_ip_header="X-Arbitrary-Header")
+
+
+@pytest.mark.asyncio
 async def test_payload_too_large_rejected_cleanly() -> None:
     app = create_app(
         Settings(

@@ -20,13 +20,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const supabase = await createSupabaseServerClient();
   if (supabase) {
     const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-    if (authUser) {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.access_token) {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (authUser) {
         let target: string | null = null;
         try {
           const user = await fetchCurrentUser(session.access_token);

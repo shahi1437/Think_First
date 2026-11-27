@@ -28,13 +28,13 @@ export default async function StudentLoginPage({
   const supabase = await createSupabaseServerClient();
   if (supabase) {
     const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-    if (authUser) {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.access_token) {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (authUser) {
         let redirectTarget: string | null = null;
         try {
           const user = await fetchCurrentUser(session.access_token);

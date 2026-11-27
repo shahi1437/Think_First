@@ -755,3 +755,81 @@ def test_llm_client_reports_explicit_fallback_when_unconfigured() -> None:
     assert len(v1) == 256
     assert cosine_similarity(v1, v2) > 0.4
     _ = TutorPromptContext  # ensure exported
+
+
+@pytest.mark.asyncio
+async def test_rag_multilanguage_ood_rejection_and_in_domain_precision_at_022() -> None:
+    """Regression guard: at default threshold 0.22, all 10 OOD queries MUST be rejected
+    across the full 26-document multi-language corpus while in-domain queries across
+    Python, JavaScript, C, C++, and Java still match accurately."""
+    settings = Settings(app_env="test")
+    assert settings.rag_similarity_threshold == 0.22
+
+    repo = InMemoryMentorRepository()
+    rag = RagKnowledgeService(repository=repo, settings=settings)  # type: ignore[arg-type]
+    await rag.seed_approved_corpus()
+    assert len(await repo.list_knowledge_documents(approved_only=True)) == 26
+
+    ood_queries = [
+        "medieval french cathedral flying buttress limestone masonry architecture",
+        "sourdough bread fermentation hydration starter recipe oven temperature",
+        "photosynthesis chlorophyll thylakoid membrane calvin cycle botany",
+        "italian renaissance oil painting canvas fresco chiaroscuro pigment",
+        "classical violin luthiery spruce soundboard maple bridge varnish",
+        "organic chemistry benzene aromatic ring electrophilic substitution",
+        "world cup football offside rule goalkeeper penalty shootout",
+        "mountain glacier moraine erosion sedimentary rock geology",
+        "beethoven symphony orchestra cello tempo crescendo score",
+        "espresso extraction portafilter grind size crema roast profile",
+    ]
+    for ood_query in ood_queries:
+        res = await rag.retrieve(query=ood_query, top_k=3)
+        assert res.matched is False, (
+            f"OOD query falsely matched at threshold 0.22: {ood_query!r} -> "
+            f"{[c.document_slug for c in res.citations]}"
+        )
+        assert res.citations == []
+        assert res.fallback_note
+
+    in_domain_multilang = [
+        (
+            "python",
+            "range(a, b) excludes upper endpoint off-by-one loop boundary",
+            "loops",
+            "loop_boundary_error",
+        ),
+        (
+            "javascript",
+            "JavaScript strict equality === vs == coercion NaN type comparison",
+            "conditionals",
+            "condition_error",
+        ),
+        (
+            "c",
+            "C scanf missing ampersand pointer segmentation fault printf format",
+            "syntax",
+            "syntax_error",
+        ),
+        (
+            "cpp",
+            "C++ std::vector bounds safety v.at(i) out_of_range v.size()",
+            "lists",
+            "indexing_error",
+        ),
+        (
+            "java",
+            "Java NullPointerException ArrayIndexOutOfBoundsException String equals",
+            "runtime",
+            "runtime_error",
+        ),
+    ]
+    for lang, query, topic, err_code in in_domain_multilang:
+        res = await rag.retrieve(
+            query=query,
+            top_k=3,
+            topic=topic,
+            error_code=err_code,
+            language_slug=lang,
+        )
+        assert res.matched is True, f"In-domain {lang} query failed to match"
+        assert len(res.citations) >= 1

@@ -2,7 +2,7 @@
   "corpus_documents": 10,
   "corpus_chunks": 19,
   "embedding_dimensions": 256,
-  "similarity_threshold": 0.16,
+  "similarity_threshold": 0.22,
   "in_domain_queries": 14,
   "hit_at_1": 1.0,
   "hit_at_3": 1.0,
@@ -42,8 +42,7 @@
       "matched": true,
       "top_slugs": [
         "py-conditions-and-boolean-logic",
-        "py-conditions-and-boolean-logic",
-        "py-loops-and-boundaries"
+        "py-conditions-and-boolean-logic"
       ],
       "top_raw_similarity": 0.3564,
       "rank": 1,
@@ -69,7 +68,7 @@
       "top_slugs": [
         "py-loops-and-boundaries",
         "py-loops-and-boundaries",
-        "py-test-design-and-edge-cases"
+        "py-conditions-and-boolean-logic"
       ],
       "top_raw_similarity": 0.5048,
       "rank": 1,
@@ -94,8 +93,7 @@
       "matched": true,
       "top_slugs": [
         "py-arrays-and-indexing",
-        "py-arrays-and-indexing",
-        "py-test-design-and-edge-cases"
+        "py-arrays-and-indexing"
       ],
       "top_raw_similarity": 0.6285,
       "rank": 1,
@@ -132,8 +130,7 @@
       "matched": true,
       "top_slugs": [
         "py-syntax-and-indentation",
-        "py-syntax-and-indentation",
-        "py-runtime-exceptions"
+        "py-syntax-and-indentation"
       ],
       "top_raw_similarity": 0.44,
       "rank": 1,
@@ -157,8 +154,7 @@
       "matched": true,
       "top_slugs": [
         "py-logic-and-tracing",
-        "py-logic-and-tracing",
-        "py-conditions-and-boolean-logic"
+        "py-logic-and-tracing"
       ],
       "top_raw_similarity": 0.3454,
       "rank": 1,

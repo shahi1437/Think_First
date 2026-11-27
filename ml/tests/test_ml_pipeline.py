@@ -41,3 +41,45 @@ def test_dataset_and_model_artifact_exist_and_predict_valid_classes() -> None:
     probs = pipe.predict_proba([doc])[0]
     assert pred in ERROR_TAXONOMY
     assert abs(float(sum(probs)) - 1.0) < 1e-5
+
+
+def test_rag_evaluation_default_threshold_022_and_multilanguage_ood_rejection() -> None:
+    from app.services.mentor.embeddings import LocalSemanticEmbedder, cosine_similarity
+    from app.services.mentor.knowledge_corpus import (
+        ALL_APPROVED_KNOWLEDGE_DOCS,
+        chunk_markdown_document,
+    )
+    from ml.evaluation.evaluate_rag import run_rag_evaluation
+
+    report = run_rag_evaluation()
+    assert report["similarity_threshold"] == 0.22
+    assert report["hit_at_1"] == 1.0
+    assert report["hit_at_3"] == 1.0
+    assert report["mrr"] == 1.0
+    assert report["no_match_rejection_rate"] == 1.0
+
+    # Multi-language OOD regression check across all 26 approved docs
+    embedder = LocalSemanticEmbedder(dimensions=256)
+    threshold = 0.22
+    chunk_vecs = []
+    for doc in ALL_APPROVED_KNOWLEDGE_DOCS:
+        for heading, body in chunk_markdown_document(doc.content_md):
+            embed_input = (
+                f"{doc.title}\nLanguage: {doc.language_slug}\nTopic: {doc.topic}\n"
+                f"Errors: {' '.join(doc.error_codes)}\n{heading}\n{body}"
+            )
+            chunk_vecs.append((doc.slug, embedder.embed(embed_input)))
+
+    ood_queries = [
+        "sourdough bread fermentation hydration starter recipe oven temperature",
+        "medieval french cathedral flying buttress limestone masonry architecture",
+        "photosynthesis chlorophyll thylakoid membrane calvin cycle botany",
+        "world cup football offside rule goalkeeper penalty shootout",
+        "espresso extraction portafilter grind size crema roast profile",
+    ]
+    for query in ood_queries:
+        qvec = embedder.embed(query)
+        max_sim = max(cosine_similarity(qvec, cvec) for _, cvec in chunk_vecs)
+        assert max_sim < threshold, (
+            f"OOD query {query!r} exceeded threshold {threshold} (max_sim={max_sim:.4f})"
+        )

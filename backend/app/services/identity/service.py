@@ -41,6 +41,7 @@ from app.schemas.identity import (
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TEACHER_INVITATION_TARGET_TYPE = "teacher_invitation"
+_TEACHER_INVITATION_EVENT_BATCH_SIZE = 1000
 
 
 def normalize_and_validate_email(raw_email: str) -> str:
@@ -464,89 +465,105 @@ class IdentityService:
 
     # --- Admin Teacher Management & Verified Teacher Invitations ---
 
+    @staticmethod
+    def _apply_invitation_event(
+        by_id: dict[UUID, _FoldedInvitation],
+        rec: AuditRecord,
+        event_time: datetime,
+        actor_email: str | None,
+    ) -> None:
+        inv_id = _parse_optional_uuid(rec.target_id)
+        if inv_id is None:
+            return
+        meta = rec.metadata or {}
+        ev_dt = event_time if event_time.tzinfo is not None else event_time.replace(tzinfo=UTC)
+
+        if rec.action == "teacher.invitation_created":
+            email = str(meta.get("email") or "").strip().lower()
+            token_hash = str(meta.get("token_hash") or "").strip()
+            if not email or not token_hash:
+                return
+            deliv_raw = str(meta.get("delivery_status") or "delivery_blocked")
+            deliv_status: TeacherInvitationDeliveryStatus = (
+                "sent" if deliv_raw == "sent" else "delivery_blocked"
+            )
+            expires_at = _parse_iso_dt(meta.get("expires_at"), ev_dt + timedelta(days=7))
+            by_id[inv_id] = _FoldedInvitation(
+                id=inv_id,
+                email=email,
+                full_name=str(meta.get("full_name") or "").strip(),
+                status="pending",
+                delivery_status=deliv_status,
+                delivery_detail=str(
+                    meta.get("delivery_detail")
+                    or "Pending email delivery or direct invitation link verification."
+                ),
+                token_hash=token_hash,
+                token_preview=str(meta.get("token_preview") or "tfi_..."),
+                invited_by_id=rec.actor_user_id,
+                invited_by_email=actor_email or str(meta.get("invited_by_email") or "") or None,
+                accepted_by_user_id=None,
+                accepted_at=None,
+                revoked_by_user_id=None,
+                revoked_at=None,
+                resend_count=0,
+                expires_at=expires_at,
+                created_at=ev_dt,
+                updated_at=ev_dt,
+            )
+        elif rec.action == "teacher.invitation_resent" and inv_id in by_id:
+            inv = by_id[inv_id]
+            if inv.status in ("accepted", "revoked"):
+                return
+            new_hash = str(meta.get("token_hash") or "").strip()
+            if new_hash:
+                inv.token_hash = new_hash
+            new_preview = str(meta.get("token_preview") or "").strip()
+            if new_preview:
+                inv.token_preview = new_preview
+            inv.expires_at = _parse_iso_dt(meta.get("expires_at"), ev_dt + timedelta(days=7))
+            deliv_raw = str(meta.get("delivery_status") or inv.delivery_status)
+            inv.delivery_status = "sent" if deliv_raw == "sent" else "delivery_blocked"
+            if meta.get("delivery_detail"):
+                inv.delivery_detail = str(meta["delivery_detail"])
+            inv.resend_count += 1
+            inv.status = "pending"
+            inv.updated_at = ev_dt
+        elif rec.action == "teacher.invitation_accepted" and inv_id in by_id:
+            inv = by_id[inv_id]
+            inv.status = "accepted"
+            inv.accepted_by_user_id = (
+                _parse_optional_uuid(meta.get("accepted_by_user_id")) or rec.actor_user_id
+            )
+            inv.accepted_at = ev_dt
+            inv.updated_at = ev_dt
+        elif rec.action == "teacher.invitation_revoked" and inv_id in by_id:
+            inv = by_id[inv_id]
+            if inv.status != "accepted":
+                inv.status = "revoked"
+                inv.revoked_by_user_id = rec.actor_user_id
+                inv.revoked_at = ev_dt
+                inv.updated_at = ev_dt
+
     async def _fold_teacher_invitations(
         self,
     ) -> tuple[list[_FoldedInvitation], dict[UUID, _FoldedInvitation]]:
-        events = await self._repo.list_audit_events_by_target_type(
-            TEACHER_INVITATION_TARGET_TYPE, limit=400
-        )
+        """Stream and fold all teacher invitation audit events in batches without truncation."""
         by_id: dict[UUID, _FoldedInvitation] = {}
+        offset = 0
+        while True:
+            batch = await self._repo.list_audit_events_by_target_type(
+                TEACHER_INVITATION_TARGET_TYPE,
+                limit=_TEACHER_INVITATION_EVENT_BATCH_SIZE,
+                offset=offset,
+            )
+            for rec, event_time, actor_email in batch:
+                self._apply_invitation_event(by_id, rec, event_time, actor_email)
+            if len(batch) < _TEACHER_INVITATION_EVENT_BATCH_SIZE:
+                break
+            offset += len(batch)
+
         now = datetime.now(UTC)
-
-        for rec, event_time, actor_email in events:
-            inv_id = _parse_optional_uuid(rec.target_id)
-            if inv_id is None:
-                continue
-            meta = rec.metadata or {}
-            ev_dt = event_time if event_time.tzinfo is not None else event_time.replace(tzinfo=UTC)
-
-            if rec.action == "teacher.invitation_created":
-                email = str(meta.get("email") or "").strip().lower()
-                token_hash = str(meta.get("token_hash") or "").strip()
-                if not email or not token_hash:
-                    continue
-                deliv_raw = str(meta.get("delivery_status") or "delivery_blocked")
-                deliv_status: TeacherInvitationDeliveryStatus = (
-                    "sent" if deliv_raw == "sent" else "delivery_blocked"
-                )
-                expires_at = _parse_iso_dt(meta.get("expires_at"), ev_dt + timedelta(days=7))
-                by_id[inv_id] = _FoldedInvitation(
-                    id=inv_id,
-                    email=email,
-                    full_name=str(meta.get("full_name") or "").strip(),
-                    status="pending",
-                    delivery_status=deliv_status,
-                    delivery_detail=str(
-                        meta.get("delivery_detail")
-                        or "Pending email delivery or direct invitation link verification."
-                    ),
-                    token_hash=token_hash,
-                    token_preview=str(meta.get("token_preview") or "tfi_..."),
-                    invited_by_id=rec.actor_user_id,
-                    invited_by_email=actor_email or str(meta.get("invited_by_email") or "") or None,
-                    accepted_by_user_id=None,
-                    accepted_at=None,
-                    revoked_by_user_id=None,
-                    revoked_at=None,
-                    resend_count=0,
-                    expires_at=expires_at,
-                    created_at=ev_dt,
-                    updated_at=ev_dt,
-                )
-            elif rec.action == "teacher.invitation_resent" and inv_id in by_id:
-                inv = by_id[inv_id]
-                if inv.status in ("accepted", "revoked"):
-                    continue
-                new_hash = str(meta.get("token_hash") or "").strip()
-                if new_hash:
-                    inv.token_hash = new_hash
-                new_preview = str(meta.get("token_preview") or "").strip()
-                if new_preview:
-                    inv.token_preview = new_preview
-                inv.expires_at = _parse_iso_dt(meta.get("expires_at"), ev_dt + timedelta(days=7))
-                deliv_raw = str(meta.get("delivery_status") or inv.delivery_status)
-                inv.delivery_status = "sent" if deliv_raw == "sent" else "delivery_blocked"
-                if meta.get("delivery_detail"):
-                    inv.delivery_detail = str(meta["delivery_detail"])
-                inv.resend_count += 1
-                inv.status = "pending"
-                inv.updated_at = ev_dt
-            elif rec.action == "teacher.invitation_accepted" and inv_id in by_id:
-                inv = by_id[inv_id]
-                inv.status = "accepted"
-                inv.accepted_by_user_id = (
-                    _parse_optional_uuid(meta.get("accepted_by_user_id")) or rec.actor_user_id
-                )
-                inv.accepted_at = ev_dt
-                inv.updated_at = ev_dt
-            elif rec.action == "teacher.invitation_revoked" and inv_id in by_id:
-                inv = by_id[inv_id]
-                if inv.status != "accepted":
-                    inv.status = "revoked"
-                    inv.revoked_by_user_id = rec.actor_user_id
-                    inv.revoked_at = ev_dt
-                    inv.updated_at = ev_dt
-
         for inv in by_id.values():
             if inv.status == "pending" and now >= inv.expires_at:
                 inv.status = "expired"
@@ -554,15 +571,36 @@ class IdentityService:
         ordered = sorted(by_id.values(), key=lambda item: item.created_at, reverse=True)
         return ordered, by_id
 
+    async def _fold_single_teacher_invitation(
+        self, invitation_id: UUID
+    ) -> _FoldedInvitation | None:
+        """Fold audit events for a single invitation ID without scanning the full audit table."""
+        events = await self._repo.list_audit_events_for_target(
+            TEACHER_INVITATION_TARGET_TYPE, str(invitation_id)
+        )
+        by_id: dict[UUID, _FoldedInvitation] = {}
+        for rec, event_time, actor_email in events:
+            self._apply_invitation_event(by_id, rec, event_time, actor_email)
+        inv = by_id.get(invitation_id)
+        if inv is not None and inv.status == "pending" and datetime.now(UTC) >= inv.expires_at:
+            inv.status = "expired"
+        return inv
+
     async def get_teacher_management_overview(
         self,
         *,
         q: str | None = None,
         limit: int = 50,
+        offset: int = 0,
+        invitations_limit: int | None = None,
+        invitations_offset: int | None = None,
     ) -> TeacherManagementOverviewResponse:
         active_records, active_total = await self._repo.list_users(
-            limit=limit, offset=0, role="teacher", q=q
+            limit=limit, offset=offset, role="teacher", q=q
         )
+        inv_limit = invitations_limit if invitations_limit is not None else limit
+        inv_offset = invitations_offset if invitations_offset is not None else offset
+
         folded_invitations, _ = await self._fold_teacher_invitations()
         needle = (q or "").strip().lower()
         if needle:
@@ -574,11 +612,16 @@ class IdentityService:
         else:
             filtered_invitations = folded_invitations
 
+        invitations_total = len(filtered_invitations)
+        page_invitations = filtered_invitations[inv_offset : inv_offset + inv_limit]
         pending_count = sum(1 for inv in folded_invitations if inv.status == "pending")
         return TeacherManagementOverviewResponse(
             active_teachers=[_to_admin_user_summary(r) for r in active_records],
             active_teachers_total=active_total,
-            invitations=[inv.to_view() for inv in filtered_invitations[:limit]],
+            invitations=[inv.to_view() for inv in page_invitations],
+            invitations_total=invitations_total,
+            invitations_limit=inv_limit,
+            invitations_offset=inv_offset,
             pending_invitations_count=pending_count,
         )
 
@@ -752,10 +795,27 @@ class IdentityService:
             )
         )
 
-        _, by_id = await self._fold_teacher_invitations()
-        created = by_id.get(inv_id)
-        if created is None:
-            raise RuntimeError("Failed to reload created teacher invitation")
+        created_status: TeacherInvitationStatus = "expired" if now >= expires_at else "pending"
+        created = _FoldedInvitation(
+            id=inv_id,
+            email=normalized,
+            full_name=full_name,
+            status=created_status,
+            delivery_status=delivery_status,
+            delivery_detail=delivery_detail,
+            token_hash=token_hash,
+            token_preview=token_preview,
+            invited_by_id=actor.id,
+            invited_by_email=actor.email,
+            accepted_by_user_id=None,
+            accepted_at=None,
+            revoked_by_user_id=None,
+            revoked_at=None,
+            resend_count=0,
+            expires_at=expires_at,
+            created_at=now,
+            updated_at=now,
+        )
 
         return TeacherInvitationMutationResponse(
             invitation=created.to_view(),
@@ -771,8 +831,7 @@ class IdentityService:
         invitation_id: UUID,
         request_id: str | None,
     ) -> TeacherInvitationMutationResponse:
-        _, by_id = await self._fold_teacher_invitations()
-        inv = by_id.get(invitation_id)
+        inv = await self._fold_single_teacher_invitation(invitation_id)
         if inv is None:
             raise AppError(
                 code="INVITATION_NOT_FOUND",
@@ -819,10 +878,16 @@ class IdentityService:
             )
         )
 
-        _, reloaded_map = await self._fold_teacher_invitations()
-        updated = reloaded_map[invitation_id]
+        inv.token_hash = token_hash
+        inv.token_preview = token_preview
+        inv.expires_at = new_expires_at
+        inv.delivery_status = delivery_status
+        inv.delivery_detail = delivery_detail
+        inv.resend_count += 1
+        inv.status = "pending"
+        inv.updated_at = now
         return TeacherInvitationMutationResponse(
-            invitation=updated.to_view(),
+            invitation=inv.to_view(),
             invitation_token=raw_token,
             accept_path=f"/accept-teacher-invite?token={raw_token}",
             action="teacher.invitation_resent",
@@ -835,8 +900,7 @@ class IdentityService:
         invitation_id: UUID,
         request_id: str | None,
     ) -> TeacherInvitationMutationResponse:
-        _, by_id = await self._fold_teacher_invitations()
-        inv = by_id.get(invitation_id)
+        inv = await self._fold_single_teacher_invitation(invitation_id)
         if inv is None:
             raise AppError(
                 code="INVITATION_NOT_FOUND",
@@ -853,6 +917,7 @@ class IdentityService:
                 status_code=status.HTTP_409_CONFLICT,
             )
 
+        now = datetime.now(UTC)
         await self._repo.record_audit_log(
             AuditRecord(
                 actor_user_id=actor.id,
@@ -864,10 +929,12 @@ class IdentityService:
             )
         )
 
-        _, reloaded_map = await self._fold_teacher_invitations()
-        updated = reloaded_map[invitation_id]
+        inv.status = "revoked"
+        inv.revoked_by_user_id = actor.id
+        inv.revoked_at = now
+        inv.updated_at = now
         return TeacherInvitationMutationResponse(
-            invitation=updated.to_view(),
+            invitation=inv.to_view(),
             invitation_token=None,
             accept_path=None,
             action="teacher.invitation_revoked",
