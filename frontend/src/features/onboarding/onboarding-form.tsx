@@ -65,8 +65,18 @@ export function OnboardingForm({
   const selectedExp = useWatch({ control, name: "programming_experience" });
   const selectedStartPref = useWatch({ control, name: "starting_preference" });
   const selectedLang = useWatch({ control, name: "preferred_language" });
+  const selectedGoal = useWatch({ control, name: "learning_goal" });
+  const selectedMinutes = useWatch({ control, name: "daily_practice_minutes" });
   const willRouteToDiagnostic =
     selectedExp !== "none" && selectedStartPref === "diagnostic_assessment";
+  const recommendedDifficulty =
+    selectedExp === "none" || selectedExp === "beginner"
+      ? "Beginner"
+      : selectedExp === "basic"
+        ? "Basic"
+        : selectedExp === "intermediate"
+          ? "Intermediate"
+          : "Advanced";
 
   async function handleFormSubmit(values: OnboardingFormValues) {
     setServerError(null);
@@ -94,7 +104,7 @@ export function OnboardingForm({
         const nextRoute =
           updated.preferences?.entry_redirect_path ||
           (updated.preferences?.recommended_entry_track ===
-          "diagnostic_assessment"
+            "diagnostic_assessment"
             ? "/student/diagnostic?mode=full&entry=onboarding"
             : "/student");
         router.push(nextRoute);
@@ -385,26 +395,60 @@ export function OnboardingForm({
       {mode === "onboarding" ? (
         <div
           aria-live="polite"
-          className="tf-scale-in rounded-2xl border border-indigo-200/80 bg-indigo-50/60 p-4 text-sm text-indigo-950"
+          data-testid="onboarding-roadmap-preview"
+          className="tf-scale-in space-y-3 rounded-2xl border border-teal-200 bg-teal-50/50 p-5 text-sm text-slate-900"
         >
-          <p className="font-semibold">
-            {willRouteToDiagnostic
-              ? "Adaptive Entry Path: Direct to 8-Domain Diagnostic"
-              : "Gentle Beginner Entry Path: Guided Foundation Lessons First"}
-          </p>
-          <p className="mt-1 leading-relaxed text-indigo-900">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold text-teal-950">
+              {willRouteToDiagnostic
+                ? "Adaptive Entry Path: Direct to 8-Domain Diagnostic"
+                : "Gentle Beginner Entry Path: Guided Foundation Lessons First"}
+            </p>
+            <span className="rounded-md border border-teal-300 bg-white px-2.5 py-0.5 text-xs font-semibold text-teal-800">
+              Starting Difficulty: {recommendedDifficulty}
+            </span>
+          </div>
+          <p className="leading-relaxed text-slate-700">
             {willRouteToDiagnostic
               ? `Because you have prior experience (${selectedExp}) and chose the skill check, we will open your ${selectedLang.toUpperCase()} adaptive diagnostic right after setup to place you on an evidence-backed track.`
               : `You will start smoothly with introductory ${selectedLang.toUpperCase()} foundation lessons before taking a short 4-question readiness check—no overwhelming advanced test upfront.`}
           </p>
+          <ol className="grid gap-2 pt-1 text-xs sm:grid-cols-3">
+            <li className="rounded-lg border border-slate-200 bg-white p-2.5">
+              <span className="font-semibold text-teal-800">1. Calibrate</span>
+              <p className="mt-0.5 text-slate-600">
+                {willRouteToDiagnostic
+                  ? `Run ${selectedLang.toUpperCase()} 8-domain diagnostic`
+                  : `Complete 2 ${selectedLang.toUpperCase()} foundation lessons`}
+              </p>
+            </li>
+            <li className="rounded-lg border border-slate-200 bg-white p-2.5">
+              <span className="font-semibold text-teal-800">
+                2. Map Skill Graph
+              </span>
+              <p className="mt-0.5 text-slate-600">
+                Seeds Learning DNA &amp; Daily Plan ({selectedMinutes || 30}{" "}
+                min/day)
+              </p>
+            </li>
+            <li className="rounded-lg border border-slate-200 bg-white p-2.5">
+              <span className="font-semibold text-teal-800">
+                3. Practice &amp; Verify
+              </span>
+              <p className="mt-0.5 text-slate-600">
+                Goal: {String(selectedGoal || "coursework").replaceAll("_", " ")}{" "}
+                with sandbox verification
+              </p>
+            </li>
+          </ol>
         </div>
       ) : null}
 
-      <div className="border-t border-slate-100 pt-5">
+      <div className="border-t border-[#D8E2DC] pt-5">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="tf-btn-press inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0b1221] to-indigo-900 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:from-slate-800 hover:to-indigo-800 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[17px]"
+          className="tf-btn-press inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0b1221] px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[17px]"
         >
           {isSubmitting ? (
             <>

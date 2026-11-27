@@ -356,6 +356,55 @@ export type TeacherCourseDetailView = z.infer<
   typeof teacherCourseDetailViewSchema
 >;
 
+export const classComparisonItemSchema = z.object({
+  course_id: z.string(),
+  course_code: z.string(),
+  course_title: z.string(),
+  active_students: z.number(),
+  published_assignments: z.number(),
+  submitted_count: z.number(),
+  graded_count: z.number(),
+  pending_grading_count: z.number(),
+  total_attempts: z.number(),
+  accepted_attempts: z.number(),
+  acceptance_rate_pct: z.number().nullable().optional(),
+});
+export type ClassComparisonItem = z.infer<typeof classComparisonItemSchema>;
+
+export const teacherStudentAssignmentRecordSchema = z.object({
+  assignment_id: z.string(),
+  title: z.string(),
+  due_at: z.string().nullable().optional(),
+  workflow_status: submissionWorkflowStatusSchema,
+  attempts_used: z.number(),
+  latest_verdict: z.string().nullable().optional(),
+  marks_awarded: z.number().nullable().optional(),
+  max_marks: z.number(),
+  grade_status: gradeStatusSchema.nullable().optional(),
+  submitted_at: z.string().nullable().optional(),
+});
+
+export const teacherStudentPerformanceViewSchema = z.object({
+  course_id: z.string(),
+  course_code: z.string(),
+  course_title: z.string(),
+  student_id: z.string(),
+  full_name: z.string(),
+  email: z.string(),
+  membership_status: membershipStatusSchema,
+  total_assignment_attempts: z.number(),
+  accepted_assignment_attempts: z.number(),
+  hints_used_total: z.number(),
+  verified_transfers_count: z.number(),
+  verified_skills: z.array(z.string()),
+  developing_skills: z.array(z.string()),
+  common_misconceptions: z.array(misconceptionCountItemSchema),
+  assignments: z.array(teacherStudentAssignmentRecordSchema),
+});
+export type TeacherStudentPerformanceView = z.infer<
+  typeof teacherStudentPerformanceViewSchema
+>;
+
 export const teacherDashboardViewSchema = z.object({
   courses_count: z.number(),
   active_courses_count: z.number(),
@@ -366,6 +415,7 @@ export const teacherDashboardViewSchema = z.object({
   courses: z.array(courseSummaryViewSchema),
   upcoming_deadlines: z.array(assignmentSummaryViewSchema),
   analytics: classAnalyticsViewSchema,
+  class_comparison: z.array(classComparisonItemSchema).optional().default([]),
   methodology_note: z.string(),
 });
 export type TeacherDashboardView = z.infer<typeof teacherDashboardViewSchema>;

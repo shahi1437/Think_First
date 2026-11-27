@@ -162,6 +162,24 @@ export const operationalCheckStatusSchema = z.object({
   detail: z.string(),
 });
 
+export const adminExecutionFailureStatsSchema = z.object({
+  window_days: z.number().int(),
+  total_executions: z.number().int(),
+  accepted_executions: z.number().int(),
+  failed_executions: z.number().int(),
+  failure_rate_pct: z.number().nullable().optional(),
+  verdict_counts: z.record(z.string(), z.number()),
+  failures_by_language: z.record(z.string(), z.number()),
+});
+
+export const adminUserActivityOverviewSchema = z.object({
+  active_learners_24h: z.number().int(),
+  active_learners_7d: z.number().int(),
+  submissions_24h: z.number().int(),
+  diagnoses_24h: z.number().int(),
+  notifications_total: z.number().int(),
+});
+
 export const adminOperationsHealthSchema = z.object({
   overall_status: z.enum(["ok", "degraded"]),
   environment: z.string(),
@@ -170,6 +188,8 @@ export const adminOperationsHealthSchema = z.object({
   llm_provider: z.string(),
   llm_model: z.string(),
   checks: z.array(operationalCheckStatusSchema),
+  execution_stats: adminExecutionFailureStatsSchema.nullable().optional(),
+  activity_overview: adminUserActivityOverviewSchema.nullable().optional(),
 });
 
 export const teacherInvitationStatusSchema = z.enum([
