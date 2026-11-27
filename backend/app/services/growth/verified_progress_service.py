@@ -158,12 +158,8 @@ class VerifiedProgressService:
         )
 
         # 4. Transfer & spaced retention verified checks
-        transfer_passed = sum(
-            1 for v in verifs if str(v.outcome) == "verified_independent"
-        )
-        retention_passed = sum(
-            1 for r in retentions if str(r.outcome) == "retained_verified"
-        )
+        transfer_passed = sum(1 for v in verifs if str(v.outcome) == "verified_independent")
+        retention_passed = sum(1 for r in retentions if str(r.outcome) == "retained_verified")
 
         # 5. 14-day factual consistency & honest improvement trend (requires >=4 submissions)
         daily_points = [
@@ -192,10 +188,7 @@ class VerifiedProgressService:
                 1,
             )
             recent_rate = round(
-                (
-                    sum(1 for s, _, _ in recent_slice if s.verdict == "accepted")
-                    / len(recent_slice)
-                )
+                (sum(1 for s, _, _ in recent_slice if s.verdict == "accepted") / len(recent_slice))
                 * 100.0,
                 1,
             )
