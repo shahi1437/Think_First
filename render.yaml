@@ -44,9 +44,11 @@ services:
         value: "false"
       - key: PISTON_ISOLATED_HOST_VERIFIED
         value: "false"
-      # Bundled scikit-learn ML error classifier artifact
+      # Bundled scikit-learn ML error classifier artifact & verified RAG threshold
       - key: ML_MODEL_ARTIFACT_PATH
         value: /app/ml/artifacts/error_classifier_v1.joblib
+      - key: RAG_SIMILARITY_THRESHOLD
+        value: "0.22"
       # Socratic AI Mentor (Gemini API; falls back deterministically if LLM_API_KEY is omitted)
       - key: LLM_PROVIDER
         value: gemini
@@ -56,3 +58,8 @@ services:
         sync: false
       - key: RATE_LIMIT_ENABLED
         value: "true"
+      # Reverse-proxy IP extraction: set TRUSTED_PROXY_CIDRS explicitly for verified edge proxies
+      - key: TRUSTED_PROXY_CIDRS
+        sync: false
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"

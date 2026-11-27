@@ -1,9 +1,13 @@
+import ipaddress
 import json
 from functools import lru_cache
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+_ALLOWED_PROXY_IP_HEADERS = frozenset({"cf-connecting-ip", "true-client-ip", "x-real-ip"})
 
 
 class Settings(BaseSettings):
@@ -123,8 +127,55 @@ class Settings(BaseSettings):
     api_write_rate_limit_per_minute: int = 120
     class_join_rate_limit_per_minute: int = 15
     portal_verify_rate_limit_per_minute: int = 20
+    trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    trusted_proxy_hops: int = Field(default=1, ge=1, le=10)
+    trusted_proxy_client_ip_header: str | None = None
     max_request_body_bytes: int = 2_097_152
     slow_request_threshold_ms: float = 2500.0
+
+    @field_validator("trusted_proxy_cidrs", mode="before")
+    @classmethod
+    def _parse_trusted_proxy_cidrs(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        items: list[str]
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                parsed = json.loads(raw)
+                if not isinstance(parsed, list):
+                    raise ValueError(
+                        "TRUSTED_PROXY_CIDRS must be a JSON array or comma-separated list of CIDRs."
+                    )
+                items = [str(item).strip() for item in parsed if str(item).strip()]
+            else:
+                items = [item.strip() for item in raw.split(",") if item.strip()]
+        elif isinstance(value, list):
+            items = [str(item).strip() for item in value if str(item).strip()]
+        else:
+            raise ValueError(
+                "TRUSTED_PROXY_CIDRS must be a JSON array or comma-separated list of CIDRs."
+            )
+        return [str(ipaddress.ip_network(cidr, strict=False)) for cidr in items]
+
+    @field_validator("trusted_proxy_client_ip_header", mode="before")
+    @classmethod
+    def _validate_trusted_proxy_client_ip_header(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        if not cleaned:
+            return None
+        if cleaned.lower() not in _ALLOWED_PROXY_IP_HEADERS:
+            allowed = ", ".join(sorted(_ALLOWED_PROXY_IP_HEADERS))
+            raise ValueError(f"TRUSTED_PROXY_CLIENT_IP_HEADER must be one of: {allowed}")
+        return cleaned
+
+    def parsed_trusted_proxy_networks(self) -> tuple[IPNetwork, ...]:
+        """Return parsed trusted reverse-proxy CIDR networks."""
+        return tuple(ipaddress.ip_network(cidr, strict=False) for cidr in self.trusted_proxy_cidrs)
 
     @model_validator(mode="after")
     def _enforce_production_piston_default(self) -> "Settings":

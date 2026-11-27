@@ -1,7 +1,8 @@
+import ipaddress
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 
 import structlog
@@ -12,7 +13,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.deps import get_ml_classifier_service
 from app.api.v1.health import health_router
 from app.api.v1.router import api_v1_router
-from app.core.config import Settings, get_settings
+from app.core.config import IPNetwork, Settings, get_settings
 from app.core.database import get_db_manager
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
@@ -36,11 +37,65 @@ def _apply_security_headers(response: Response, *, path: str) -> None:
         response.headers.setdefault("Cache-Control", "no-store")
 
 
-def _extract_client_ip(request: Request) -> str:
+def _parse_ip(raw: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    cleaned = raw.strip()
+    if not cleaned:
+        return None
+    try:
+        return ipaddress.ip_address(cleaned)
+    except ValueError:
+        return None
+
+
+def _is_ip_in_networks(
+    ip_addr: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    networks: Sequence[IPNetwork],
+) -> bool:
+    return any(ip_addr in network for network in networks)
+
+
+def _extract_client_ip(
+    request: Request,
+    *,
+    settings: Settings,
+    trusted_networks: Sequence[IPNetwork],
+) -> str:
+    """Resolve client IP without trusting forwarding headers from untrusted peers.
+
+    Forwarding headers are inspected ONLY when the direct TCP peer matches
+    `TRUSTED_PROXY_CIDRS`. When trusted, an explicitly configured edge header
+    (`TRUSTED_PROXY_CLIENT_IP_HEADER`) is checked first; otherwise `X-Forwarded-For`
+    is walked right-to-left peeling at most `TRUSTED_PROXY_HOPS - 1` intermediate
+    trusted proxy hops.
+    """
+    peer_host = (request.client.host or "").strip() if request.client else ""
+    if not peer_host:
+        return "unknown"
+
+    peer_ip = _parse_ip(peer_host)
+    if peer_ip is None or not trusted_networks or not _is_ip_in_networks(peer_ip, trusted_networks):
+        return peer_host
+
+    if settings.trusted_proxy_client_ip_header:
+        edge_ip = _parse_ip(request.headers.get(settings.trusted_proxy_client_ip_header, ""))
+        if edge_ip is not None:
+            return str(edge_ip)
+
     forwarded = request.headers.get("X-Forwarded-For", "").strip()
     if forwarded:
-        return forwarded.split(",")[0].strip() or "unknown"
-    return request.client.host if request.client else "unknown"
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        max_intermediate_skips = max(settings.trusted_proxy_hops - 1, 0)
+        skipped = 0
+        for raw_hop in reversed(hops):
+            parsed = _parse_ip(raw_hop)
+            if parsed is None:
+                return peer_host
+            if skipped < max_intermediate_skips and _is_ip_in_networks(parsed, trusted_networks):
+                skipped += 1
+                continue
+            return str(parsed)
+
+    return str(peer_ip)
 
 
 @asynccontextmanager
@@ -88,6 +143,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     write_limiter = InMemorySlidingWindowRateLimiter(window_seconds=60.0)
     join_limiter = InMemorySlidingWindowRateLimiter(window_seconds=60.0)
     portal_verify_limiter = InMemorySlidingWindowRateLimiter(window_seconds=60.0)
+    trusted_proxy_networks = resolved_settings.parsed_trusted_proxy_networks()
 
     @app.middleware("http")
     async def request_context_middleware(
@@ -127,7 +183,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             and request.method in _MUTATING_METHODS
             and path.startswith("/api/v1/")
         ):
-            client_ip = _extract_client_ip(request)
+            client_ip = _extract_client_ip(
+                request,
+                settings=resolved_settings,
+                trusted_networks=trusted_proxy_networks,
+            )
             if path.rstrip("/") == "/api/v1/student/classes/join":
                 decision = join_limiter.check(
                     f"join:{client_ip}",
