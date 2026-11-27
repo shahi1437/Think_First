@@ -11,10 +11,13 @@ from app.core.database import DatabaseManager, get_db_manager, get_db_session
 from app.main import create_app
 
 LIVE_ENABLED = os.getenv("RUN_LIVE_INTEGRATION_TESTS") == "1"
-pytestmark = pytest.mark.skipif(
-    not LIVE_ENABLED,
-    reason="Set RUN_LIVE_INTEGRATION_TESTS=1 with local Supabase running.",
-)
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        not LIVE_ENABLED,
+        reason="Set RUN_LIVE_INTEGRATION_TESTS=1 with local Supabase running.",
+    ),
+]
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "http://127.0.0.1:54321")
 SUPABASE_ANON_KEY = os.getenv(

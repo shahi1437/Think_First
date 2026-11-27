@@ -34,19 +34,19 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*"]
+include = ["app*", "worker*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["app", "tests"]
+src = ["app", "worker", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["B008"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "tests", "ml"]
+known-first-party = ["app", "worker", "tests", "ml"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/integrations/llm/client.py" = ["E501"]
@@ -86,3 +86,6 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = [
+    "live: external integration tests requiring local Supabase, Judge0, or live LLM services",
+]

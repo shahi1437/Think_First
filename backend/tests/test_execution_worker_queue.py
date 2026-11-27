@@ -9,7 +9,6 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from worker.execution_worker import OutboundExecutionWorker
 
 from app.api.v1.deps import (
     get_current_user,
@@ -24,6 +23,7 @@ from app.repositories.identity import UserRecord
 from app.schemas.execution_queue import ExecutionAvailabilityResponse, WorkerClaimResponse
 from app.schemas.problems import SubmissionCreateRequest
 from app.services.execution.service import ExecutionService
+from worker.execution_worker import OutboundExecutionWorker
 
 _STRONG_WORKER_TOKEN = "wkr_test_super_secret_token_0123456789abcdef"
 

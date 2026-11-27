@@ -19,7 +19,7 @@ The following public repository SQL seed files on GitHub contain demonstration p
 ## 3. Core Application Security Controls Verified
 | Control | Implementation | Verification |
 |---|---|---|
-| Database Isolation | PostgreSQL RLS + `FORCE ROW LEVEL SECURITY` on `55/55` tables in `public`; `problem_reference_solutions` and `diagnostic_question_answers` locked to Admin-only | Live `pg_class` query & pytest RLS tests |
+| Database Isolation | PostgreSQL RLS + `FORCE ROW LEVEL SECURITY` on `57/57` tables in `public`; `problem_reference_solutions` and `diagnostic_question_answers` locked to Admin-only | Live `pg_class` query & pytest RLS tests |
 | Auth & RBAC | Supabase asymmetric JWKS (`RS256`/`ES256`/`EdDSA`), DB-backed `user_roles`, privilege-escalation blocked | `test_auth_and_rbac.py` & live Supabase tests |
 | Code Execution | Strict delegation to isolated Judge0 CE sandbox (`ENABLE_NETWORK=false`, time/memory limits); zero `eval`/`exec` | `test_live_phase3_judge0.py` |
 | HTTP & API Hardening | Security headers (`nosniff`, `DENY`, `Referrer-Policy`, `Permissions-Policy`, `Cache-Control: no-store` on `/api/*`), 2 MiB body cap (`413`), sliding-window rate limiter (`429`) | `test_phase9_security_and_observability.py` & `phase9-ux.test.tsx` |

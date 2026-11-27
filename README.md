@@ -181,13 +181,16 @@ python -m pytest -v ml/tests
 | `GET/POST/PATCH /api/v1/admin/learning/diagnostic-questions` | Admin | Author, validate via Judge0, publish, and archive diagnostic items with private answer keys |
 | `POST /api/v1/admin/learning/import-bundle` | Admin | Bulk import and Judge0-validate protected curriculum bundles safely without public secret leakage |
 
-## Phase 9 Security, Observability, CI & Release Hardening
+## Phase 9 & 10 Security, Outbound Judge0 Worker Queue, Teacher Management & Observability
 
 | Area | Addition | Reference |
 |---|---|---|
-| Telemetry & Health | `GET /api/v1/admin/operations/health` (Admin-only live DB, ML, Judge0 & LLM telemetry) | [Admin Overview API](backend/app/api/v1/admin_overview.py) |
+| Telemetry & Health | `GET /api/v1/admin/operations/health` (Admin-only live DB, ML, Judge0/Worker & LLM telemetry) | [Admin Overview API](backend/app/api/v1/admin_overview.py) |
+| Outbound Execution Worker Queue | `GET /api/v1/execution/status`, `POST /api/v1/internal/execution-worker/*`, `POST /api/v1/submissions/{id}/cancel` (`JUDGE0_AUTH_MODE=worker_queue`, 5 languages) | [Execution Worker API](backend/app/api/v1/execution_worker.py) & [Migration 0010](supabase/migrations/20261123000010_execution_worker_queue.sql) |
+| Admin Teacher Management | `GET /api/v1/admin/teachers`, `GET /api/v1/admin/teachers/lookup`, `POST/DELETE /api/v1/admin/teachers/invitations`, `GET /api/v1/users/teacher-invitations/inspect`, `POST /api/v1/users/me/accept-teacher-invitation` | [Admin Users API](backend/app/api/v1/admin_users.py) & [Users API](backend/app/api/v1/users.py) |
+| Student Dashboard Bundle | `GET /api/v1/learning/dashboard-bundle` (Unified SSR bundle for dashboard, tracks, and recent submissions) | [Learning API](backend/app/api/v1/learning.py) |
 | HTTP & API Defense | Security headers (`X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Cache-Control: no-store`), 2 MiB body guard & sliding-window rate limiter | [FastAPI App](backend/app/main.py) & [Next Config](frontend/next.config.ts) |
-| Performance Indexes | Migration `0008` hot B-tree indexes across learning events, audit logs, submissions & grading | [Migration 0008](supabase/migrations/20261120000008_phase9_performance_indexes.sql) |
+| Performance & Multilanguage | Migration `0008` hot B-tree indexes, Migration `0009` 5-language support (`python`, `javascript`, `c`, `cpp`, `java`), Migration `0010` worker queue (`57/57` `FORCE RLS` tables) | [Migrations](supabase/migrations/) |
 | Backup Verification | Disposable-DB `pg_dump` / `psql` round-trip restore & `FORCE RLS` parity script | [Backup Script](backend/scripts/backup_verify.py) |
 
 ## Documentation
@@ -218,6 +221,6 @@ python -m pytest -v ml/tests
 
 When configured in `backend/.env` (never commit real keys), the Socratic AI Mentor authenticates directly with the live provider and reports `provider_mode="live_llm"`, while keeping deterministic prompt-injection blocking, solution-leakage checks, and safe fallback (`provider_mode="deterministic_fallback"`):
 
-- **Google Gemini (Verified Live):** `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.5-flash-lite`, `LLM_API_KEY=<your-key>`
+- **Google Gemini (Verified Live):** `LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-2.5-flash-lite`, `LLM_API_KEY=<your-key>`
 - **OpenAI:** `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, `LLM_API_KEY=<your-key>`
 - **Local Ollama:** `LLM_PROVIDER=ollama`, `LLM_MODEL=qwen2.5-coder:7b`, `LLM_BASE_URL=http://127.0.0.1:11434`

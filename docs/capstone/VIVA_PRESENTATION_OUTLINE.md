@@ -2,7 +2,7 @@
 
 1. **Title & Motivation:** *Think First. Code Better.* — Why standard LLM coding chatbots erode debugging reasoning through instant answer leakage, and how evidence-driven Socratic tutoring solves it.
 2. **Research Gap & Design Principles:** Contrast ungrounded LLM wrappers vs CodeMentor AI's 5 invariants (Judge0 sandboxed truth, owned ML diagnosis, approved-only RAG, bounded Socratic progression, independent transfer verification).
-3. **System Architecture:** Modular Monolith (Next.js 16 + FastAPI + Supabase PostgreSQL/`pgvector` + Judge0 CE + Gemini) with asymmetric JWKS + DB RBAC + `FORCE RLS` (`55/55` tables).
+3. **System Architecture:** Modular Monolith (Next.js 16 + FastAPI + Supabase PostgreSQL/`pgvector` + Judge0 CE + Gemini) with asymmetric JWKS + DB RBAC + `FORCE RLS` (`57/57` tables).
 4. **Isolated Execution & Security Model:** Why untrusted student code runs strictly inside Judge0 (`network=false`), how hidden tests & reference solutions stay isolated from browsers, and public vs private curriculum separation.
 5. **Owned ML Error Classifier (`error-clf-v1.0.0`):** `309` execution-validated samples across `42` families, `StratifiedGroupKFold` (`0` family leakage), `0.7196` Macro F1 vs `0.5945` rule baseline, uncertainty flagging (`<0.55` / margin `<0.12`).
 6. **Verified `pgvector` RAG & Bounded Gemini Mentor:** Semantic chunking over approved docs only (`Hit@1 = 1.0000`, `MRR = 1.0000`, `1.0000` OOD rejection), prompt-injection + solution-leakage guards, EN/BN bilingual guidance.

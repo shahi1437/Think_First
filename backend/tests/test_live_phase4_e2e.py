@@ -19,10 +19,15 @@ from app.core.config import Settings, get_settings
 from app.core.database import DatabaseManager, get_db_manager, get_db_session
 from app.main import create_app
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_LIVE_INTEGRATION_TESTS") != "1",
-    reason="Set RUN_LIVE_INTEGRATION_TESTS=1 with local Supabase + Judge0 Docker stack running.",
-)
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        os.getenv("RUN_LIVE_INTEGRATION_TESTS") != "1",
+        reason=(
+            "Set RUN_LIVE_INTEGRATION_TESTS=1 with local Supabase + Judge0 Docker stack running."
+        ),
+    ),
+]
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "http://127.0.0.1:54321")
 SUPABASE_ANON_KEY = os.getenv(
@@ -173,7 +178,7 @@ async def test_live_phase4_full_intelligent_debugging_and_transfer_journey() -> 
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
             assert seed_resp.status_code == 200, seed_resp.text
-            assert seed_resp.json()["seeded_documents"] == 10
+            assert seed_resp.json()["seeded_documents"] == 26
 
             draft_slug = f"draft-secret-{suffix}"
             draft_resp = await api.post(

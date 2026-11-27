@@ -31,7 +31,7 @@ jobs:
           python3 -c '
           import pathlib, sys
           files = sorted(p.name for p in pathlib.Path("supabase/migrations").glob("*.sql"))
-          assert len(files) >= 8, f"Expected >= 8 migrations, found {len(files)}"
+          assert len(files) >= 10, f"Expected >= 10 migrations, found {len(files)}"
           assert len(files) == len(set(f[:14] for f in files)), "Duplicate migration timestamp prefix!"
           print(f"Verified {len(files)} ordered SQL migrations.")
           '
@@ -59,20 +59,19 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint (ruff)
-        run: ruff check app tests scripts
+        run: ruff check app worker tests scripts
 
       - name: Format check (ruff)
-        run: ruff format --check app tests scripts
+        run: ruff format --check app worker tests scripts
 
       - name: Static type check (mypy)
-        run: mypy app
+        run: mypy app worker
 
       - name: Run unit & API tests (pytest)
-        run: pytest -v
+        run: pytest -v -m "not live"
 
       - name: Run ML pipeline tests
-        working-directory: .
-        run: python -m pytest -v ml/tests
+        run: pytest -c pyproject.toml -v ../ml/tests
 
   frontend:
     name: Frontend Lint, Typecheck, Tests & Build
