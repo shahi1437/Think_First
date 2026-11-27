@@ -132,7 +132,7 @@ EVAL_QUERIES: tuple[dict[str, Any], ...] = (
 )
 
 
-def run_rag_evaluation(threshold: float = 0.16) -> dict[str, Any]:
+def run_rag_evaluation(threshold: float = 0.22) -> dict[str, Any]:
     embedder = LocalSemanticEmbedder(dimensions=256)
 
     # Index all approved chunks (same formula as RagKnowledgeService)

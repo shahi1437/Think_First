@@ -4,7 +4,7 @@
 - **Approved Educational Documents:** `10` (10 Python concept & debugging areas)
 - **Semantic Heading-Aware Chunks:** `19`
 - **Vector Index:** PostgreSQL `pgvector` (`vector(256)` + HNSW cosine index)
-- **Relevance Threshold:** `0.16` (strictly filters `status = 'approved'` docs; never indexes hidden tests or reference solutions)
+- **Relevance Threshold:** `0.22` (strictly filters `status = 'approved'` docs; never indexes hidden tests or reference solutions)
 
 ## 2. Retrieval Benchmark Results
 | Metric | Value |
