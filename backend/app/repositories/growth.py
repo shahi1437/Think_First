@@ -424,6 +424,18 @@ class GrowthRepository:
         )
         return list(res.scalars().all())
 
+    async def list_student_hint_events_with_sessions(
+        self, *, student_id: UUID, limit: int = 80
+    ) -> list[tuple[HintEvent, MentorSession]]:
+        res = await self._session.execute(
+            select(HintEvent, MentorSession)
+            .join(MentorSession, MentorSession.id == HintEvent.session_id)
+            .where(HintEvent.student_id == student_id)
+            .order_by(desc(HintEvent.created_at))
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in res.all()]
+
     async def list_student_diagnostic_responses(
         self, *, student_id: UUID, limit: int = 120, language_slug: str | None = None
     ) -> list[DiagnosticResponse]:

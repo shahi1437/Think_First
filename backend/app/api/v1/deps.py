@@ -22,6 +22,7 @@ from app.repositories.growth import GrowthRepository
 from app.repositories.identity import IdentityRepository, SQLAlchemyIdentityRepository, UserRecord
 from app.repositories.learning import LearningRepository
 from app.repositories.mentor import MentorRepository
+from app.repositories.notifications import NotificationRepository, SQLAlchemyNotificationRepository
 from app.repositories.problems import ProblemRepository
 from app.schemas.identity import RoleName
 from app.services.admin.curriculum_service import AdminCurriculumService
@@ -33,9 +34,11 @@ from app.services.classroom.grading_service import GradingService
 from app.services.execution.service import ExecutionService
 from app.services.execution.worker_service import ExecutionWorkerService, is_worker_queue_mode
 from app.services.growth.daily_plan_service import DailyPlanService
+from app.services.growth.debugging_timeline_service import DebuggingTimelineService
 from app.services.growth.dna_service import LearningDnaService
 from app.services.growth.history_service import LearningHistoryService
 from app.services.growth.retention_service import RetentionVerificationService
+from app.services.growth.verified_progress_service import VerifiedProgressService
 from app.services.identity.service import IdentityService
 from app.services.learning.diagnostics_service import DiagnosticAssessmentService
 from app.services.learning.journey_engine import LearningJourneyService
@@ -45,6 +48,7 @@ from app.services.learning.skill_graph import SkillGraphService
 from app.services.mentor.ml_inference import MLErrorClassifierService
 from app.services.mentor.rag_service import RagKnowledgeService
 from app.services.mentor.socratic_agent import SocraticMentorService
+from app.services.notifications.service import NotificationService
 from app.services.problems.service import ProblemService
 from app.services.verification.service import VerificationService
 
@@ -370,6 +374,42 @@ def get_learning_history_service(
     growth_repo: GrowthRepository = Depends(get_growth_repository),
 ) -> LearningHistoryService:
     return LearningHistoryService(growth_repo=growth_repo)
+
+
+def get_debugging_timeline_service(
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+) -> DebuggingTimelineService:
+    return DebuggingTimelineService(growth_repo=growth_repo)
+
+
+def get_verified_progress_service(
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+    learning_repo: LearningRepository = Depends(get_learning_repository),
+    classroom_repo: ClassroomRepository = Depends(get_classroom_repository),
+) -> VerifiedProgressService:
+    return VerifiedProgressService(
+        growth_repo=growth_repo,
+        learning_repo=learning_repo,
+        classroom_repo=classroom_repo,
+    )
+
+
+def get_notification_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> NotificationRepository:
+    return SQLAlchemyNotificationRepository(session)
+
+
+def get_notification_service(
+    notification_repo: NotificationRepository = Depends(get_notification_repository),
+    classroom_repo: ClassroomRepository = Depends(get_classroom_repository),
+    growth_repo: GrowthRepository = Depends(get_growth_repository),
+) -> NotificationService:
+    return NotificationService(
+        notification_repo=notification_repo,
+        classroom_repo=classroom_repo,
+        growth_repo=growth_repo,
+    )
 
 
 def get_classroom_course_service(
