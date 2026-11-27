@@ -69,6 +69,20 @@ def _stop_pid_force(pid: int) -> None:
             os.kill(pid, 9)
 
 
+def _windows_detached_creation_flags() -> int:
+    """Return detached Windows subprocess creation flags safely across platforms."""
+    if os.name != "nt":
+        return 0
+    new_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    detached = getattr(subprocess, "DETACHED_PROCESS", 0)
+    flags = 0
+    if isinstance(new_group, int):
+        flags |= new_group
+    if isinstance(detached, int):
+        flags |= detached
+    return flags
+
+
 def _print_banner(ok: bool, lines: list[str]) -> None:
     bar = "=" * 60
     print("")
@@ -248,9 +262,7 @@ def start_runner(env_file: Path, *, self_check_only: bool = False) -> int:
 
     worker_script = _BACKEND_DIR / "worker" / "execution_worker.py"
     with log_file.open("ab") as out_fh, err_file.open("ab") as err_fh:
-        creation_flags = 0
-        if os.name == "nt":
-            creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        creation_flags = _windows_detached_creation_flags()
         proc = subprocess.Popen(
             [sys.executable, str(worker_script), "--env-file", str(env_file)],
             cwd=str(_BACKEND_DIR),

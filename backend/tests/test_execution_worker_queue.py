@@ -307,3 +307,19 @@ async def test_cancel_submission_route_requires_auth() -> None:
         res = await client.post(f"/api/v1/submissions/{uuid4()}/cancel")
     assert res.status_code == 401
     assert timedelta(seconds=1).total_seconds() == 1.0
+
+
+def test_runner_ctl_detached_creation_flags_cross_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from worker import runner_ctl
+
+    # On POSIX / Linux, creation flags must always be 0
+    monkeypatch.setattr(runner_ctl.os, "name", "posix")
+    assert runner_ctl._windows_detached_creation_flags() == 0
+
+    # On Windows, preserves CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS bitmask
+    monkeypatch.setattr(runner_ctl.os, "name", "nt")
+    monkeypatch.setattr(runner_ctl.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
+    monkeypatch.setattr(runner_ctl.subprocess, "DETACHED_PROCESS", 0x8, raising=False)
+    assert runner_ctl._windows_detached_creation_flags() == (0x200 | 0x8)
