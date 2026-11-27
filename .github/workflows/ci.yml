@@ -31,7 +31,7 @@ jobs:
           python3 -c '
           import pathlib, sys
           files = sorted(p.name for p in pathlib.Path("supabase/migrations").glob("*.sql"))
-          assert len(files) >= 10, f"Expected >= 10 migrations, found {len(files)}"
+          assert len(files) >= 11, f"Expected >= 11 migrations, found {len(files)}"
           assert len(files) == len(set(f[:14] for f in files)), "Duplicate migration timestamp prefix!"
           print(f"Verified {len(files)} ordered SQL migrations.")
           '

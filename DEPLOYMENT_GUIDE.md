@@ -63,7 +63,7 @@ Deploy in this exact order so URLs, migrations, CORS, and Auth callbacks wire cl
 ### 4.1 Safety & Backup Before Any Migration
 - **NEVER run `supabase db reset`, `DROP TABLE`, or `TRUNCATE` on production.**
 - Before applying migrations to Supabase Cloud (`vsmrwfoqqjvomtjpypyv`), take a manual snapshot/backup from **Supabase Dashboard → Database → Backups** (or `pg_dump --schema=public --no-owner --no-privileges` into encrypted local storage).
-- All 10 SQL migrations in `supabase/migrations/` are strictly additive and ordered:
+- All 11 SQL migrations in `supabase/migrations/` are strictly additive and ordered:
   1. `20261120000001_identity_roles_and_audit.sql` (enables `pgcrypto` + `vector` extensions, identity, RBAC, audit logs)
   2. `20261120000002_problems_and_execution.sql`
   3. `20261120000003_ai_mentor_rag_and_verification.sql`
@@ -73,7 +73,8 @@ Deploy in this exact order so URLs, migrations, CORS, and Auth callbacks wire cl
   7. `20261120000007_admin_studio_curriculum_governance.sql`
   8. `20261120000008_phase9_performance_indexes.sql`
   9. `20261122000009_multilanguage_learning_and_execution.sql` *(adds 5-language support, `active_language_slug`, per-language isolation, and `execution_provider` without modifying or removing any existing Python data)*
-  10. `20261123000010_execution_worker_queue.sql` *(adds `execution_workers` and `execution_jobs` with `FORCE ROW LEVEL SECURITY` for the free outbound local Judge0 worker queue; total `57/57` `FORCE RLS` public tables)*
+  10. `20261123000010_execution_worker_queue.sql` *(adds `execution_workers` and `execution_jobs` with `FORCE ROW LEVEL SECURITY` for the free outbound local Judge0 worker queue)*
+  11. `20261127000011_in_app_notifications.sql` *(adds `user_notifications` with `FORCE ROW LEVEL SECURITY`, recipient/unread indexes, and deduplication source key for the role-scoped Notification Center; total `58/58` `FORCE RLS` public tables)*
 
 ### 4.2 Dry-Run & Apply Migrations
 ```powershell
@@ -90,7 +91,7 @@ npx supabase db push --dry-run
 npx supabase db push
 ```
 
-### 4.3 Verify Extensions & 57/57 FORCE RLS in Supabase SQL Editor
+### 4.3 Verify Extensions & 58/58 FORCE RLS in Supabase SQL Editor
 ```sql
 SELECT extname FROM pg_extension WHERE extname IN ('pgcrypto', 'vector') ORDER BY extname;
 
@@ -100,7 +101,7 @@ SELECT
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind = 'r';
--- Expected: total_tables = 57, force_rls_tables = 57
+-- Expected: total_tables = 58, force_rls_tables = 58
 
 SELECT slug, display_name, judge0_language_id, is_enabled
 FROM public.supported_languages
