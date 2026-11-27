@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { LearningDashboardClient } from "@/features/learning/learning-dashboard-client";
 import {
   fetchDailyPlanWorkspace,
+  fetchDebuggingTimeline,
   fetchLanguageProgressOverview,
   fetchLearningDashboard,
   fetchLearningDnaProfile,
@@ -9,6 +10,7 @@ import {
   fetchStudentAssignments,
   fetchStudentClasses,
   fetchStudentDashboardBundle,
+  fetchVerifiedLearningProgress,
 } from "@/lib/api-client";
 import { requireAuthenticatedUser } from "@/lib/auth/server-guard";
 
@@ -29,8 +31,8 @@ export default async function StudentDashboardPage({
     redirect("/student/onboarding");
   }
 
-  const bundle = await fetchStudentDashboardBundle(accessToken).catch(
-    async () => {
+  const [bundle, verifiedProgress, debuggingTimeline] = await Promise.all([
+    fetchStudentDashboardBundle(accessToken).catch(async () => {
       const [
         languageOverview,
         dashboard,
@@ -57,8 +59,10 @@ export default async function StudentDashboardPage({
         enrolled_classes: enrolledClasses,
         student_assignments: studentAssignments,
       };
-    },
-  );
+    }),
+    fetchVerifiedLearningProgress(accessToken).catch(() => null),
+    fetchDebuggingTimeline(accessToken, { limit: 4 }).catch(() => null),
+  ]);
 
   const {
     language_overview: languageOverview,
@@ -113,6 +117,8 @@ export default async function StudentDashboardPage({
           scheduledCount: retentionOverview.schedules.length,
           retainedSkillsCount: retentionOverview.retained_skills_count,
         }}
+        verifiedProgress={verifiedProgress}
+        debuggingTimeline={debuggingTimeline}
         classroomSummary={{
           enrolledCount: enrolledClasses.filter(
             (c) => c.membership_status === "active",

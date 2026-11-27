@@ -1,6 +1,7 @@
 import { LanguageSelector } from "@/components/language-selector";
 import { LearningHistoryClient } from "@/features/growth/learning-history-client";
 import {
+  fetchDebuggingTimeline,
   fetchLanguageProgressOverview,
   fetchLearningHistory,
 } from "@/lib/api-client";
@@ -14,9 +15,10 @@ export default async function StudentLearningHistoryPage() {
     currentPath: "/student/history",
   });
 
-  const [languageOverview, history] = await Promise.all([
+  const [languageOverview, history, debuggingTimeline] = await Promise.all([
     fetchLanguageProgressOverview(accessToken),
     fetchLearningHistory(accessToken, { limit: 50 }),
+    fetchDebuggingTimeline(accessToken, { limit: 15 }).catch(() => null),
   ]);
   const explanationLang =
     user.preferences?.preferred_explanation_language ?? "en";
@@ -34,6 +36,7 @@ export default async function StudentLearningHistoryPage() {
         key={languageOverview.active_language_slug}
         accessToken={accessToken}
         initialHistory={history}
+        initialDebuggingTimeline={debuggingTimeline}
         initialLanguage={explanationLang}
       />
     </div>

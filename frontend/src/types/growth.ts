@@ -244,3 +244,124 @@ export const retentionOverviewViewSchema = z.object({
   policy_note_bn: z.string(),
 });
 export type RetentionOverviewView = z.infer<typeof retentionOverviewViewSchema>;
+
+// =============================================================================
+// Phase 11: AI Debugging Timeline & Verified Learning Progress
+// =============================================================================
+
+export const debuggingStepKindSchema = z.enum([
+  "problem_started",
+  "initial_attempt",
+  "error_diagnosed",
+  "ai_hint",
+  "student_correction",
+  "successful_execution",
+  "learning_outcome",
+]);
+export type DebuggingStepKind = z.infer<typeof debuggingStepKindSchema>;
+
+export const debuggingTimelineStepViewSchema = z.object({
+  id: z.string(),
+  step_kind: debuggingStepKindSchema,
+  title: z.string(),
+  detail: z.string(),
+  code_excerpt: z.string().nullable(),
+  verdict_or_status: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  occurred_at: z.string(),
+});
+export type DebuggingTimelineStepView = z.infer<
+  typeof debuggingTimelineStepViewSchema
+>;
+
+export const debuggingJourneyOutcomeSchema = z.enum([
+  "verified_transfer",
+  "solved",
+  "in_progress",
+]);
+export type DebuggingJourneyOutcome = z.infer<
+  typeof debuggingJourneyOutcomeSchema
+>;
+
+export const debuggingJourneyViewSchema = z.object({
+  problem_id: z.string(),
+  problem_slug: z.string(),
+  problem_title: z.string(),
+  language_slug: z.string(),
+  href: z.string(),
+  outcome_status: debuggingJourneyOutcomeSchema,
+  attempts_count: z.number(),
+  hints_used: z.number(),
+  diagnoses_count: z.number(),
+  started_at: z.string(),
+  latest_event_at: z.string(),
+  steps: z.array(debuggingTimelineStepViewSchema),
+});
+export type DebuggingJourneyView = z.infer<typeof debuggingJourneyViewSchema>;
+
+export const debuggingTimelineResponseViewSchema = z.object({
+  journeys: z.array(debuggingJourneyViewSchema),
+  total_journeys: z.number(),
+  solved_journeys: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+});
+export type DebuggingTimelineResponseView = z.infer<
+  typeof debuggingTimelineResponseViewSchema
+>;
+
+export const verifiedLanguageBreakdownViewSchema = z.object({
+  language_slug: z.string(),
+  problems_attempted: z.number(),
+  problems_solved_verified: z.number(),
+  lessons_completed: z.number(),
+  total_submissions: z.number(),
+});
+export type VerifiedLanguageBreakdownView = z.infer<
+  typeof verifiedLanguageBreakdownViewSchema
+>;
+
+export const dailyActivityPointViewSchema = z.object({
+  day: z.string(),
+  submissions_count: z.number(),
+  accepted_count: z.number(),
+  lessons_completed: z.number(),
+});
+export type DailyActivityPointView = z.infer<
+  typeof dailyActivityPointViewSchema
+>;
+
+export const improvementTrendSchema = z.enum([
+  "improving",
+  "steady",
+  "needs_focus",
+  "insufficient_data",
+]);
+export type ImprovementTrend = z.infer<typeof improvementTrendSchema>;
+
+export const verifiedLearningProgressViewSchema = z.object({
+  problems_attempted: z.number(),
+  problems_solved_verified: z.number(),
+  total_submissions: z.number(),
+  accepted_submissions: z.number(),
+  languages_used: z.array(verifiedLanguageBreakdownViewSchema),
+  concepts_mastered_verified: z.array(z.string()),
+  concepts_in_progress: z.array(z.string()),
+  assignments_completed_verified: z.number(),
+  assignments_total: z.number(),
+  average_published_grade_pct: z.number().nullable(),
+  transfer_verifications_passed: z.number(),
+  retention_checks_passed: z.number(),
+  consistency_active_days_14d: z.number(),
+  daily_activity_14d: z.array(dailyActivityPointViewSchema),
+  improvement_trend: improvementTrendSchema,
+  early_acceptance_rate_pct: z.number().nullable(),
+  recent_acceptance_rate_pct: z.number().nullable(),
+  estimated_lessons_completed: z.number(),
+  estimated_diagnostic_sessions: z.number(),
+  estimated_guided_skills_count: z.number(),
+  methodology_note: z.string(),
+});
+export type VerifiedLearningProgressView = z.infer<
+  typeof verifiedLearningProgressViewSchema
+>;
