@@ -238,6 +238,9 @@ export const teacherManagementOverviewSchema = z.object({
   active_teachers: z.array(adminUserSummarySchema),
   active_teachers_total: z.number().int(),
   invitations: z.array(teacherInvitationViewSchema),
+  invitations_total: z.number().int().optional(),
+  invitations_limit: z.number().int().optional(),
+  invitations_offset: z.number().int().optional(),
   pending_invitations_count: z.number().int(),
 });
 

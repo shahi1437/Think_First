@@ -194,6 +194,9 @@ class TeacherManagementOverviewResponse(BaseModel):
     active_teachers: list[AdminUserSummary]
     active_teachers_total: int
     invitations: list[TeacherInvitationView]
+    invitations_total: int = 0
+    invitations_limit: int = 50
+    invitations_offset: int = 0
     pending_invitations_count: int
 
 

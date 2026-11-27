@@ -109,7 +109,11 @@ class IdentityRepository(Protocol):
     async def record_audit_log(self, event: AuditRecord) -> None: ...
 
     async def list_audit_events_by_target_type(
-        self, target_type: str, limit: int = 300
+        self, target_type: str, limit: int = 1000, offset: int = 0
+    ) -> list[tuple[AuditRecord, datetime, str | None]]: ...
+
+    async def list_audit_events_for_target(
+        self, target_type: str, target_id: str
     ) -> list[tuple[AuditRecord, datetime, str | None]]: ...
 
 
@@ -373,17 +377,10 @@ class SQLAlchemyIdentityRepository:
         self._session.add(log)
         await self._session.commit()
 
-    async def list_audit_events_by_target_type(
-        self, target_type: str, limit: int = 300
+    @staticmethod
+    def _rows_to_audit_tuples(
+        rows: list[Any],
     ) -> list[tuple[AuditRecord, datetime, str | None]]:
-        stmt = (
-            select(AuditLog, Profile.email)
-            .outerjoin(Profile, AuditLog.actor_user_id == Profile.id)
-            .where(AuditLog.target_type == target_type)
-            .order_by(AuditLog.created_at.asc())
-            .limit(limit)
-        )
-        rows = (await self._session.execute(stmt)).all()
         out: list[tuple[AuditRecord, datetime, str | None]] = []
         for log, actor_email in rows:
             rec = AuditRecord(
@@ -396,3 +393,32 @@ class SQLAlchemyIdentityRepository:
             )
             out.append((rec, log.created_at, actor_email))
         return out
+
+    async def list_audit_events_by_target_type(
+        self, target_type: str, limit: int = 1000, offset: int = 0
+    ) -> list[tuple[AuditRecord, datetime, str | None]]:
+        stmt = (
+            select(AuditLog, Profile.email)
+            .outerjoin(Profile, AuditLog.actor_user_id == Profile.id)
+            .where(AuditLog.target_type == target_type)
+            .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = list((await self._session.execute(stmt)).all())
+        return self._rows_to_audit_tuples(rows)
+
+    async def list_audit_events_for_target(
+        self, target_type: str, target_id: str
+    ) -> list[tuple[AuditRecord, datetime, str | None]]:
+        stmt = (
+            select(AuditLog, Profile.email)
+            .outerjoin(Profile, AuditLog.actor_user_id == Profile.id)
+            .where(
+                AuditLog.target_type == target_type,
+                AuditLog.target_id == target_id,
+            )
+            .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+        )
+        rows = list((await self._session.execute(stmt)).all())
+        return self._rows_to_audit_tuples(rows)
