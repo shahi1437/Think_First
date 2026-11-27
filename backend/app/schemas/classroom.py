@@ -403,6 +403,51 @@ class ClassAnalyticsView(BaseModel):
     students_needing_support: list[SupportStudentItem]
 
 
+class ClassComparisonItem(BaseModel):
+    course_id: UUID
+    course_code: str
+    course_title: str
+    active_students: int
+    published_assignments: int
+    submitted_count: int
+    graded_count: int
+    pending_grading_count: int
+    total_attempts: int
+    accepted_attempts: int
+    acceptance_rate_pct: float | None = None
+
+
+class TeacherStudentAssignmentRecord(BaseModel):
+    assignment_id: UUID
+    title: str
+    due_at: datetime | None = None
+    workflow_status: SubmissionWorkflowStatus
+    attempts_used: int
+    latest_verdict: str | None = None
+    marks_awarded: float | None = None
+    max_marks: float
+    grade_status: GradeStatus | None = None
+    submitted_at: datetime | None = None
+
+
+class TeacherStudentPerformanceView(BaseModel):
+    course_id: UUID
+    course_code: str
+    course_title: str
+    student_id: UUID
+    full_name: str
+    email: str
+    membership_status: MembershipStatus
+    total_assignment_attempts: int
+    accepted_assignment_attempts: int
+    hints_used_total: int
+    verified_transfers_count: int
+    verified_skills: list[str]
+    developing_skills: list[str]
+    common_misconceptions: list[MisconceptionCountItem]
+    assignments: list[TeacherStudentAssignmentRecord]
+
+
 class TeacherDashboardView(BaseModel):
     courses_count: int
     active_courses_count: int
@@ -413,4 +458,5 @@ class TeacherDashboardView(BaseModel):
     courses: list[CourseSummaryView]
     upcoming_deadlines: list[AssignmentSummaryView]
     analytics: ClassAnalyticsView
+    class_comparison: list[ClassComparisonItem] = Field(default_factory=list)
     methodology_note: str

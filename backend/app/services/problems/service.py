@@ -26,6 +26,7 @@ from app.schemas.problems import (
     AdminVariantDetail,
     Difficulty,
     LanguageItem,
+    ProblemCompletionStatus,
     ProblemExample,
     ProblemMode,
     ProblemStatus,
@@ -185,9 +186,16 @@ class ProblemService:
         topic: str | None = None,
         track: TrackSlug | None = None,
         language: str | None = None,
+        student_id: UUID | None = None,
+        completion_status: ProblemCompletionStatus | None = None,
+        recommended_only: bool = False,
         limit: int = 20,
         offset: int = 0,
     ) -> PaginatedResponse[StudentProblemListItem]:
+        # When student-scoped adaptive filters are active, fetch full page set to filter accurately
+        needs_post_filter = student_id is not None and (
+            completion_status is not None or recommended_only
+        )
         rows, total = await self._repo.list_published_problems(
             search=search,
             difficulty=difficulty,
@@ -195,28 +203,81 @@ class ProblemService:
             topic=topic,
             track=track,
             language=language,
-            limit=limit,
-            offset=offset,
+            limit=200 if needs_post_filter else limit,
+            offset=0 if needs_post_filter else offset,
         )
-        items = [
-            StudentProblemListItem(
-                problem_id=problem.id,
-                version_id=version.id,
-                slug=problem.slug,
-                title=version.title,
-                difficulty=version.difficulty,
-                track_slug=version.track_slug,
-                mode=version.mode,
-                topics=list(version.topics),
-                skills=list(version.skills),
-                supported_languages=sorted(
-                    {v.language_slug for v in version.variants},
-                    key=lambda slug: (_LANGUAGE_ORDER.get(slug, 99), slug),
-                ),
-                published_at=version.published_at,
+
+        progress_map: dict[UUID, tuple[int, bool]] = {}
+        weak_skills: set[str] = set()
+        if student_id is not None:
+            if hasattr(self._repo, "get_student_problem_progress_map"):
+                progress_map = await self._repo.get_student_problem_progress_map(student_id)
+            if hasattr(self._repo, "list_student_weak_skills"):
+                weak_skills = await self._repo.list_student_weak_skills(student_id)
+
+        solved_count = sum(1 for _, solved in progress_map.values() if solved)
+        next_diff_tier: set[str] = (
+            {"beginner", "basic"}
+            if solved_count < 3
+            else ({"basic", "intermediate"} if solved_count < 8 else {"intermediate", "advanced"})
+        )
+
+        items: list[StudentProblemListItem] = []
+        for problem, version in rows:
+            attempts_cnt, is_solved = progress_map.get(problem.id, (0, False))
+            status_val: ProblemCompletionStatus = (
+                "solved" if is_solved else ("attempted" if attempts_cnt > 0 else "unattempted")
             )
-            for problem, version in rows
-        ]
+            matching_weak = [
+                sk for sk in (list(version.skills) + list(version.topics)) if sk in weak_skills
+            ]
+            is_rec = False
+            rec_reason: str | None = None
+            if student_id is not None and not is_solved:
+                if matching_weak:
+                    is_rec = True
+                    rec_reason = f"Targets developing concept: {matching_weak[0].replace('_', ' ')}"
+                elif attempts_cnt > 0:
+                    is_rec = True
+                    rec_reason = f"In progress ({attempts_cnt} attempt(s)) — finish and verify fix"
+                elif version.difficulty in next_diff_tier:
+                    is_rec = True
+                    rec_reason = (
+                        f"Matches your progressive {version.difficulty} difficulty tier "
+                        f"({solved_count} solved so far)"
+                    )
+
+            items.append(
+                StudentProblemListItem(
+                    problem_id=problem.id,
+                    version_id=version.id,
+                    slug=problem.slug,
+                    title=version.title,
+                    difficulty=version.difficulty,
+                    track_slug=version.track_slug,
+                    mode=version.mode,
+                    topics=list(version.topics),
+                    skills=list(version.skills),
+                    supported_languages=sorted(
+                        {v.language_slug for v in version.variants},
+                        key=lambda slug: (_LANGUAGE_ORDER.get(slug, 99), slug),
+                    ),
+                    published_at=version.published_at,
+                    completion_status=status_val,
+                    attempts_count=attempts_cnt,
+                    is_recommended=is_rec,
+                    recommendation_reason=rec_reason,
+                )
+            )
+
+        if completion_status is not None:
+            items = [it for it in items if it.completion_status == completion_status]
+        if recommended_only:
+            items = [it for it in items if it.is_recommended]
+        if needs_post_filter:
+            total = len(items)
+            items = items[offset : offset + limit]
+
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
 
     async def get_published_problem(self, problem_id: UUID) -> StudentProblemDetail:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -100,6 +100,7 @@ class NotificationService:
                 subs_by_asn = await self._classroom_repo.list_submissions_for_student(
                     student_id=user.id, assignment_ids=[a.id for a in assignments]
                 )
+                now_utc = datetime.now(UTC)
                 for asn in assignments:
                     due_note = (
                         f" Due {asn.due_at.strftime('%b %d, %Y %H:%M UTC')}."
@@ -118,6 +119,36 @@ class NotificationService:
                         metadata={"assignment_id": str(asn.id)},
                     )
                     sub = subs_by_asn.get(asn.id)
+
+                    # Automated upcoming deadline reminder (within 48 hours and not yet submitted)
+                    if (
+                        asn.due_at is not None
+                        and now_utc < asn.due_at <= now_utc + timedelta(hours=48)
+                        and (
+                            sub is None
+                            or sub.status in ("not_started", "in_progress", "revision_requested")
+                        )
+                    ):
+                        hours_left = max(1, int((asn.due_at - now_utc).total_seconds() // 3600))
+                        await self._repo.upsert_notification_by_source_key(
+                            recipient_user_id=user.id,
+                            actor_user_id=asn.teacher_id,
+                            recipient_role="student",
+                            category="assignment",
+                            title=f"Deadline approaching: {asn.title}",
+                            body=(
+                                f"Due in ~{hours_left} hour(s) "
+                                f"({asn.due_at.strftime('%b %d, %Y %H:%M UTC')}). "
+                                "Submit your verified code before the deadline."
+                            ),
+                            href=f"/student/assignments/{asn.id}",
+                            source_key=f"student:deadline:{asn.id}:{now_utc.date().isoformat()}",
+                            metadata={
+                                "assignment_id": str(asn.id),
+                                "hours_remaining": hours_left,
+                            },
+                        )
+
                     if sub is None:
                         continue
                     if sub.status == "revision_requested":
@@ -135,6 +166,27 @@ class NotificationService:
                             source_key=f"student:revision:{sub.id}:{sub.attempts_used}",
                             metadata={"assignment_id": str(asn.id)},
                         )
+                    for fb in getattr(sub, "feedback_entries", []) or []:
+                        if getattr(fb, "is_visible_to_student", True):
+                            preview = str(getattr(fb, "body_md", "")).strip()[:160]
+                            await self._repo.upsert_notification_by_source_key(
+                                recipient_user_id=user.id,
+                                actor_user_id=getattr(fb, "teacher_id", asn.teacher_id),
+                                recipient_role="student",
+                                category="submission_feedback",
+                                title=f"Instructor feedback: {asn.title}",
+                                body=(
+                                    preview
+                                    if preview
+                                    else "Your instructor posted feedback on your submission."
+                                ),
+                                href=f"/student/assignments/{asn.id}",
+                                source_key=f"student:feedback:{fb.id}",
+                                metadata={
+                                    "assignment_id": str(asn.id),
+                                    "feedback_id": str(fb.id),
+                                },
+                            )
                     grade = sub.grade
                     if grade is not None and grade.status == "published":
                         await self._repo.upsert_notification_by_source_key(

@@ -25,11 +25,17 @@ from app.repositories.classroom import ClassroomRepository
 from app.repositories.identity import UserRecord
 from app.schemas.classroom import (
     ClassAnalyticsView,
+    ClassComparisonItem,
+    GradeStatus,
+    MembershipStatus,
     MisconceptionCountItem,
     SkillGapItem,
+    SubmissionWorkflowStatus,
     SupportStudentItem,
     TeacherCourseDetailView,
     TeacherDashboardView,
+    TeacherStudentAssignmentRecord,
+    TeacherStudentPerformanceView,
     VerdictCountItem,
 )
 from app.services.classroom.assignment_service import AssignmentService
@@ -184,6 +190,37 @@ class TeacherAnalyticsService:
             course_ids=course_ids, course_titles=course_titles
         )
 
+        # Build factual per-class comparison from real assignments & Judge0 attempts
+        all_attempts = await self._repo.list_attempts_for_courses(course_ids)
+        attempts_by_course: dict[UUID, list[int]] = {cid: [0, 0] for cid in course_ids}
+        for att in all_attempts:
+            bucket = attempts_by_course.get(att.course_id)
+            if bucket is not None:
+                bucket[0] += 1
+                if att.verdict == "accepted":
+                    bucket[1] += 1
+
+        comparison: list[ClassComparisonItem] = []
+        for c in courses:
+            c_asgs = [a for a in all_assignments if a.course_id == c.id and a.status == "published"]
+            tot_att, acc_att = attempts_by_course.get(c.id, [0, 0])
+            acc_pct = round((acc_att / tot_att) * 100.0, 1) if tot_att > 0 else None
+            comparison.append(
+                ClassComparisonItem(
+                    course_id=c.id,
+                    course_code=c.code,
+                    course_title=c.title,
+                    active_students=c.active_students_count,
+                    published_assignments=len(c_asgs),
+                    submitted_count=sum(a.submitted_count for a in c_asgs),
+                    graded_count=sum(a.graded_count for a in c_asgs),
+                    pending_grading_count=sum(a.pending_grading_count for a in c_asgs),
+                    total_attempts=tot_att,
+                    accepted_attempts=acc_att,
+                    acceptance_rate_pct=acc_pct,
+                )
+            )
+
         return TeacherDashboardView(
             courses_count=len(courses),
             active_courses_count=sum(1 for c in courses if c.status == "active"),
@@ -194,9 +231,126 @@ class TeacherAnalyticsService:
             courses=courses,
             upcoming_deadlines=upcoming,
             analytics=analytics,
+            class_comparison=comparison,
             methodology_note=(
                 "All dashboard counts, Judge0 verdict distributions, ML misconceptions, Skill Graph gaps, "
-                "hint usage, and support flags are computed strictly from real database records scoped to "
-                "your authorized classes."
+                "hint usage, class comparisons, and support flags are computed strictly from real database "
+                "records scoped to your authorized classes."
             ),
+        )
+
+    async def get_student_performance_in_course(
+        self, *, teacher: UserRecord, course_id: UUID, student_id: UUID
+    ) -> TeacherStudentPerformanceView:
+        """Drill-down from class analytics to a single enrolled student's real DB record."""
+        course = await self._repo.get_course_by_id(course_id)
+        if course is None:
+            raise AppError(
+                code="COURSE_NOT_FOUND",
+                message="Class was not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        if course.teacher_id != teacher.id and "admin" not in teacher.roles:
+            raise AppError(
+                code="FORBIDDEN",
+                message="You are not authorized to inspect students in this class.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+        membership = await self._repo.get_membership(course_id=course_id, student_id=student_id)
+        if membership is None:
+            raise AppError(
+                code="STUDENT_NOT_IN_CLASS",
+                message="Student is not enrolled in this class.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        profiles = await self._repo.get_profiles_map([student_id])
+        prof = profiles.get(student_id)
+
+        asns = await self._repo.list_assignments_for_courses(
+            course_ids=[course_id], published_only=False
+        )
+        subs_map = await self._repo.list_submissions_for_student(
+            student_id=student_id, assignment_ids=[a.id for a in asns]
+        )
+        course_attempts = [
+            att
+            for att in await self._repo.list_attempts_for_courses([course_id])
+            if att.student_id == student_id
+        ]
+        total_att = len(course_attempts)
+        accepted_att = sum(1 for att in course_attempts if att.verdict == "accepted")
+        attempt_hints = sum(int(att.hints_used) for att in course_attempts)
+
+        misconceptions = [
+            MisconceptionCountItem(error_code=code, occurrences=cnt)
+            for code, cnt in await self._repo.count_misconceptions_for_students([student_id])
+        ]
+        skill_rows = await self._repo.aggregate_skill_gaps_for_students([student_id])
+        verified_skills = sorted(slug for slug, _unobs, verif in skill_rows if verif > 0)
+        developing_skills = sorted(
+            slug for slug, unobs, verif in skill_rows if unobs > 0 and verif == 0
+        )
+        mentor_hints, verified_transfers = await self._repo.count_hints_and_transfers_for_students(
+            [student_id]
+        )
+
+        asn_records: list[TeacherStudentAssignmentRecord] = []
+        for asn in asns:
+            sub = subs_map.get(asn.id)
+            wf_raw = sub.status if sub is not None else "not_started"
+            wf: SubmissionWorkflowStatus = (
+                wf_raw  # type: ignore[assignment]
+                if wf_raw
+                in (
+                    "not_started",
+                    "in_progress",
+                    "submitted",
+                    "revision_requested",
+                    "resubmitted",
+                    "graded",
+                )
+                else "not_started"
+            )
+            latest_verdict = sub.attempts[0].verdict if (sub is not None and sub.attempts) else None
+            grade = sub.grade if sub is not None else None
+            g_status: GradeStatus | None = None
+            if grade is not None and grade.status in ("draft", "published", "revision_requested"):
+                g_status = grade.status  # type: ignore[assignment]
+            asn_records.append(
+                TeacherStudentAssignmentRecord(
+                    assignment_id=asn.id,
+                    title=asn.title,
+                    due_at=asn.due_at,
+                    workflow_status=wf,
+                    attempts_used=sub.attempts_used if sub is not None else 0,
+                    latest_verdict=latest_verdict,
+                    marks_awarded=float(grade.marks_awarded) if grade is not None else None,
+                    max_marks=float(asn.max_marks),
+                    grade_status=g_status,
+                    submitted_at=sub.submitted_at if sub is not None else None,
+                )
+            )
+
+        mem_status: MembershipStatus = (
+            membership.status  # type: ignore[assignment]
+            if membership.status in ("pending", "active", "removed", "left")
+            else "active"
+        )
+        return TeacherStudentPerformanceView(
+            course_id=course.id,
+            course_code=course.code,
+            course_title=course.title,
+            student_id=student_id,
+            full_name=prof.full_name if prof else "Student",
+            email=prof.email if prof else "",
+            membership_status=mem_status,
+            total_assignment_attempts=total_att,
+            accepted_assignment_attempts=accepted_att,
+            hints_used_total=mentor_hints + attempt_hints,
+            verified_transfers_count=verified_transfers,
+            verified_skills=verified_skills,
+            developing_skills=developing_skills,
+            common_misconceptions=misconceptions,
+            assignments=asn_records,
         )
