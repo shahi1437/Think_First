@@ -35,6 +35,7 @@ import {
   fetchTransferChallenge,
   saveWorkspaceRevision,
 } from "@/lib/api-client";
+import { computeLineDiff } from "@/lib/code-diff";
 import type {
   MentorSessionDetail,
   TransferChallengeSummary,
@@ -177,6 +178,25 @@ export function CodingWorkspace({
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(
     latestRevisionForLang?.created_at ?? null,
   );
+  const [compareRevisionId, setCompareRevisionId] = useState<string | null>(
+    null,
+  );
+
+  const codeDiffPreview = useMemo(() => {
+    if (!compareRevisionId) return null;
+    if (compareRevisionId === "__starter__") {
+      return {
+        label: "Starter Code",
+        diff: computeLineDiff(initialStarter, code),
+      };
+    }
+    const rev = revisions.find((r) => r.id === compareRevisionId);
+    if (!rev) return null;
+    return {
+      label: `${rev.revision_type} (${new Date(rev.created_at).toLocaleTimeString()})`,
+      diff: computeLineDiff(rev.source_code, code),
+    };
+  }, [compareRevisionId, initialStarter, code, revisions]);
 
   const lastSavedCodeRef = useRef<string>(code);
   const activePollRunRef = useRef<number>(0);
@@ -1320,84 +1340,224 @@ export function CodingWorkspace({
                     No submissions yet for this problem.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
-                    {submissions.map((sub) => (
-                      <li
-                        key={sub.id}
-                        className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <VerdictBadge verdict={sub.verdict} />
-                          <span className="font-medium text-slate-800">
-                            {sub.passed_tests}/{sub.total_tests} passed
-                          </span>
-                          <Badge variant="neutral">
-                            <span className="uppercase">
-                              {sub.submission_kind}
-                            </span>
-                          </Badge>
-                          <span className="text-slate-400">
-                            {new Date(sub.created_at).toLocaleString()}
-                          </span>
-                        </div>
+                  <div className="space-y-4">
+                    <div
+                      data-testid="error-evolution-strip"
+                      className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-slate-800">
+                          Attempt Evolution ({submissions.length} run
+                          {submissions.length === 1 ? "" : "s"})
+                        </p>
                         <button
                           type="button"
-                          disabled={loadingSubId === sub.id}
                           onClick={() => {
-                            void handleInspectSubmission(sub.id);
+                            setCompareRevisionId("__starter__");
+                            setBottomTab("revisions");
                           }}
-                          className="font-medium text-indigo-700 hover:underline disabled:opacity-50"
+                          className="text-xs font-semibold text-teal-700 hover:underline"
                         >
-                          {loadingSubId === sub.id
-                            ? "Loading..."
-                            : "Inspect results"}
+                          Compare current code vs starter →
                         </button>
-                      </li>
-                    ))}
-                  </ul>
-                )
-              ) : revisions.length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-500">
-                  Autosave and manual revisions will appear here as you edit.
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {revisions.map((rev) => (
-                    <li
-                      key={rev.id}
-                      className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs"
-                    >
-                      <div className="flex items-center gap-2">
-                        <History
-                          className="h-3.5 w-3.5 text-slate-400"
-                          aria-hidden="true"
-                        />
-                        <Badge variant="neutral">
-                          <span className="capitalize">
-                            {rev.revision_type}
-                          </span>
-                        </Badge>
-                        <span className="font-mono text-slate-600">
-                          {rev.language_slug}
-                        </span>
-                        <span className="text-slate-400">
-                          {new Date(rev.created_at).toLocaleString()}
-                        </span>
                       </div>
+                      <ol className="mt-2 flex flex-wrap items-center gap-2">
+                        {[...submissions].reverse().map((sub, idx) => (
+                          <li key={sub.id} className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleInspectSubmission(sub.id);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] hover:border-teal-400"
+                            >
+                              <span className="font-semibold text-slate-500 tabular-nums">
+                                #{idx + 1}
+                              </span>
+                              <VerdictBadge verdict={sub.verdict} />
+                              <span className="text-slate-600 tabular-nums">
+                                {sub.passed_tests}/{sub.total_tests}
+                              </span>
+                            </button>
+                            {idx < submissions.length - 1 ? (
+                              <span
+                                aria-hidden="true"
+                                className="text-xs text-slate-400"
+                              >
+                                →
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <ul className="divide-y divide-slate-100">
+                      {submissions.map((sub) => (
+                        <li
+                          key={sub.id}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <VerdictBadge verdict={sub.verdict} />
+                            <span className="font-medium text-slate-800">
+                              {sub.passed_tests}/{sub.total_tests} passed
+                            </span>
+                            <Badge variant="neutral">
+                              <span className="uppercase">
+                                {sub.submission_kind}
+                              </span>
+                            </Badge>
+                            <span className="text-slate-400">
+                              {new Date(sub.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={loadingSubId === sub.id}
+                            onClick={() => {
+                              void handleInspectSubmission(sub.id);
+                            }}
+                            className="font-medium text-indigo-700 hover:underline disabled:opacity-50"
+                          >
+                            {loadingSubId === sub.id
+                              ? "Loading..."
+                              : "Inspect results"}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-[#f7f8fa] px-3 py-2 text-xs">
+                    <span className="font-medium text-slate-700">
+                      Code Attempt Comparison (line-by-line diff vs current editor)
+                    </span>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleRestoreRevision(rev)}
-                        className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline"
+                        onClick={() => setCompareRevisionId("__starter__")}
+                        className="rounded-md border border-teal-200 bg-white px-2.5 py-1 font-semibold text-teal-800 hover:bg-teal-50"
                       >
-                        <CheckCircle2
-                          className="h-3.5 w-3.5"
-                          aria-hidden="true"
-                        />
-                        <span>Restore snapshot</span>
+                        Diff vs Starter Code
                       </button>
-                    </li>
-                  ))}
-                </ul>
+                      {codeDiffPreview ? (
+                        <button
+                          type="button"
+                          onClick={() => setCompareRevisionId(null)}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-600 hover:bg-slate-100"
+                        >
+                          Close diff
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {codeDiffPreview ? (
+                    <div
+                      data-testid="code-attempt-diff-viewer"
+                      aria-live="polite"
+                      className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-slate-900">
+                          Comparing {codeDiffPreview.label} → Current Editor
+                        </span>
+                        <span className="font-mono text-[11px] tabular-nums">
+                          <span className="text-emerald-700">
+                            +{codeDiffPreview.diff.addedCount} added
+                          </span>{" "}
+                          ·{" "}
+                          <span className="text-rose-700">
+                            -{codeDiffPreview.diff.removedCount} removed
+                          </span>{" "}
+                          ·{" "}
+                          <span className="text-slate-500">
+                            {codeDiffPreview.diff.unchangedCount} unchanged
+                          </span>
+                        </span>
+                      </div>
+                      <pre className="max-h-64 overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed">
+                        {codeDiffPreview.diff.lines.map((ln, idx) => (
+                          <div
+                            key={`${idx}-${ln.kind}`}
+                            className={
+                              ln.kind === "added"
+                                ? "bg-emerald-950/70 text-emerald-200"
+                                : ln.kind === "removed"
+                                  ? "bg-rose-950/70 text-rose-200"
+                                  : "text-slate-300"
+                            }
+                          >
+                            <span className="mr-2 inline-block w-3 select-none opacity-70">
+                              {ln.kind === "added"
+                                ? "+"
+                                : ln.kind === "removed"
+                                  ? "-"
+                                  : " "}
+                            </span>
+                            {ln.text}
+                          </div>
+                        ))}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  {revisions.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-slate-500">
+                      Autosave and manual revisions will appear here as you edit.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-slate-100">
+                      {revisions.map((rev) => (
+                        <li
+                          key={rev.id}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <History
+                              className="h-3.5 w-3.5 text-slate-400"
+                              aria-hidden="true"
+                            />
+                            <Badge variant="neutral">
+                              <span className="capitalize">
+                                {rev.revision_type}
+                              </span>
+                            </Badge>
+                            <span className="font-mono text-slate-600">
+                              {rev.language_slug}
+                            </span>
+                            <span className="text-slate-400 tabular-nums">
+                              {new Date(rev.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setCompareRevisionId(rev.id)}
+                              className="font-medium text-teal-700 hover:underline"
+                            >
+                              Compare diff
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreRevision(rev)}
+                              className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline"
+                            >
+                              <CheckCircle2
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                              <span>Restore snapshot</span>
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
             </div>
           </section>

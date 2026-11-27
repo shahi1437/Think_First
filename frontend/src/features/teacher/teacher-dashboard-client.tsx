@@ -396,6 +396,92 @@ export function TeacherDashboardClient({
           </div>
         </div>
       </section>
+
+      {/* Class Performance Comparison & Grading Overview */}
+      {initialDashboard.class_comparison &&
+      initialDashboard.class_comparison.length > 0 ? (
+        <section
+          aria-label="Class performance comparison"
+          data-testid="teacher-class-comparison"
+          className="rounded-2xl border border-slate-200 bg-white p-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-slate-950">
+                {isBn
+                  ? "ক্লাস তুলনামূলক পারফরম্যান্স ও গ্রেডিং সারাংশ"
+                  : "Class Performance Comparison & Grading Overview"}
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {isBn
+                  ? "প্রতিটি ক্লাসের বাস্তব সাবমিশন, গ্রেডিং এবং Judge0 পাসের হার।"
+                  : "Compare enrollment, published assignments, grading progress, and real Judge0 acceptance rates across classes."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-slate-200 text-slate-500">
+                <tr>
+                  <th className="py-2 pr-3 font-semibold">Class</th>
+                  <th className="px-2 py-2 font-semibold">Students</th>
+                  <th className="px-2 py-2 font-semibold">Assignments</th>
+                  <th className="px-2 py-2 font-semibold">Submitted / Graded</th>
+                  <th className="px-2 py-2 font-semibold">Judge0 Pass Rate</th>
+                  <th className="py-2 pl-2 text-right font-semibold">Drill-Down</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 tabular-nums">
+                {initialDashboard.class_comparison.map((row) => (
+                  <tr key={row.course_id} className="hover:bg-slate-50/70">
+                    <td className="py-2.5 pr-3">
+                      <span className="font-mono font-semibold text-teal-800">
+                        {row.course_code}
+                      </span>{" "}
+                      <span className="font-medium text-slate-800">
+                        {row.course_title}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2.5 text-slate-700">
+                      {row.active_students}
+                    </td>
+                    <td className="px-2 py-2.5 text-slate-700">
+                      {row.published_assignments}
+                    </td>
+                    <td className="px-2 py-2.5 text-slate-700">
+                      {row.submitted_count} submitted · {row.graded_count} graded
+                      {row.pending_grading_count > 0 ? (
+                        <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                          {row.pending_grading_count} pending
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2.5">
+                      {row.acceptance_rate_pct != null ? (
+                        <span className="font-semibold text-emerald-800">
+                          {row.acceptance_rate_pct}% ({row.accepted_attempts}/
+                          {row.total_attempts})
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">No attempts yet</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pl-2 text-right">
+                      <Link
+                        href={`/teacher/classes/${row.course_id}`}
+                        className="font-semibold text-teal-700 hover:underline"
+                      >
+                        Inspect Students →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
