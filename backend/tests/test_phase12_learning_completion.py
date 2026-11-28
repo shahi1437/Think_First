@@ -306,9 +306,11 @@ class _FakeClassroomRepo:
         return [("loop_boundary_error", 2)]
 
     async def aggregate_skill_gaps_for_students(
-        self, _sids: list[UUID]
+        self, _sids: list[UUID], *, limit: int | None = 8
     ) -> list[tuple[str, int, int]]:
-        return [("loops", 1, 0), ("variables", 0, 1)]
+        self.last_skill_limit = limit
+        rows = [(f"dev_skill_{i}", 1, 0) for i in range(8)] + [("variables", 0, 1)]
+        return rows if limit is None else rows[:limit]
 
     async def count_hints_and_transfers_for_students(self, _sids: list[UUID]) -> tuple[int, int]:
         return (2, 1)
@@ -394,8 +396,9 @@ async def test_adaptive_problem_bank_and_history_filters_and_deadline_notificati
         )
         assert perf_ok.status_code == 200
         pdata = perf_ok.json()
+        assert cls_repo.last_skill_limit is None
         assert pdata["verified_skills"] == ["variables"]
-        assert pdata["developing_skills"] == ["loops"]
+        assert len(pdata["developing_skills"]) == 8
         assert pdata["hints_used_total"] == 3
         assert len(pdata["assignments"]) == 1
 
@@ -442,3 +445,55 @@ async def test_adaptive_problem_bank_and_history_filters_and_deadline_notificati
     assert health_model.execution_stats.failure_rate_pct == 30.0
     assert health_model.activity_overview is not None
     assert health_model.activity_overview.active_learners_7d == 9
+
+
+@pytest.mark.asyncio
+async def test_pr10_hardening_eager_loads_and_submit_only_solved() -> None:
+    """Verify eager-loaded assignment relations, submit-only solved, and full student skills."""
+    from app.repositories.classroom import ClassroomRepository
+    from app.repositories.problems import ProblemRepository
+
+    captured_stmts: list[Any] = []
+
+    class _CaptureSession:
+        async def execute(self, stmt: Any) -> Any:
+            captured_stmts.append(stmt)
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: []),
+                all=lambda: [],
+            )
+
+    cap_sess = _CaptureSession()
+    cls_repo = ClassroomRepository(cap_sess)  # type: ignore[arg-type]
+    await cls_repo.list_submissions_for_student(
+        student_id=uuid4(),
+        assignment_ids=[uuid4()],
+    )
+    assert len(captured_stmts) == 1
+    opt_paths = {str(opt.path) for opt in captured_stmts[0]._with_options if hasattr(opt, "path")}
+    assert any("attempts" in p for p in opt_paths)
+    assert any("grade" in p for p in opt_paths)
+    assert any("feedback_entries" in p for p in opt_paths)
+
+    captured_stmts.clear()
+    prob_repo = ProblemRepository(cap_sess)  # type: ignore[arg-type]
+    await prob_repo.get_student_problem_progress_map(uuid4())
+    assert len(captured_stmts) == 1
+    compiled_sql = str(captured_stmts[0].compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "submission_kind = 'submit'" in compiled_sql
+    assert "verdict = 'accepted'" in compiled_sql
+
+    # Verify aggregate_skill_gaps_for_students returns all skills when limit=None
+    class _NineSkillSession:
+        async def execute(self, _stmt: Any) -> Any:
+            rows = [(f"dev_{i}", "guided", 1) for i in range(8)] + [
+                ("verified_arrays", "independent", 1)
+            ]
+            return SimpleNamespace(all=lambda: rows)
+
+    skill_repo = ClassroomRepository(_NineSkillSession())  # type: ignore[arg-type]
+    all_rows = await skill_repo.aggregate_skill_gaps_for_students([uuid4()], limit=None)
+    assert len(all_rows) == 9
+    assert any(slug == "verified_arrays" and verif == 1 for slug, _u, verif in all_rows)
+    capped_rows = await skill_repo.aggregate_skill_gaps_for_students([uuid4()])
+    assert len(capped_rows) == 8

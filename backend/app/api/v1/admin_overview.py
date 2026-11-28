@@ -207,7 +207,10 @@ async def get_admin_operations_health(
                 verdict_rows = (
                     await db_sess.execute(
                         select(Submission.verdict, func.count(Submission.id))
-                        .where(Submission.created_at >= since_7d)
+                        .where(
+                            Submission.created_at >= since_7d,
+                            Submission.verdict != "pending",
+                        )
                         .group_by(Submission.verdict)
                     )
                 ).all()
@@ -222,7 +225,7 @@ async def get_admin_operations_health(
                         select(Submission.language_slug, func.count(Submission.id))
                         .where(
                             Submission.created_at >= since_7d,
-                            Submission.verdict != "accepted",
+                            Submission.verdict.notin_(["accepted", "pending"]),
                         )
                         .group_by(Submission.language_slug)
                     )

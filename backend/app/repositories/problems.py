@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -82,12 +82,17 @@ class ProblemRepository:
     async def get_student_problem_progress_map(
         self, student_id: UUID
     ) -> dict[UUID, tuple[int, bool]]:
-        """Return {problem_id: (attempts_count, has_accepted_submission)} from real submissions."""
+        """Return {problem_id: (attempts_count, has_accepted_submit)} from real submissions."""
         stmt = (
             select(
                 Submission.problem_id,
                 func.count(Submission.id),
-                func.bool_or(Submission.verdict == "accepted"),
+                func.bool_or(
+                    and_(
+                        Submission.submission_kind == "submit",
+                        Submission.verdict == "accepted",
+                    )
+                ),
             )
             .where(Submission.student_id == student_id)
             .group_by(Submission.problem_id)

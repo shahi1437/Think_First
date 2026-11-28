@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   createClassInvitation,
@@ -59,8 +59,10 @@ export function TeacherClassDetailClient({
     useState<TeacherStudentPerformanceView | null>(null);
   const [loadingStudentId, setLoadingStudentId] = useState<string | null>(null);
   const [studentPerfError, setStudentPerfError] = useState<string | null>(null);
+  const inspectSeqRef = useRef(0);
 
   async function handleInspectStudent(studentId: string) {
+    const seq = ++inspectSeqRef.current;
     setStudentPerfError(null);
     setLoadingStudentId(studentId);
     try {
@@ -69,15 +71,19 @@ export function TeacherClassDetailClient({
         detail.course.id,
         studentId,
       );
+      if (seq !== inspectSeqRef.current) return;
       setSelectedStudentPerf(perf);
     } catch (err) {
+      if (seq !== inspectSeqRef.current) return;
       setStudentPerfError(
         err instanceof Error
           ? err.message
           : "Could not load student performance breakdown.",
       );
     } finally {
-      setLoadingStudentId(null);
+      if (seq === inspectSeqRef.current) {
+        setLoadingStudentId(null);
+      }
     }
   }
 

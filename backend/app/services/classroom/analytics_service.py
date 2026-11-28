@@ -286,7 +286,7 @@ class TeacherAnalyticsService:
             MisconceptionCountItem(error_code=code, occurrences=cnt)
             for code, cnt in await self._repo.count_misconceptions_for_students([student_id])
         ]
-        skill_rows = await self._repo.aggregate_skill_gaps_for_students([student_id])
+        skill_rows = await self._repo.aggregate_skill_gaps_for_students([student_id], limit=None)
         verified_skills = sorted(slug for slug, _unobs, verif in skill_rows if verif > 0)
         developing_skills = sorted(
             slug for slug, unobs, verif in skill_rows if unobs > 0 and verif == 0
