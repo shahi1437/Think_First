@@ -457,3 +457,140 @@ async def test_worker_renew_endpoint_and_piston_provider_outcome_schema() -> Non
         )
     assert res.status_code == 200
     assert res.json()["renewed"] is True
+
+
+def test_embedded_worker_url_security_hardening_and_piston_https() -> None:
+    from app.integrations.piston.client import is_piston_configured
+    from app.services.execution.embedded_worker import resolve_embedded_upstream_settings
+
+    # 1. Malformed bracket URL must return None safely instead of raising ValueError
+    malformed = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        judge0_auth_mode="worker_queue",
+        judge0_base_url="https://[broken-host",
+        execution_embedded_judge0_base_url="https://[also-broken",
+        execution_worker_token=_STRONG_WORKER_TOKEN,
+    )
+    assert resolve_embedded_upstream_settings(malformed) is None
+
+    # 2. Staging HTTP upstream with Judge0 credential must be rejected (CWE-319)
+    staging_http_cred = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="development",
+        judge0_auth_mode="worker_queue",
+        judge0_base_url="http://staging-judge0.internal:2358",
+        judge0_auth_token="secret-staging-token",
+        execution_worker_token=_STRONG_WORKER_TOKEN,
+    )
+    assert resolve_embedded_upstream_settings(staging_http_cred) is None
+
+    # 3. RapidAPI key must NEVER leak to public ce.judge0.com (CWE-201)
+    ce_with_rapid_key = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        judge0_auth_mode="worker_queue",
+        judge0_base_url="http://127.0.0.1:2359",
+        judge0_auth_token="local-secret-token",
+        judge0_rapidapi_key="rapid-secret-should-not-leak",
+        execution_embedded_judge0_base_url="https://ce.judge0.com",
+        execution_worker_token=_STRONG_WORKER_TOKEN,
+    )
+    resolved_ce = resolve_embedded_upstream_settings(ce_with_rapid_key)
+    assert resolved_ce is not None
+    assert resolved_ce.judge0_base_url == "https://ce.judge0.com"
+    assert resolved_ce.judge0_auth_mode == "auth_token"
+    assert resolved_ce.judge0_rapidapi_key == ""
+    assert resolved_ce.judge0_auth_token == ""
+
+    # 4. Production Piston fallback rejects plaintext http:// URL (CWE-319)
+    prod_piston_http = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        execution_fallback_enabled=True,
+        piston_enabled=True,
+        piston_isolated_host_verified=True,
+        piston_base_url="http://piston.example.com:2000",
+    )
+    assert is_piston_configured(prod_piston_http) is False
+
+    prod_piston_https = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        execution_fallback_enabled=True,
+        piston_enabled=True,
+        piston_isolated_host_verified=True,
+        piston_base_url="https://piston.example.com",
+    )
+    assert is_piston_configured(prod_piston_https) is True
+
+
+@pytest.mark.asyncio
+async def test_embedded_worker_requeues_transient_error_and_outbound_piston_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.execution.embedded_worker import EmbeddedExecutionWorker
+    from worker.execution_worker import OutboundExecutionWorker
+
+    # 1. Transient sandbox outage with remaining attempts releases job for retry
+    failing_executor = MagicMock()
+    failing_executor.execute_test_case = AsyncMock(
+        side_effect=AppError(
+            code="EXECUTION_SERVICE_UNAVAILABLE",
+            message="Upstream 503",
+            status_code=503,
+        )
+    )
+    worker = EmbeddedExecutionWorker(
+        settings=_worker_settings(),
+        executor=failing_executor,
+    )
+    release_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(worker, "_release_job", release_mock)
+
+    fake_job = SimpleNamespace(
+        id=uuid4(),
+        claim_token=uuid4(),
+        language_slug="python",
+        judge0_language_id=71,
+        attempt_count=1,
+        max_attempts=2,
+        payload_json={
+            "source_code": "print(1)",
+            "test_cases": [{"ordinal": 1, "stdin": "", "expected_output": "1"}],
+        },
+    )
+    await worker.execute_claimed_job(fake_job)  # type: ignore[arg-type]
+    release_mock.assert_awaited_once()
+
+    # 2. OutboundExecutionWorker allows startup when Piston fallback is healthy
+    outbound = OutboundExecutionWorker(
+        api_base_url="http://127.0.0.1:8000",
+        worker_id="win-test",
+        worker_token=_STRONG_WORKER_TOKEN,
+        judge0_base_url="http://127.0.0.1:2359",
+        judge0_auth_token="",
+        piston_base_url="http://127.0.0.1:2000",
+        piston_fallback_enabled=True,
+    )
+    monkeypatch.setattr(
+        outbound, "check_local_judge0", AsyncMock(side_effect=RuntimeError("Judge0 down"))
+    )
+    monkeypatch.setattr(
+        outbound, "check_local_piston", AsyncMock(return_value="piston-fallback (5 runtimes)")
+    )
+    ver = await outbound.check_local_providers()
+    assert ver == "piston-fallback (5 runtimes)"
+
+
+@pytest.mark.asyncio
+async def test_ml_consent_endpoints_require_auth_and_toggle_state() -> None:
+    app = create_app(Settings(app_env="test", rate_limit_enabled=False))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r_unauth = await client.get("/api/v1/users/me/ml-consent")
+        assert r_unauth.status_code == 401
+        r_put_unauth = await client.put(
+            "/api/v1/users/me/ml-consent",
+            json={"consent_granted": True},
+        )
+        assert r_put_unauth.status_code == 401

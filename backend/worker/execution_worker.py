@@ -206,10 +206,43 @@ class OutboundExecutionWorker:
         except Exception as exc:
             logger.warning("worker_offline_notify_failed", error_type=type(exc).__name__)
 
+    async def check_local_piston(self) -> str:
+        if not is_piston_configured(self._judge0_settings):
+            raise RuntimeError("Local Piston fallback is not enabled.")
+        piston_url = self._judge0_settings.piston_base_url.rstrip("/")
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(f"{piston_url}/api/v2/runtimes")
+            resp.raise_for_status()
+            runtimes = resp.json()
+            if not isinstance(runtimes, list) or not runtimes:
+                raise RuntimeError("Local Piston returned no installed runtimes.")
+            version = f"piston-fallback ({len(runtimes)} runtimes)"
+            self._judge0_version = version
+            return version
+
+    async def check_local_providers(self) -> str:
+        """Check local Judge0, falling back to local Piston only when fallback is enabled."""
+        try:
+            return await self.check_local_judge0()
+        except Exception as judge0_exc:
+            if not is_piston_configured(self._judge0_settings):
+                raise
+            logger.warning(
+                "local_judge0_unavailable_checking_piston_fallback",
+                error_type=type(judge0_exc).__name__,
+            )
+            try:
+                return await self.check_local_piston()
+            except Exception as piston_exc:
+                raise RuntimeError(
+                    f"Neither local Judge0 ({type(judge0_exc).__name__}) nor Piston fallback "
+                    f"({type(piston_exc).__name__}) is healthy."
+                ) from piston_exc
+
     async def self_check(self) -> bool:
-        """Verify local Judge0, production API readiness, and worker queue auth."""
-        version = await self.check_local_judge0()
-        logger.info("local_judge0_ready", version=version, url=self._judge0_base)
+        """Verify local Judge0 (or Piston fallback), API readiness, and worker queue auth."""
+        version = await self.check_local_providers()
+        logger.info("local_execution_provider_ready", version=version, url=self._judge0_base)
 
         async with httpx.AsyncClient(timeout=45.0) as client:
             ready_resp = await client.get(f"{self._api_base}/health/ready")
@@ -400,7 +433,7 @@ class OutboundExecutionWorker:
         if self._stop_signal_path and self._stop_signal_path.exists():
             self._stop_signal_path.unlink(missing_ok=True)
 
-        await self.check_local_judge0()
+        await self.check_local_providers()
         current_idle = self._idle_sleep
         error_backoff = 3.0
         cycles = 0

@@ -1,21 +1,23 @@
 {
   "dataset_version": "python_errors_v1",
-  "total_families": 42,
-  "validated_samples": 309,
+  "data_origin": "controlled_synthetic",
+  "license": "MIT-ThinkFirst-Internal",
+  "total_families": 58,
+  "validated_samples": 399,
   "dropped_samples": 1,
   "class_distribution": {
-    "condition_error": 34,
-    "function_return_error": 49,
-    "indexing_error": 32,
-    "initialization_error": 28,
-    "logic_error": 41,
-    "loop_boundary_error": 39,
-    "runtime_error": 43,
-    "syntax_error": 43
+    "condition_error": 65,
+    "function_return_error": 62,
+    "indexing_error": 39,
+    "initialization_error": 37,
+    "logic_error": 50,
+    "loop_boundary_error": 49,
+    "runtime_error": 48,
+    "syntax_error": 49
   },
   "dropped_details": [
     {
-      "family_id": "fam_41_count_below_avg",
+      "family_id": "fam_51_count_consonants",
       "mutation": "skip_last_bound",
       "reason": "verdict=accepted, passed=3/3"
     }

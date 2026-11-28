@@ -1,0 +1,18 @@
+{
+  "dataset_version": "public_curated_quixbugs_v1",
+  "source_repository": "https://github.com/jkoppel/QuixBugs",
+  "spdx_license": "MIT",
+  "data_origin": "public_curated",
+  "validated_samples": 28,
+  "skipped_samples": 0,
+  "class_distribution": {
+    "condition_error": 5,
+    "function_return_error": 4,
+    "indexing_error": 3,
+    "initialization_error": 2,
+    "logic_error": 8,
+    "loop_boundary_error": 3,
+    "runtime_error": 3
+  },
+  "skipped_details": []
+}

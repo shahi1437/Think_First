@@ -19,7 +19,7 @@ import socket
 import threading
 import time
 import uuid
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 from uuid import UUID
 
 import httpx
@@ -50,8 +50,28 @@ _REGISTRY_LOCK = threading.Lock()
 _ACTIVE_WORKER: EmbeddedExecutionWorker | None = None
 
 
+_TRANSIENT_ENGINE_ERROR_CODES = frozenset(
+    {
+        "EXECUTION_SERVICE_UNAVAILABLE",
+        "SANDBOX_EXECUTION_ERROR",
+        "JUDGE0_UNAVAILABLE",
+        "PISTON_UNAVAILABLE",
+    }
+)
+
+
+def _safe_urlparse(url: str) -> ParseResult | None:
+    try:
+        return urlparse(url)
+    except ValueError:
+        return None
+
+
 def _is_loopback_url(url: str) -> bool:
-    host = (urlparse(url).hostname or "").strip().lower()
+    parsed = _safe_urlparse(url)
+    if parsed is None:
+        return False
+    host = (parsed.hostname or "").strip().lower()
     return host in _LOOPBACK_HOSTS
 
 
@@ -64,17 +84,49 @@ def resolve_embedded_upstream_settings(settings: Settings) -> Settings | None:
     embedded_url = (settings.execution_embedded_judge0_base_url or "").strip()
 
     chosen_url = ""
-    if primary_url and not _is_loopback_url(primary_url):
-        chosen_url = primary_url
-    elif embedded_url:
+    from_primary = False
+    if primary_url:
+        parsed_primary = _safe_urlparse(primary_url)
+        if parsed_primary is None:
+            logger.warning("embedded_worker_invalid_primary_url")
+        elif not _is_loopback_url(primary_url):
+            chosen_url = primary_url
+            from_primary = True
+    if not chosen_url and embedded_url:
         chosen_url = embedded_url
 
     if not chosen_url:
         return None
 
-    parsed = urlparse(chosen_url)
-    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+    parsed = _safe_urlparse(chosen_url)
+    if parsed is None or parsed.scheme not in ("https", "http") or not parsed.netloc:
         logger.warning("embedded_worker_invalid_upstream_url")
+        return None
+
+    chosen_host = (parsed.hostname or "").strip().lower()
+    is_rapidapi_host = chosen_host == "rapidapi.com" or chosen_host.endswith(".rapidapi.com")
+    is_public_ce_host = chosen_host == "ce.judge0.com"
+
+    # Never forward RapidAPI keys to non-RapidAPI hosts, and never forward local
+    # self-hosted auth tokens to the public ce.judge0.com fallback endpoint.
+    effective_rapidapi_key = (
+        (settings.judge0_rapidapi_key or "").strip() if is_rapidapi_host else ""
+    )
+    effective_rapidapi_host = (
+        (settings.judge0_rapidapi_host or "").strip() if is_rapidapi_host else ""
+    )
+    effective_auth_token = (
+        (settings.judge0_auth_token or "").strip()
+        if (not is_rapidapi_host and (from_primary or not is_public_ce_host))
+        else ""
+    )
+
+    has_credential = bool(effective_auth_token or effective_rapidapi_key)
+    if parsed.scheme != "https" and has_credential and not _is_loopback_url(chosen_url):
+        logger.warning(
+            "embedded_worker_blocked_plaintext_credential_url",
+            scheme=parsed.scheme,
+        )
         return None
 
     if settings.app_env == "production" and (
@@ -86,19 +138,16 @@ def resolve_embedded_upstream_settings(settings: Settings) -> Settings | None:
         )
         return None
 
-    use_rapidapi = bool((settings.judge0_rapidapi_key or "").strip()) or (
-        "rapidapi.com" in chosen_url.lower()
-    )
-    upstream_mode = "rapidapi" if use_rapidapi else "auth_token"
+    upstream_mode = "rapidapi" if is_rapidapi_host else "auth_token"
 
     return Settings(
         _env_file=None,
         app_env=settings.app_env,
         judge0_base_url=chosen_url,
         judge0_auth_mode=upstream_mode,
-        judge0_auth_token=settings.judge0_auth_token,
-        judge0_rapidapi_key=settings.judge0_rapidapi_key,
-        judge0_rapidapi_host=settings.judge0_rapidapi_host,
+        judge0_auth_token=effective_auth_token,
+        judge0_rapidapi_key=effective_rapidapi_key,
+        judge0_rapidapi_host=effective_rapidapi_host,
         judge0_http_timeout_seconds=settings.judge0_http_timeout_seconds,
         judge0_poll_interval_seconds=settings.judge0_poll_interval_seconds,
         judge0_poll_timeout_seconds=settings.judge0_poll_timeout_seconds,
@@ -462,6 +511,26 @@ class EmbeddedExecutionWorker:
             with contextlib.suppress(asyncio.CancelledError):
                 await keeper_task
 
+        if (
+            engine_error
+            and (error_code or "") in _TRANSIENT_ENGINE_ERROR_CODES
+            and job.attempt_count < job.max_attempts
+        ):
+            logger.warning(
+                "embedded_worker_requeuing_transient_error",
+                worker_id=self._worker_id,
+                job_id=str(job_id),
+                attempt=job.attempt_count,
+                max_attempts=job.max_attempts,
+                error_code=error_code,
+            )
+            await self._release_job(
+                job_id=job_id,
+                claim_token=claim_token,
+                reason=f"transient_{(error_code or 'error').lower()}",
+            )
+            return
+
         try:
             async for session in self._manager().session():
                 repo = ExecutionQueueRepository(session)
@@ -533,24 +602,29 @@ class EmbeddedExecutionWorker:
 
     async def _run_loop(self) -> None:
         error_backoff = 3.0
+        registered = False
         try:
-            ok, version = await self.probe_upstream()
-            if ok:
-                await self._send_heartbeat(active_job_count=0)
-                logger.info(
-                    "embedded_worker_started",
-                    worker_id=self._worker_id,
-                    judge0_version=version,
-                    concurrency=self._concurrency,
-                )
-            else:
-                logger.warning(
-                    "embedded_worker_upstream_unavailable_on_boot",
-                    worker_id=self._worker_id,
-                )
-
             while not self._stop_event.is_set():
                 try:
+                    if not registered:
+                        ok, version = await self.probe_upstream()
+                        if not ok:
+                            logger.warning(
+                                "embedded_worker_upstream_unavailable_on_boot",
+                                worker_id=self._worker_id,
+                            )
+                            await self._wait_for_wakeup_or_stop(min(30.0, 10.0))
+                            continue
+                        await self._send_heartbeat(active_job_count=0)
+                        registered = True
+                        error_backoff = 3.0
+                        logger.info(
+                            "embedded_worker_started",
+                            worker_id=self._worker_id,
+                            judge0_version=version,
+                            concurrency=self._concurrency,
+                        )
+
                     processed = await self.process_one_cycle()
                     error_backoff = 3.0
                     if processed:
@@ -563,6 +637,7 @@ class EmbeddedExecutionWorker:
                     logger.warning(
                         "embedded_worker_cycle_error",
                         worker_id=self._worker_id,
+                        registered=registered,
                         error_type=type(exc).__name__,
                         backoff_seconds=error_backoff,
                     )

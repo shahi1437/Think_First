@@ -22,9 +22,15 @@ services:
       - key: CORS_ORIGINS
         sync: false
       # Production code execution:
-      # Supported modes: `worker_queue` (free outbound local Windows Judge0 runner), `auth_token` (VPS), `rapidapi`, or `disabled`.
+      # Supported modes: `worker_queue` (bounded lifespan consumer -> isolated HTTPS Judge0 CE + optional local Windows runner), `auth_token` (VPS), `rapidapi`, or `disabled`.
       - key: JUDGE0_AUTH_MODE
         sync: false
+      - key: EXECUTION_EMBEDDED_WORKER_ENABLED
+        value: "true"
+      - key: EXECUTION_EMBEDDED_JUDGE0_BASE_URL
+        value: https://ce.judge0.com
+      - key: EXECUTION_EMBEDDED_WORKER_CONCURRENCY
+        value: "1"
       - key: EXECUTION_WORKER_TOKEN
         sync: false
       - key: EXECUTION_ALLOWED_EMAILS

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -803,7 +803,7 @@ def _build_families() -> list[ProgramFamily]:
             "id": "fam_41_count_below_avg",
             "topic": "lists",
             "ref": "def below_avg(nums):\n    avg = sum(nums) / len(nums)\n    c = 0\n    for x in nums:\n        if x < avg:\n            c += 1\n    return c\nprint(below_avg([int(v) for v in input().split()]))\n",
-            "tests": (("2 4 6 8", "2"), ("10 10 10", "0"), ("1 9 2 8", "2")),
+            "tests": (("2 4 6 8", "2"), ("10 10 10", "0"), ("1 9 2 8", "2"), ("8 6 4 2", "2")),
             "muts": [
                 ("le_instead_lt_cond", "condition_error", "def below_avg(nums):\n    avg = sum(nums) / len(nums)\n    c = 0\n    for x in nums:\n        if x <= avg:\n            c += 1\n    return c\nprint(below_avg([int(v) for v in input().split()]))\n"),
                 ("init_c_one", "initialization_error", "def below_avg(nums):\n    avg = sum(nums) / len(nums)\n    c = 1\n    for x in nums:\n        if x < avg:\n            c += 1\n    return c\nprint(below_avg([int(v) for v in input().split()]))\n"),
@@ -830,6 +830,240 @@ def _build_families() -> list[ProgramFamily]:
                 ("runtime_err", "runtime_error", "def sum_weighted(nums):\n    return sum(i * 'x' + 1 for i in range(len(nums)))\nprint(sum_weighted([int(v) for v in input().split()]))\n"),
             ],
         },
+        # 43. Letter Grade Classifier (elif ordering & >= boundary conditions)
+        {
+            "id": "fam_43_letter_grade",
+            "topic": "conditionals",
+            "ref": "def letter_grade(score):\n    if score >= 90:\n        return 'A'\n    elif score >= 80:\n        return 'B'\n    elif score >= 70:\n        return 'C'\n    elif score >= 60:\n        return 'D'\n    return 'F'\nprint(letter_grade(int(input())))\n",
+            "tests": (("90", "A"), ("80", "B"), ("75", "C"), ("60", "D"), ("59", "F")),
+            "muts": [
+                ("strict_gt_90_cond", "condition_error", "def letter_grade(score):\n    if score > 90:\n        return 'A'\n    elif score >= 80:\n        return 'B'\n    elif score >= 70:\n        return 'C'\n    elif score >= 60:\n        return 'D'\n    return 'F'\nprint(letter_grade(int(input())))\n"),
+                ("reversed_elif_order_cond", "condition_error", "def letter_grade(score):\n    if score >= 60:\n        return 'D'\n    elif score >= 70:\n        return 'C'\n    elif score >= 80:\n        return 'B'\n    elif score >= 90:\n        return 'A'\n    return 'F'\nprint(letter_grade(int(input())))\n"),
+                ("missing_return_f", "function_return_error", "def letter_grade(score):\n    if score >= 90:\n        return 'A'\n    elif score >= 80:\n        return 'B'\n    elif score >= 70:\n        return 'C'\n    elif score >= 60:\n        return 'D'\nprint(letter_grade(int(input())))\n"),
+                ("wrong_label_logic", "logic_error", "def letter_grade(score):\n    if score >= 90:\n        return 'B'\n    elif score >= 80:\n        return 'A'\n    elif score >= 70:\n        return 'C'\n    elif score >= 60:\n        return 'D'\n    return 'F'\nprint(letter_grade(int(input())))\n"),
+                ("syntax_elif_colon", "syntax_error", "def letter_grade(score):\n    if score >= 90:\n        return 'A'\n    elif score >= 80\n        return 'B'\n    return 'F'\nprint(letter_grade(int(input())))\n"),
+                ("runtime_str_cmp", "runtime_error", "def letter_grade(score):\n    if score >= '90':\n        return 'A'\n    return 'F'\nprint(letter_grade(int(input())))\n"),
+            ],
+        },
+        # 44. Leap Year Check (compound boolean and/or)
+        {
+            "id": "fam_44_leap_year",
+            "topic": "conditionals",
+            "ref": "def is_leap(year):\n    if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0:\n        return True\n    return False\nprint(is_leap(int(input())))\n",
+            "tests": (("2000", "True"), ("1900", "False"), ("2024", "True"), ("2023", "False")),
+            "muts": [
+                ("or_instead_of_and_cond", "condition_error", "def is_leap(year):\n    if (year % 4 == 0 or year % 100 != 0) or year % 400 == 0:\n        return True\n    return False\nprint(is_leap(int(input())))\n"),
+                ("and_instead_of_or_cond", "condition_error", "def is_leap(year):\n    if (year % 4 == 0 and year % 100 != 0) and year % 400 == 0:\n        return True\n    return False\nprint(is_leap(int(input())))\n"),
+                ("missing_century_cond", "condition_error", "def is_leap(year):\n    if year % 4 == 0:\n        return True\n    return False\nprint(is_leap(int(input())))\n"),
+                ("missing_return_false", "function_return_error", "def is_leap(year):\n    if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0:\n        return True\nprint(is_leap(int(input())))\n"),
+                ("syntax_assign_cond", "syntax_error", "def is_leap(year):\n    if year % 4 = 0:\n        return True\n    return False\nprint(is_leap(int(input())))\n"),
+                ("runtime_mod_zero", "runtime_error", "def is_leap(year):\n    return year % 0 == 0\nprint(is_leap(int(input())))\n"),
+            ],
+        },
+        # 45. Valid Triangle Inequality (compound and/or + strict > vs >=)
+        {
+            "id": "fam_45_valid_triangle",
+            "topic": "conditionals",
+            "ref": "def is_triangle(a, b, c):\n    if a + b > c and a + c > b and b + c > a:\n        return True\n    return False\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n",
+            "tests": (("3 4 5", "True"), ("1 2 3", "False"), ("5 5 5", "True"), ("1 10 2", "False")),
+            "muts": [
+                ("gte_instead_of_gt_cond", "condition_error", "def is_triangle(a, b, c):\n    if a + b >= c and a + c >= b and b + c >= a:\n        return True\n    return False\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n"),
+                ("or_instead_of_and_cond", "condition_error", "def is_triangle(a, b, c):\n    if a + b > c or a + c > b or b + c > a:\n        return True\n    return False\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n"),
+                ("inverted_lt_cond", "condition_error", "def is_triangle(a, b, c):\n    if a + b < c and a + c < b and b + c < a:\n        return True\n    return False\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n"),
+                ("missing_return", "function_return_error", "def is_triangle(a, b, c):\n    if a + b > c and a + c > b and b + c > a:\n        return True\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n"),
+                ("sub_instead_add_logic", "logic_error", "def is_triangle(a, b, c):\n    if a - b > c and a - c > b and b - c > a:\n        return True\n    return False\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n"),
+                ("syntax_err", "syntax_error", "def is_triangle(a, b, c):\n    if a + b > c\n        return True\n    return False\na, b, c = map(int, input().split())\nprint(is_triangle(a, b, c))\n"),
+            ],
+        },
+        # 46. Count Values Inside Closed Interval [lo, hi]
+        {
+            "id": "fam_46_count_in_interval",
+            "topic": "conditionals",
+            "ref": "def count_in_range(nums, lo, hi):\n    count = 0\n    for x in nums:\n        if lo <= x and x <= hi:\n            count += 1\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n",
+            "tests": (("10 20\n5 10 15 20 25", "3"), ("0 5\n-1 0 3 5 6", "3"), ("1 3\n1 2 3", "3")),
+            "muts": [
+                ("strict_bounds_cond", "condition_error", "def count_in_range(nums, lo, hi):\n    count = 0\n    for x in nums:\n        if lo < x and x < hi:\n            count += 1\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n"),
+                ("or_instead_and_cond", "condition_error", "def count_in_range(nums, lo, hi):\n    count = 0\n    for x in nums:\n        if lo <= x or x <= hi:\n            count += 1\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n"),
+                ("init_count_one", "initialization_error", "def count_in_range(nums, lo, hi):\n    count = 1\n    for x in nums:\n        if lo <= x and x <= hi:\n            count += 1\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n"),
+                ("skip_last_loop", "loop_boundary_error", "def count_in_range(nums, lo, hi):\n    count = 0\n    for i in range(len(nums) - 1):\n        if lo <= nums[i] and nums[i] <= hi:\n            count += 1\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n"),
+                ("oob_idx", "indexing_error", "def count_in_range(nums, lo, hi):\n    count = 0\n    for i in range(len(nums) + 1):\n        if lo <= nums[i] and nums[i] <= hi:\n            count += 1\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n"),
+                ("sums_val_logic", "logic_error", "def count_in_range(nums, lo, hi):\n    count = 0\n    for x in nums:\n        if lo <= x and x <= hi:\n            count += x\n    return count\nlo, hi = map(int, input().split())\nnums = [int(v) for v in input().split()]\nprint(count_in_range(nums, lo, hi))\n"),
+            ],
+        },
+        # 47. Count Multiples of 3 or 5 (boolean or vs and)
+        {
+            "id": "fam_47_multiples_3_or_5",
+            "topic": "conditionals",
+            "ref": "def sum_mult_3_5(n):\n    total = 0\n    for i in range(1, n + 1):\n        if i % 3 == 0 or i % 5 == 0:\n            total += i\n    return total\nprint(sum_mult_3_5(int(input())))\n",
+            "tests": (("10", "33"), ("15", "60"), ("6", "14")),
+            "muts": [
+                ("and_instead_or_cond", "condition_error", "def sum_mult_3_5(n):\n    total = 0\n    for i in range(1, n + 1):\n        if i % 3 == 0 and i % 5 == 0:\n            total += i\n    return total\nprint(sum_mult_3_5(int(input())))\n"),
+                ("neq_zero_cond", "condition_error", "def sum_mult_3_5(n):\n    total = 0\n    for i in range(1, n + 1):\n        if i % 3 != 0 or i % 5 != 0:\n            total += i\n    return total\nprint(sum_mult_3_5(int(input())))\n"),
+                ("exclusive_range_bound", "loop_boundary_error", "def sum_mult_3_5(n):\n    total = 0\n    for i in range(1, n):\n        if i % 3 == 0 or i % 5 == 0:\n            total += i\n    return total\nprint(sum_mult_3_5(int(input())))\n"),
+                ("reset_total_in_loop", "initialization_error", "def sum_mult_3_5(n):\n    for i in range(1, n + 1):\n        total = 0\n        if i % 3 == 0 or i % 5 == 0:\n            total += i\n    return total\nprint(sum_mult_3_5(int(input())))\n"),
+                ("counts_instead_sum_logic", "logic_error", "def sum_mult_3_5(n):\n    total = 0\n    for i in range(1, n + 1):\n        if i % 3 == 0 or i % 5 == 0:\n            total += 1\n    return total\nprint(sum_mult_3_5(int(input())))\n"),
+                ("early_ret", "function_return_error", "def sum_mult_3_5(n):\n    total = 0\n    for i in range(1, n + 1):\n        if i % 3 == 0 or i % 5 == 0:\n            total += i\n            return total\n    return total\nprint(sum_mult_3_5(int(input())))\n"),
+            ],
+        },
+        # 48. Temperature State Classifier (elif boundaries)
+        {
+            "id": "fam_48_temp_state",
+            "topic": "conditionals",
+            "ref": "def water_state(temp):\n    if temp <= 0:\n        return 'solid'\n    elif temp < 100:\n        return 'liquid'\n    return 'gas'\nprint(water_state(int(input())))\n",
+            "tests": (("0", "solid"), ("-5", "solid"), ("50", "liquid"), ("100", "gas"), ("120", "gas")),
+            "muts": [
+                ("strict_lt_zero_cond", "condition_error", "def water_state(temp):\n    if temp < 0:\n        return 'solid'\n    elif temp < 100:\n        return 'liquid'\n    return 'gas'\nprint(water_state(int(input())))\n"),
+                ("lte_100_cond", "condition_error", "def water_state(temp):\n    if temp <= 0:\n        return 'solid'\n    elif temp <= 100:\n        return 'liquid'\n    return 'gas'\nprint(water_state(int(input())))\n"),
+                ("missing_default_ret", "function_return_error", "def water_state(temp):\n    if temp <= 0:\n        return 'solid'\n    elif temp < 100:\n        return 'liquid'\nprint(water_state(int(input())))\n"),
+                ("swapped_output_logic", "logic_error", "def water_state(temp):\n    if temp <= 0:\n        return 'gas'\n    elif temp < 100:\n        return 'liquid'\n    return 'solid'\nprint(water_state(int(input())))\n"),
+                ("syntax_err", "syntax_error", "def water_state(temp):\n    if temp <= 0\n        return 'solid'\n    return 'liquid'\nprint(water_state(int(input())))\n"),
+            ],
+        },
+        # 49. Strictly Increasing List Check
+        {
+            "id": "fam_49_strictly_increasing",
+            "topic": "lists",
+            "ref": "def is_strictly_inc(nums):\n    for i in range(len(nums) - 1):\n        if nums[i] >= nums[i + 1]:\n            return False\n    return True\nprint(is_strictly_inc([int(v) for v in input().split()]))\n",
+            "tests": (("1 2 3 4", "True"), ("1 2 2 4", "False"), ("5 3 1", "False"), ("1 2 5 4", "False")),
+            "muts": [
+                ("strict_gt_allows_eq_cond", "condition_error", "def is_strictly_inc(nums):\n    for i in range(len(nums) - 1):\n        if nums[i] > nums[i + 1]:\n            return False\n    return True\nprint(is_strictly_inc([int(v) for v in input().split()]))\n"),
+                ("inverted_lt_cond", "condition_error", "def is_strictly_inc(nums):\n    for i in range(len(nums) - 1):\n        if nums[i] <= nums[i + 1]:\n            return False\n    return True\nprint(is_strictly_inc([int(v) for v in input().split()]))\n"),
+                ("oob_range_len", "indexing_error", "def is_strictly_inc(nums):\n    for i in range(len(nums)):\n        if nums[i] >= nums[i + 1]:\n            return False\n    return True\nprint(is_strictly_inc([int(v) for v in input().split()]))\n"),
+                ("range_minus_two_bound", "loop_boundary_error", "def is_strictly_inc(nums):\n    for i in range(len(nums) - 2):\n        if nums[i] >= nums[i + 1]:\n            return False\n    return True\nprint(is_strictly_inc([int(v) for v in input().split()]))\n"),
+                ("both_branches_return", "function_return_error", "def is_strictly_inc(nums):\n    for i in range(len(nums) - 1):\n        if nums[i] >= nums[i + 1]:\n            return False\n        else:\n            return True\n    return True\nprint(is_strictly_inc([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 50. Count Passing Scores (>= 60 and <= 100)
+        {
+            "id": "fam_50_passing_scores",
+            "topic": "conditionals",
+            "ref": "def count_passing(scores):\n    passed = 0\n    for s in scores:\n        if s >= 60 and s <= 100:\n            passed += 1\n    return passed\nprint(count_passing([int(v) for v in input().split()]))\n",
+            "tests": (("59 60 85 100 105", "3"), ("60 70 80", "3"), ("40 55 110", "0")),
+            "muts": [
+                ("gt_60_cond", "condition_error", "def count_passing(scores):\n    passed = 0\n    for s in scores:\n        if s > 60 and s <= 100:\n            passed += 1\n    return passed\nprint(count_passing([int(v) for v in input().split()]))\n"),
+                ("or_instead_and_cond", "condition_error", "def count_passing(scores):\n    passed = 0\n    for s in scores:\n        if s >= 60 or s <= 100:\n            passed += 1\n    return passed\nprint(count_passing([int(v) for v in input().split()]))\n"),
+                ("init_passed_one", "initialization_error", "def count_passing(scores):\n    passed = 1\n    for s in scores:\n        if s >= 60 and s <= 100:\n            passed += 1\n    return passed\nprint(count_passing([int(v) for v in input().split()]))\n"),
+                ("skip_last_bound", "loop_boundary_error", "def count_passing(scores):\n    passed = 0\n    for i in range(len(scores) - 1):\n        if scores[i] >= 60 and scores[i] <= 100:\n            passed += 1\n    return passed\nprint(count_passing([int(v) for v in input().split()]))\n"),
+                ("oob_idx", "indexing_error", "def count_passing(scores):\n    passed = 0\n    for i in range(len(scores) + 1):\n        if scores[i] >= 60 and scores[i] <= 100:\n            passed += 1\n    return passed\nprint(count_passing([int(v) for v in input().split()]))\n"),
+                ("no_return", "function_return_error", "def count_passing(scores):\n    passed = 0\n    for s in scores:\n        if s >= 60 and s <= 100:\n            passed += 1\nprint(count_passing([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 51. Count Consonants in Alphabetic Word
+        {
+            "id": "fam_51_count_consonants",
+            "topic": "strings",
+            "ref": "def count_consonants(word):\n    total = 0\n    for ch in word.lower():\n        if ch.isalpha() and ch not in 'aeiou':\n            total += 1\n    return total\nprint(count_consonants(input().strip()))\n",
+            "tests": (("Hello", "3"), ("AEIOU", "0"), ("Python3", "5")),
+            "muts": [
+                ("in_vowels_cond", "condition_error", "def count_consonants(word):\n    total = 0\n    for ch in word.lower():\n        if ch.isalpha() and ch in 'aeiou':\n            total += 1\n    return total\nprint(count_consonants(input().strip()))\n"),
+                ("no_lower_cond", "condition_error", "def count_consonants(word):\n    total = 0\n    for ch in word:\n        if ch.isalpha() and ch not in 'aeiou':\n            total += 1\n    return total\nprint(count_consonants(input().strip()))\n"),
+                ("or_instead_and_cond", "condition_error", "def count_consonants(word):\n    total = 0\n    for ch in word.lower():\n        if ch.isalpha() or ch not in 'aeiou':\n            total += 1\n    return total\nprint(count_consonants(input().strip()))\n"),
+                ("skip_last_bound", "loop_boundary_error", "def count_consonants(word):\n    total = 0\n    for i in range(len(word) - 1):\n        ch = word[i].lower()\n        if ch.isalpha() and ch not in 'aeiou':\n            total += 1\n    return total\nprint(count_consonants(input().strip()))\n"),
+                ("init_total_one", "initialization_error", "def count_consonants(word):\n    total = 1\n    for ch in word.lower():\n        if ch.isalpha() and ch not in 'aeiou':\n            total += 1\n    return total\nprint(count_consonants(input().strip()))\n"),
+                ("runtime_bad_method", "runtime_error", "def count_consonants(word):\n    return sum(1 for c in word.toLower() if c not in 'aeiou')\nprint(count_consonants(input().strip()))\n"),
+            ],
+        },
+        # 52. Count Negative Numbers Strictly Below Zero
+        {
+            "id": "fam_52_count_negatives",
+            "topic": "conditionals",
+            "ref": "def count_neg(nums):\n    cnt = 0\n    for x in nums:\n        if x < 0:\n            cnt += 1\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n",
+            "tests": (("-3 0 4 -1", "2"), ("0 0 5", "0"), ("-1 -2 -3", "3")),
+            "muts": [
+                ("lte_zero_cond", "condition_error", "def count_neg(nums):\n    cnt = 0\n    for x in nums:\n        if x <= 0:\n            cnt += 1\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n"),
+                ("gt_zero_cond", "condition_error", "def count_neg(nums):\n    cnt = 0\n    for x in nums:\n        if x > 0:\n            cnt += 1\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n"),
+                ("reset_cnt_in_loop", "initialization_error", "def count_neg(nums):\n    for x in nums:\n        cnt = 0\n        if x < 0:\n            cnt += 1\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n"),
+                ("skip_last_bound", "loop_boundary_error", "def count_neg(nums):\n    cnt = 0\n    for i in range(len(nums) - 1):\n        if nums[i] < 0:\n            cnt += 1\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n"),
+                ("sums_val_logic", "logic_error", "def count_neg(nums):\n    cnt = 0\n    for x in nums:\n        if x < 0:\n            cnt += x\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n"),
+                ("oob_idx", "indexing_error", "def count_neg(nums):\n    cnt = 0\n    for i in range(len(nums) + 1):\n        if nums[i] < 0:\n            cnt += 1\n    return cnt\nprint(count_neg([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 53. Shipping Discount Tier (elif ordering + >= threshold)
+        {
+            "id": "fam_53_discount_tier",
+            "topic": "conditionals",
+            "ref": "def discount_pct(amount):\n    if amount >= 200:\n        return 20\n    elif amount >= 100:\n        return 10\n    elif amount >= 50:\n        return 5\n    return 0\nprint(discount_pct(int(input())))\n",
+            "tests": (("250", "20"), ("200", "20"), ("100", "10"), ("50", "5"), ("30", "0")),
+            "muts": [
+                ("strict_gt_cond", "condition_error", "def discount_pct(amount):\n    if amount > 200:\n        return 20\n    elif amount > 100:\n        return 10\n    elif amount > 50:\n        return 5\n    return 0\nprint(discount_pct(int(input())))\n"),
+                ("wrong_order_elif_cond", "condition_error", "def discount_pct(amount):\n    if amount >= 50:\n        return 5\n    elif amount >= 100:\n        return 10\n    elif amount >= 200:\n        return 20\n    return 0\nprint(discount_pct(int(input())))\n"),
+                ("missing_return_zero", "function_return_error", "def discount_pct(amount):\n    if amount >= 200:\n        return 20\n    elif amount >= 100:\n        return 10\n    elif amount >= 50:\n        return 5\nprint(discount_pct(int(input())))\n"),
+                ("syntax_err", "syntax_error", "def discount_pct(amount):\n    if amount >= 200:\n        return 20\n    elif amount >= 100\n        return 10\n    return 0\nprint(discount_pct(int(input())))\n"),
+                ("runtime_div_zero", "runtime_error", "def discount_pct(amount):\n    return amount // 0\nprint(discount_pct(int(input())))\n"),
+            ],
+        },
+        # 54. First Even Number in List (or -1)
+        {
+            "id": "fam_54_first_even",
+            "topic": "searching",
+            "ref": "def first_even(nums):\n    for x in nums:\n        if x % 2 == 0:\n            return x\n    return -1\nprint(first_even([int(v) for v in input().split()]))\n",
+            "tests": (("3 5 8 10", "8"), ("1 3 5 6", "6"), ("1 3 5", "-1")),
+            "muts": [
+                ("odd_instead_even_cond", "condition_error", "def first_even(nums):\n    for x in nums:\n        if x % 2 != 0:\n            return x\n    return -1\nprint(first_even([int(v) for v in input().split()]))\n"),
+                ("both_branches_return", "function_return_error", "def first_even(nums):\n    for x in nums:\n        if x % 2 == 0:\n            return x\n        else:\n            return -1\n    return -1\nprint(first_even([int(v) for v in input().split()]))\n"),
+                ("missing_default_ret", "function_return_error", "def first_even(nums):\n    for x in nums:\n        if x % 2 == 0:\n            return x\nprint(first_even([int(v) for v in input().split()]))\n"),
+                ("skip_last_bound", "loop_boundary_error", "def first_even(nums):\n    for i in range(len(nums) - 1):\n        if nums[i] % 2 == 0:\n            return nums[i]\n    return -1\nprint(first_even([int(v) for v in input().split()]))\n"),
+                ("oob_idx", "indexing_error", "def first_even(nums):\n    for i in range(len(nums) + 1):\n        if nums[i] % 2 == 0:\n            return nums[i]\n    return -1\nprint(first_even([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 55. Maximum Even Number in List (all-negative evens test)
+        {
+            "id": "fam_55_max_even",
+            "topic": "lists",
+            "ref": "def max_even(nums):\n    best = None\n    for x in nums:\n        if x % 2 == 0:\n            if best is None or x > best:\n                best = x\n    return best\nprint(max_even([int(v) for v in input().split()]))\n",
+            "tests": (("-8 -4 -10", "-4"), ("3 2 9 6", "6"), ("-6 -2 1", "-2")),
+            "muts": [
+                ("init_best_zero", "initialization_error", "def max_even(nums):\n    best = 0\n    for x in nums:\n        if x % 2 == 0 and x > best:\n            best = x\n    return best\nprint(max_even([int(v) for v in input().split()]))\n"),
+                ("min_instead_max_cond", "condition_error", "def max_even(nums):\n    best = None\n    for x in nums:\n        if x % 2 == 0:\n            if best is None or x < best:\n                best = x\n    return best\nprint(max_even([int(v) for v in input().split()]))\n"),
+                ("odd_instead_even_cond", "condition_error", "def max_even(nums):\n    best = None\n    for x in nums:\n        if x % 2 != 0:\n            if best is None or x > best:\n                best = x\n    return best\nprint(max_even([int(v) for v in input().split()]))\n"),
+                ("skip_last_bound", "loop_boundary_error", "def max_even(nums):\n    best = None\n    for i in range(len(nums) - 1):\n        if nums[i] % 2 == 0:\n            if best is None or nums[i] > best:\n                best = nums[i]\n    return best\nprint(max_even([int(v) for v in input().split()]))\n"),
+                ("oob_idx", "indexing_error", "def max_even(nums):\n    best = None\n    for i in range(len(nums) + 1):\n        if nums[i] % 2 == 0:\n            if best is None or nums[i] > best:\n                best = nums[i]\n    return best\nprint(max_even([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 56. Product of Positive Elements
+        {
+            "id": "fam_56_product_positive",
+            "topic": "loops",
+            "ref": "def prod_pos(nums):\n    prod = 1\n    for x in nums:\n        if x > 0:\n            prod *= x\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n",
+            "tests": (("-2 3 0 4", "12"), ("2 5 3", "30"), ("-5 2 6", "12")),
+            "muts": [
+                ("init_prod_zero", "initialization_error", "def prod_pos(nums):\n    prod = 0\n    for x in nums:\n        if x > 0:\n            prod *= x\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n"),
+                ("reset_prod_in_loop", "initialization_error", "def prod_pos(nums):\n    for x in nums:\n        prod = 1\n        if x > 0:\n            prod *= x\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n"),
+                ("gte_zero_cond", "condition_error", "def prod_pos(nums):\n    prod = 1\n    for x in nums:\n        if x >= 0:\n            prod *= x\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n"),
+                ("adds_instead_mul_logic", "logic_error", "def prod_pos(nums):\n    prod = 1\n    for x in nums:\n        if x > 0:\n            prod += x\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n"),
+                ("skip_last_bound", "loop_boundary_error", "def prod_pos(nums):\n    prod = 1\n    for i in range(len(nums) - 1):\n        if nums[i] > 0:\n            prod *= nums[i]\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n"),
+                ("early_ret", "function_return_error", "def prod_pos(nums):\n    prod = 1\n    for x in nums:\n        if x > 0:\n            prod *= x\n            return prod\n    return prod\nprint(prod_pos([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 57. Count Adjacent Equal Pairs
+        {
+            "id": "fam_57_adjacent_equal_pairs",
+            "topic": "indexing",
+            "ref": "def count_adj_eq(nums):\n    pairs = 0\n    for i in range(len(nums) - 1):\n        if nums[i] == nums[i + 1]:\n            pairs += 1\n    return pairs\nprint(count_adj_eq([int(v) for v in input().split()]))\n",
+            "tests": (("1 1 2 2 2", "3"), ("1 2 3 4", "0"), ("5 5 1 4 4", "2")),
+            "muts": [
+                ("neq_instead_eq_cond", "condition_error", "def count_adj_eq(nums):\n    pairs = 0\n    for i in range(len(nums) - 1):\n        if nums[i] != nums[i + 1]:\n            pairs += 1\n    return pairs\nprint(count_adj_eq([int(v) for v in input().split()]))\n"),
+                ("oob_range_len", "indexing_error", "def count_adj_eq(nums):\n    pairs = 0\n    for i in range(len(nums)):\n        if nums[i] == nums[i + 1]:\n            pairs += 1\n    return pairs\nprint(count_adj_eq([int(v) for v in input().split()]))\n"),
+                ("skip_last_pair_bound", "loop_boundary_error", "def count_adj_eq(nums):\n    pairs = 0\n    for i in range(len(nums) - 2):\n        if nums[i] == nums[i + 1]:\n            pairs += 1\n    return pairs\nprint(count_adj_eq([int(v) for v in input().split()]))\n"),
+                ("init_pairs_one", "initialization_error", "def count_adj_eq(nums):\n    pairs = 1\n    for i in range(len(nums) - 1):\n        if nums[i] == nums[i + 1]:\n            pairs += 1\n    return pairs\nprint(count_adj_eq([int(v) for v in input().split()]))\n"),
+                ("adds_val_logic", "logic_error", "def count_adj_eq(nums):\n    pairs = 0\n    for i in range(len(nums) - 1):\n        if nums[i] == nums[i + 1]:\n            pairs += nums[i]\n    return pairs\nprint(count_adj_eq([int(v) for v in input().split()]))\n"),
+                ("no_return", "function_return_error", "def count_adj_eq(nums):\n    pairs = 0\n    for i in range(len(nums) - 1):\n        if nums[i] == nums[i + 1]:\n            pairs += 1\nprint(count_adj_eq([int(v) for v in input().split()]))\n"),
+            ],
+        },
+        # 58. Clamp Number to [lo, hi]
+        {
+            "id": "fam_58_clamp_value",
+            "topic": "conditionals",
+            "ref": "def clamp(x, lo, hi):\n    if x < lo:\n        return lo\n    elif x > hi:\n        return hi\n    return x\nx, lo, hi = map(int, input().split())\nprint(clamp(x, lo, hi))\n",
+            "tests": (("5 1 10", "5"), ("-3 1 10", "1"), ("15 1 10", "10"), ("1 1 10", "1")),
+            "muts": [
+                ("inverted_cmp_cond", "condition_error", "def clamp(x, lo, hi):\n    if x > lo:\n        return lo\n    elif x < hi:\n        return hi\n    return x\nx, lo, hi = map(int, input().split())\nprint(clamp(x, lo, hi))\n"),
+                ("swapped_return_logic", "logic_error", "def clamp(x, lo, hi):\n    if x < lo:\n        return hi\n    elif x > hi:\n        return lo\n    return x\nx, lo, hi = map(int, input().split())\nprint(clamp(x, lo, hi))\n"),
+                ("missing_return_x", "function_return_error", "def clamp(x, lo, hi):\n    if x < lo:\n        return lo\n    elif x > hi:\n        return hi\nx, lo, hi = map(int, input().split())\nprint(clamp(x, lo, hi))\n"),
+                ("syntax_err", "syntax_error", "def clamp(x, lo, hi):\n    if x < lo\n        return lo\n    return x\nx, lo, hi = map(int, input().split())\nprint(clamp(x, lo, hi))\n"),
+                ("runtime_err", "runtime_error", "def clamp(x, lo, hi):\n    return max(lo, min(hi, unknown_x))\nx, lo, hi = map(int, input().split())\nprint(clamp(x, lo, hi))\n"),
+            ],
+        },
     ]
 
     for spec in more_specs:
@@ -846,33 +1080,171 @@ def _build_families() -> list[ProgramFamily]:
     return families
 
 
-def _run_python_code(source_code: str, stdin_data: str) -> tuple[str, str, str]:
-    """Run controlled dataset sample in an isolated subprocess with strict 2s timeout."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", encoding="utf-8", delete=False
-    ) as tmp:
-        tmp.write(source_code)
-        tmp_path = Path(tmp.name)
+_ISOLATED_BATCH_RUNNER = """
+import contextlib, io, json, sys, traceback
 
+payload = json.loads(sys.stdin.read())
+results = []
+for item in payload:
+    code = item["code"]
+    stdin_data = item["stdin"]
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    in_buf = io.StringIO(stdin_data)
+    old_stdin = sys.stdin
+    try:
+        compiled = compile(code, "<script>", "exec")
+    except (SyntaxError, IndentationError):
+        results.append(["compilation_error", "", traceback.format_exc().strip()])
+        continue
+    try:
+        sys.stdin = in_buf
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            exec(compiled, {"__name__": "__main__"})
+        results.append(["ok", out_buf.getvalue().strip(), err_buf.getvalue().strip()])
+    except BaseException:
+        results.append(["runtime_error", out_buf.getvalue().strip(), traceback.format_exc().strip()])
+    finally:
+        sys.stdin = old_stdin
+sys.stdout.write(json.dumps(results))
+"""
+
+
+def _run_python_batch_isolated(
+    cases: list[tuple[str, str]],
+) -> list[tuple[str, str, str]]:
+    """Run a family's controlled samples in a single isolated `-I` subprocess."""
+    payload = json.dumps([{"code": c, "stdin": s} for c, s in cases])
     try:
         proc = subprocess.run(
-            [sys.executable, "-I", str(tmp_path)],
-            input=stdin_data,
+            [sys.executable, "-I", "-c", _ISOLATED_BATCH_RUNNER],
+            input=payload,
             text=True,
             capture_output=True,
-            timeout=2.0,
+            timeout=15.0,
             check=False,
         )
-        if proc.returncode == 0:
-            return "ok", proc.stdout.strip(), proc.stderr.strip()
-        stderr = proc.stderr.strip()
-        if "SyntaxError:" in stderr or "IndentationError:" in stderr:
-            return "compilation_error", proc.stdout.strip(), stderr
-        return "runtime_error", proc.stdout.strip(), stderr
+        if proc.returncode == 0 and proc.stdout.strip():
+            raw = json.loads(proc.stdout)
+            return [(str(a), str(b), str(c)) for a, b, c in raw]
     except subprocess.TimeoutExpired:
-        return "time_limit_exceeded", "", "TimeoutExpired"
-    finally:
-        tmp_path.unlink(missing_ok=True)
+        pass
+    # Fallback to per-case isolated subprocess if any single mutation triggered an infinite loop
+    out: list[tuple[str, str, str]] = []
+    for code, stdin_data in cases:
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-I", "-c", code],
+                input=stdin_data,
+                text=True,
+                capture_output=True,
+                timeout=2.0,
+                check=False,
+            )
+            if proc.returncode == 0:
+                out.append(("ok", proc.stdout.strip(), proc.stderr.strip()))
+            else:
+                stderr = proc.stderr.strip()
+                if "SyntaxError:" in stderr or "IndentationError:" in stderr:
+                    out.append(("compilation_error", proc.stdout.strip(), stderr))
+                else:
+                    out.append(("runtime_error", proc.stdout.strip(), stderr))
+        except subprocess.TimeoutExpired:
+            out.append(("time_limit_exceeded", "", "TimeoutExpired"))
+    return out
+
+
+def _validate_family(
+    fam: ProgramFamily,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    fam_rows: list[dict[str, Any]] = []
+    fam_dropped: list[dict[str, str]] = []
+
+    cases: list[tuple[str, str]] = []
+    for stdin_data, _ in fam.tests:
+        cases.append((fam.reference_code, stdin_data))
+    for _mut_name, label, buggy_code in fam.mutations:
+        if label not in ERROR_TAXONOMY:
+            raise ValueError(f"Unknown label {label!r} in {fam.family_id}")
+        for stdin_data, _ in fam.tests:
+            cases.append((buggy_code, stdin_data))
+
+    outcomes = _run_python_batch_isolated(cases)
+    n_tests = len(fam.tests)
+
+    # 1. Verify reference solution passes 100% of its tests
+    for idx, (_stdin_data, expected) in enumerate(fam.tests):
+        status_code, stdout, stderr = outcomes[idx]
+        if status_code != "ok" or stdout != expected.strip():
+            raise RuntimeError(
+                f"Reference solution failed for {fam.family_id}: "
+                f"status={status_code}, expected={expected!r}, actual={stdout!r}, stderr={stderr!r}"
+            )
+
+    # 2. Inspect each buggy mutation's execution outcomes
+    for m_idx, (mut_name, label, buggy_code) in enumerate(fam.mutations):
+        offset = n_tests + (m_idx * n_tests)
+        passed = 0
+        first_verdict = "accepted"
+        first_stderr = ""
+        first_compile = ""
+        first_actual = ""
+        first_expected = ""
+
+        for t_idx, (_stdin_data, expected) in enumerate(fam.tests):
+            status_code, stdout, stderr = outcomes[offset + t_idx]
+            if status_code == "ok" and stdout == expected.strip():
+                passed += 1
+                continue
+
+            if first_verdict == "accepted":
+                if status_code == "compilation_error":
+                    first_verdict = "compilation_error"
+                    first_compile = stderr
+                elif status_code == "runtime_error":
+                    first_verdict = "runtime_error"
+                    first_stderr = stderr
+                elif status_code == "time_limit_exceeded":
+                    first_verdict = "time_limit_exceeded"
+                    first_stderr = stderr
+                else:
+                    first_verdict = "wrong_answer"
+                    first_actual = stdout
+                    first_expected = expected.strip()
+
+        if passed == n_tests or first_verdict == "time_limit_exceeded":
+            fam_dropped.append(
+                {
+                    "family_id": fam.family_id,
+                    "mutation": mut_name,
+                    "reason": f"verdict={first_verdict}, passed={passed}/{n_tests}",
+                }
+            )
+            continue
+
+        exc_name = extract_exception_name(first_stderr, first_compile)
+        fam_rows.append(
+            {
+                "sample_id": f"{fam.family_id}__{mut_name}",
+                "program_family": fam.family_id,
+                "topic": fam.topic,
+                "mutation": mut_name,
+                "label": label,
+                "source_code": buggy_code,
+                "verdict": first_verdict,
+                "exception_name": exc_name,
+                "stderr": first_stderr,
+                "compile_output": first_compile,
+                "stdout_actual": first_actual,
+                "stdout_expected": first_expected,
+                "passed_tests": passed,
+                "total_tests": n_tests,
+                "data_origin": "controlled_synthetic",
+                "license": "MIT-ThinkFirst-Internal",
+                "review_status": "execution_validated",
+            }
+        )
+    return fam_rows, fam_dropped
 
 
 def generate_validated_dataset(output_dir: Path) -> dict[str, Any]:
@@ -882,78 +1254,10 @@ def generate_validated_dataset(output_dir: Path) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     dropped: list[dict[str, str]] = []
 
-    for fam in families:
-        # 1. Verify reference solution passes 100% of its tests
-        for stdin_data, expected in fam.tests:
-            status_code, stdout, stderr = _run_python_code(fam.reference_code, stdin_data)
-            if status_code != "ok" or stdout != expected.strip():
-                raise RuntimeError(
-                    f"Reference solution failed for {fam.family_id}: "
-                    f"status={status_code}, expected={expected!r}, actual={stdout!r}, stderr={stderr!r}"
-                )
-
-        # 2. Execute each buggy mutation and capture actual failing execution evidence
-        for mut_name, label, buggy_code in fam.mutations:
-            if label not in ERROR_TAXONOMY:
-                raise ValueError(f"Unknown label {label!r} in {fam.family_id}")
-
-            passed = 0
-            first_verdict = "accepted"
-            first_stderr = ""
-            first_compile = ""
-            first_actual = ""
-            first_expected = ""
-
-            for stdin_data, expected in fam.tests:
-                status_code, stdout, stderr = _run_python_code(buggy_code, stdin_data)
-                if status_code == "ok" and stdout == expected.strip():
-                    passed += 1
-                    continue
-
-                if first_verdict == "accepted":
-                    if status_code == "compilation_error":
-                        first_verdict = "compilation_error"
-                        first_compile = stderr
-                    elif status_code == "runtime_error":
-                        first_verdict = "runtime_error"
-                        first_stderr = stderr
-                    elif status_code == "time_limit_exceeded":
-                        first_verdict = "time_limit_exceeded"
-                        first_stderr = stderr
-                    else:
-                        first_verdict = "wrong_answer"
-                        first_actual = stdout
-                        first_expected = expected.strip()
-
-            if passed == len(fam.tests) or first_verdict == "time_limit_exceeded":
-                dropped.append(
-                    {
-                        "family_id": fam.family_id,
-                        "mutation": mut_name,
-                        "reason": f"verdict={first_verdict}, passed={passed}/{len(fam.tests)}",
-                    }
-                )
-                continue
-
-            exc_name = extract_exception_name(first_stderr, first_compile)
-            rows.append(
-                {
-                    "sample_id": f"{fam.family_id}__{mut_name}",
-                    "program_family": fam.family_id,
-                    "topic": fam.topic,
-                    "mutation": mut_name,
-                    "label": label,
-                    "source_code": buggy_code,
-                    "verdict": first_verdict,
-                    "exception_name": exc_name,
-                    "stderr": first_stderr,
-                    "compile_output": first_compile,
-                    "stdout_actual": first_actual,
-                    "stdout_expected": first_expected,
-                    "passed_tests": passed,
-                    "total_tests": len(fam.tests),
-                }
-            )
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for fam_rows, fam_dropped in pool.map(_validate_family, families):
+            rows.extend(fam_rows)
+            dropped.extend(fam_dropped)
 
     df = pd.DataFrame(rows)
     csv_path = output_dir / "python_errors_v1.csv"
@@ -961,8 +1265,10 @@ def generate_validated_dataset(output_dir: Path) -> dict[str, Any]:
 
     summary = {
         "dataset_version": "python_errors_v1",
+        "data_origin": "controlled_synthetic",
+        "license": "MIT-ThinkFirst-Internal",
         "total_families": len(families),
-        "validated_samples": int(len(df)),
+        "validated_samples": len(df),
         "dropped_samples": len(dropped),
         "class_distribution": {k: int(v) for k, v in df["label"].value_counts().sort_index().items()},
         "dropped_details": dropped,
