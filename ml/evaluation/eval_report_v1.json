@@ -1,32 +1,102 @@
 {
-  "model_version": "error-clf-v1.0.0",
+  "model_version": "error-clf-v1.1.0",
   "dataset_version": "python_errors_v1",
-  "trained_at": "2026-11-20T05:33:41.434776+00:00",
+  "data_origin": "controlled_synthetic",
+  "trained_at": "2026-11-28T17:14:03.535313+00:00",
   "split_strategy": "StratifiedGroupKFold(n_splits=5, grouped by program_family)",
-  "total_samples": 309,
-  "total_program_families": 42,
-  "train_samples": 249,
-  "test_samples": 60,
-  "train_families": 33,
-  "test_families": 9,
+  "total_samples": 399,
+  "total_program_families": 58,
+  "train_samples": 319,
+  "test_samples": 80,
+  "train_families": 46,
+  "test_families": 12,
   "family_leakage_count": 0,
-  "cv_5fold_logreg_macro_f1": {
+  "cv_5fold_selected_macro_f1": {
     "folds": [
-      0.7196,
-      0.7805,
-      0.7076,
-      0.8009,
-      0.864
+      0.8936,
+      0.8786,
+      0.7482,
+      0.8035,
+      0.7718
     ],
-    "mean": 0.7745,
-    "std": 0.057
+    "mean": 0.8191,
+    "std": 0.0576
+  },
+  "cv_5fold_all_models": {
+    "rule_based_baseline": {
+      "folds": [
+        0.688,
+        0.6143,
+        0.634,
+        0.6014,
+        0.6895
+      ],
+      "mean": 0.6454,
+      "std": 0.0368
+    },
+    "tfidf_logistic_regression": {
+      "folds": [
+        0.8597,
+        0.8356,
+        0.7396,
+        0.7649,
+        0.8249
+      ],
+      "mean": 0.8049,
+      "std": 0.0452
+    },
+    "tfidf_calibrated_linear_svc": {
+      "folds": [
+        0.8936,
+        0.8786,
+        0.7482,
+        0.8035,
+        0.7718
+      ],
+      "mean": 0.8191,
+      "std": 0.0576
+    },
+    "tfidf_random_forest": {
+      "folds": [
+        0.8129,
+        0.8171,
+        0.7796,
+        0.7881,
+        0.7434
+      ],
+      "mean": 0.7882,
+      "std": 0.0265
+    },
+    "tfidf_extra_trees": {
+      "folds": [
+        0.8503,
+        0.8662,
+        0.7953,
+        0.8097,
+        0.7712
+      ],
+      "mean": 0.8185,
+      "std": 0.0351
+    },
+    "tfidf_complement_nb": {
+      "folds": [
+        0.8341,
+        0.7904,
+        0.7676,
+        0.7867,
+        0.7896
+      ],
+      "mean": 0.7937,
+      "std": 0.0219
+    }
   },
   "models": {
     "rule_based_baseline": {
-      "macro_f1": 0.5945,
-      "weighted_f1": 0.6438,
-      "macro_precision": 0.6424,
-      "macro_recall": 0.6223,
+      "accuracy": 0.6625,
+      "macro_f1": 0.688,
+      "weighted_f1": 0.6694,
+      "macro_precision": 0.8323,
+      "macro_recall": 0.6907,
       "per_class": {
         "syntax_error": {
           "precision": 1.0,
@@ -36,45 +106,45 @@
         },
         "runtime_error": {
           "precision": 1.0,
-          "recall": 0.8889,
-          "f1": 0.9412,
-          "support": 9
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
         },
         "indexing_error": {
-          "precision": 0.8333,
-          "recall": 0.8333,
-          "f1": 0.8333,
-          "support": 6
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
+          "support": 8
         },
         "loop_boundary_error": {
-          "precision": 0.4167,
-          "recall": 0.7143,
-          "f1": 0.5263,
-          "support": 7
+          "precision": 0.6667,
+          "recall": 0.8,
+          "f1": 0.7273,
+          "support": 10
         },
         "condition_error": {
-          "precision": 0.5,
-          "recall": 0.1667,
-          "f1": 0.25,
-          "support": 6
+          "precision": 0.75,
+          "recall": 0.2143,
+          "f1": 0.3333,
+          "support": 14
         },
         "initialization_error": {
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "support": 5
+          "precision": 1.0,
+          "recall": 0.2222,
+          "f1": 0.3636,
+          "support": 9
         },
         "function_return_error": {
           "precision": 1.0,
-          "recall": 0.5,
-          "f1": 0.6667,
-          "support": 10
+          "recall": 0.6364,
+          "f1": 0.7778,
+          "support": 11
         },
         "logic_error": {
-          "precision": 0.3889,
-          "recall": 0.875,
-          "f1": 0.5385,
-          "support": 8
+          "precision": 0.2414,
+          "recall": 0.7778,
+          "f1": 0.3684,
+          "support": 9
         }
       },
       "labels": [
@@ -100,29 +170,29 @@
         ],
         [
           0,
+          10,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          7,
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
           8,
-          1,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          5,
-          1,
-          0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          5,
           0,
           0,
           0,
@@ -132,11 +202,11 @@
           0,
           0,
           0,
-          2,
-          1,
+          0,
+          3,
           0,
           0,
-          3
+          11
         ],
         [
           0,
@@ -144,37 +214,41 @@
           0,
           1,
           1,
-          0,
-          0,
-          3
-        ],
-        [
-          0,
-          0,
-          0,
           2,
           0,
-          0,
-          5,
-          3
+          5
         ],
         [
           0,
           0,
           0,
-          1,
+          0,
+          0,
+          0,
+          7,
+          4
+        ],
+        [
+          0,
+          0,
+          0,
+          2,
           0,
           0,
           0,
           7
         ]
-      ]
+      ],
+      "display_name": "Rule-Based Heuristic Baseline",
+      "cv_macro_f1_mean": 0.6454,
+      "cv_macro_f1_std": 0.0368
     },
     "tfidf_logistic_regression": {
-      "macro_f1": 0.7196,
-      "weighted_f1": 0.7487,
-      "macro_precision": 0.7304,
-      "macro_recall": 0.7285,
+      "accuracy": 0.85,
+      "macro_f1": 0.8597,
+      "weighted_f1": 0.8483,
+      "macro_precision": 0.8668,
+      "macro_recall": 0.8677,
       "per_class": {
         "syntax_error": {
           "precision": 1.0,
@@ -184,45 +258,45 @@
         },
         "runtime_error": {
           "precision": 1.0,
-          "recall": 0.8889,
-          "f1": 0.9412,
-          "support": 9
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
         },
         "indexing_error": {
-          "precision": 0.8333,
-          "recall": 0.8333,
-          "f1": 0.8333,
-          "support": 6
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
+          "support": 8
         },
         "loop_boundary_error": {
-          "precision": 0.4545,
-          "recall": 0.7143,
-          "f1": 0.5556,
-          "support": 7
+          "precision": 0.8182,
+          "recall": 0.9,
+          "f1": 0.8571,
+          "support": 10
         },
         "condition_error": {
-          "precision": 0.3333,
-          "recall": 0.1667,
-          "f1": 0.2222,
-          "support": 6
+          "precision": 0.7778,
+          "recall": 0.5,
+          "f1": 0.6087,
+          "support": 14
         },
         "initialization_error": {
-          "precision": 0.6667,
-          "recall": 0.8,
-          "f1": 0.7273,
-          "support": 5
+          "precision": 0.8,
+          "recall": 0.8889,
+          "f1": 0.8421,
+          "support": 9
         },
         "function_return_error": {
           "precision": 1.0,
-          "recall": 0.8,
-          "f1": 0.8889,
-          "support": 10
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 11
         },
         "logic_error": {
-          "precision": 0.5556,
-          "recall": 0.625,
-          "f1": 0.5882,
-          "support": 8
+          "precision": 0.5385,
+          "recall": 0.7778,
+          "f1": 0.6364,
+          "support": 9
         }
       },
       "labels": [
@@ -248,19 +322,9 @@
         ],
         [
           0,
-          8,
-          1,
+          10,
           0,
           0,
-          0,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          5,
-          1,
           0,
           0,
           0,
@@ -269,41 +333,51 @@
         [
           0,
           0,
-          0,
-          5,
-          0,
+          7,
           0,
           0,
-          2
+          0,
+          0,
+          1
         ],
         [
           0,
           0,
           0,
-          2,
-          1,
-          1,
+          9,
           0,
-          2
+          0,
+          0,
+          1
         ],
         [
           0,
           0,
           0,
-          0,
           1,
-          4,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
+          7,
           2,
           0,
+          4
+        ],
+        [
           0,
+          0,
+          0,
+          0,
+          1,
           8,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          11,
           0
         ],
         [
@@ -312,17 +386,173 @@
           0,
           1,
           1,
-          1,
           0,
-          5
+          0,
+          7
         ]
-      ]
+      ],
+      "display_name": "TF-IDF + Logistic Regression",
+      "cv_macro_f1_mean": 0.8049,
+      "cv_macro_f1_std": 0.0452
+    },
+    "tfidf_calibrated_linear_svc": {
+      "accuracy": 0.8875,
+      "macro_f1": 0.8936,
+      "weighted_f1": 0.8888,
+      "macro_precision": 0.8971,
+      "macro_recall": 0.8945,
+      "per_class": {
+        "syntax_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 9
+        },
+        "runtime_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
+        },
+        "indexing_error": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
+          "support": 8
+        },
+        "loop_boundary_error": {
+          "precision": 0.8182,
+          "recall": 0.9,
+          "f1": 0.8571,
+          "support": 10
+        },
+        "condition_error": {
+          "precision": 0.8333,
+          "recall": 0.7143,
+          "f1": 0.7692,
+          "support": 14
+        },
+        "initialization_error": {
+          "precision": 0.8889,
+          "recall": 0.8889,
+          "f1": 0.8889,
+          "support": 9
+        },
+        "function_return_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 11
+        },
+        "logic_error": {
+          "precision": 0.6364,
+          "recall": 0.7778,
+          "f1": 0.7,
+          "support": 9
+        }
+      },
+      "labels": [
+        "syntax_error",
+        "runtime_error",
+        "indexing_error",
+        "loop_boundary_error",
+        "condition_error",
+        "initialization_error",
+        "function_return_error",
+        "logic_error"
+      ],
+      "confusion_matrix": [
+        [
+          9,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          10,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          7,
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          9,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          10,
+          1,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          8,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          11,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          1,
+          0,
+          0,
+          7
+        ]
+      ],
+      "display_name": "TF-IDF + Calibrated LinearSVC",
+      "cv_macro_f1_mean": 0.8191,
+      "cv_macro_f1_std": 0.0576
     },
     "tfidf_random_forest": {
-      "macro_f1": 0.7222,
-      "weighted_f1": 0.7444,
-      "macro_precision": 0.7312,
-      "macro_recall": 0.7308,
+      "accuracy": 0.8,
+      "macro_f1": 0.8129,
+      "weighted_f1": 0.8043,
+      "macro_precision": 0.8581,
+      "macro_recall": 0.8147,
       "per_class": {
         "syntax_error": {
           "precision": 1.0,
@@ -332,45 +562,45 @@
         },
         "runtime_error": {
           "precision": 1.0,
-          "recall": 0.8889,
-          "f1": 0.9412,
-          "support": 9
-        },
-        "indexing_error": {
-          "precision": 0.8333,
-          "recall": 0.8333,
-          "f1": 0.8333,
-          "support": 6
-        },
-        "loop_boundary_error": {
-          "precision": 0.5,
-          "recall": 0.8571,
-          "f1": 0.6316,
-          "support": 7
-        },
-        "condition_error": {
-          "precision": 0.25,
-          "recall": 0.1667,
-          "f1": 0.2,
-          "support": 6
-        },
-        "initialization_error": {
-          "precision": 0.8,
-          "recall": 0.8,
-          "f1": 0.8,
-          "support": 5
-        },
-        "function_return_error": {
-          "precision": 0.8,
-          "recall": 0.8,
-          "f1": 0.8,
+          "recall": 1.0,
+          "f1": 1.0,
           "support": 10
         },
-        "logic_error": {
-          "precision": 0.6667,
-          "recall": 0.5,
-          "f1": 0.5714,
+        "indexing_error": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
           "support": 8
+        },
+        "loop_boundary_error": {
+          "precision": 0.6429,
+          "recall": 0.9,
+          "f1": 0.75,
+          "support": 10
+        },
+        "condition_error": {
+          "precision": 0.875,
+          "recall": 0.5,
+          "f1": 0.6364,
+          "support": 14
+        },
+        "initialization_error": {
+          "precision": 1.0,
+          "recall": 0.5556,
+          "f1": 0.7143,
+          "support": 9
+        },
+        "function_return_error": {
+          "precision": 0.9091,
+          "recall": 0.9091,
+          "f1": 0.9091,
+          "support": 11
+        },
+        "logic_error": {
+          "precision": 0.4375,
+          "recall": 0.7778,
+          "f1": 0.56,
+          "support": 9
         }
       },
       "labels": [
@@ -396,8 +626,8 @@
         ],
         [
           0,
-          8,
-          1,
+          10,
+          0,
           0,
           0,
           0,
@@ -407,8 +637,150 @@
         [
           0,
           0,
+          7,
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          9,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          7,
+          0,
+          1,
+          6
+        ],
+        [
+          0,
+          0,
+          0,
+          2,
+          1,
           5,
-          1,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          10,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          7
+        ]
+      ],
+      "display_name": "TF-IDF + Random Forest",
+      "cv_macro_f1_mean": 0.7882,
+      "cv_macro_f1_std": 0.0265
+    },
+    "tfidf_extra_trees": {
+      "accuracy": 0.8375,
+      "macro_f1": 0.8503,
+      "weighted_f1": 0.8438,
+      "macro_precision": 0.8784,
+      "macro_recall": 0.8478,
+      "per_class": {
+        "syntax_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 9
+        },
+        "runtime_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
+        },
+        "indexing_error": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
+          "support": 8
+        },
+        "loop_boundary_error": {
+          "precision": 0.8,
+          "recall": 0.8,
+          "f1": 0.8,
+          "support": 10
+        },
+        "condition_error": {
+          "precision": 0.8182,
+          "recall": 0.6429,
+          "f1": 0.72,
+          "support": 14
+        },
+        "initialization_error": {
+          "precision": 1.0,
+          "recall": 0.6667,
+          "f1": 0.8,
+          "support": 9
+        },
+        "function_return_error": {
+          "precision": 0.9091,
+          "recall": 0.9091,
+          "f1": 0.9091,
+          "support": 11
+        },
+        "logic_error": {
+          "precision": 0.5,
+          "recall": 0.8889,
+          "f1": 0.64,
+          "support": 9
+        }
+      },
+      "labels": [
+        "syntax_error",
+        "runtime_error",
+        "indexing_error",
+        "loop_boundary_error",
+        "condition_error",
+        "initialization_error",
+        "function_return_error",
+        "logic_error"
+      ],
+      "confusion_matrix": [
+        [
+          9,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          10,
+          0,
+          0,
           0,
           0,
           0,
@@ -417,21 +789,21 @@
         [
           0,
           0,
-          0,
-          6,
-          1,
+          7,
           0,
           0,
-          0
+          0,
+          0,
+          1
         ],
         [
           0,
           0,
           0,
-          1,
-          1,
-          1,
-          1,
+          8,
+          0,
+          0,
+          0,
           2
         ],
         [
@@ -439,34 +811,223 @@
           0,
           0,
           0,
-          1,
-          4,
-          0,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          2,
-          0,
-          0,
-          8,
-          0
-        ],
-        [
-          0,
-          0,
-          0,
-          2,
-          1,
+          9,
           0,
           1,
           4
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          1,
+          6,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          10,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          8
         ]
-      ]
+      ],
+      "display_name": "TF-IDF + Extra Trees",
+      "cv_macro_f1_mean": 0.8185,
+      "cv_macro_f1_std": 0.0351
+    },
+    "tfidf_complement_nb": {
+      "accuracy": 0.825,
+      "macro_f1": 0.8341,
+      "weighted_f1": 0.8302,
+      "macro_precision": 0.8568,
+      "macro_recall": 0.824,
+      "per_class": {
+        "syntax_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 9
+        },
+        "runtime_error": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
+        },
+        "indexing_error": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
+          "support": 8
+        },
+        "loop_boundary_error": {
+          "precision": 0.6667,
+          "recall": 0.8,
+          "f1": 0.7273,
+          "support": 10
+        },
+        "condition_error": {
+          "precision": 0.6875,
+          "recall": 0.7857,
+          "f1": 0.7333,
+          "support": 14
+        },
+        "initialization_error": {
+          "precision": 1.0,
+          "recall": 0.6667,
+          "f1": 0.8,
+          "support": 9
+        },
+        "function_return_error": {
+          "precision": 1.0,
+          "recall": 0.9091,
+          "f1": 0.9524,
+          "support": 11
+        },
+        "logic_error": {
+          "precision": 0.5,
+          "recall": 0.5556,
+          "f1": 0.5263,
+          "support": 9
+        }
+      },
+      "labels": [
+        "syntax_error",
+        "runtime_error",
+        "indexing_error",
+        "loop_boundary_error",
+        "condition_error",
+        "initialization_error",
+        "function_return_error",
+        "logic_error"
+      ],
+      "confusion_matrix": [
+        [
+          9,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          10,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          7,
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          8,
+          1,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          11,
+          0,
+          0,
+          3
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          1,
+          6,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          10,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          2,
+          2,
+          0,
+          0,
+          5
+        ]
+      ],
+      "display_name": "TF-IDF + Complement Naive Bayes",
+      "cv_macro_f1_mean": 0.7937,
+      "cv_macro_f1_std": 0.0219
     }
   },
-  "selected_model": "tfidf_logistic_regression",
-  "low_confidence_threshold": 0.55
+  "selected_model": "tfidf_calibrated_linear_svc",
+  "selected_model_name": "TF-IDF + Calibrated LinearSVC",
+  "low_confidence_threshold": 0.55,
+  "external_public_benchmark": {
+    "benchmark_name": "public_curated_quixbugs_v1",
+    "source_repo": "jkoppel/QuixBugs",
+    "license": "MIT",
+    "data_origin": "public_curated",
+    "samples": 28,
+    "classes_present": [
+      "condition_error",
+      "function_return_error",
+      "indexing_error",
+      "initialization_error",
+      "logic_error",
+      "loop_boundary_error",
+      "runtime_error"
+    ],
+    "accuracy": 0.4286,
+    "top_3_accuracy": 0.7143,
+    "macro_f1_present_classes": 0.4483,
+    "low_confidence_flagged_rate": 0.6786,
+    "high_confidence_samples": 9,
+    "high_confidence_accuracy": 0.4444,
+    "note": "Independent out-of-domain external benchmark (harder DP/graph/sorting algorithms from QuixBugs MIT, never included in training). Demonstrates honest OOD generalization and uncertainty abstention."
+  }
 }

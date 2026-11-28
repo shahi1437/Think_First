@@ -1,16 +1,51 @@
 {
-  "corpus_documents": 10,
-  "corpus_chunks": 19,
+  "corpus_documents": 26,
+  "corpus_chunks": 45,
+  "languages_covered": [
+    "c",
+    "cpp",
+    "java",
+    "javascript",
+    "python"
+  ],
   "embedding_dimensions": 256,
   "similarity_threshold": 0.22,
-  "in_domain_queries": 14,
+  "in_domain_queries": 30,
   "hit_at_1": 1.0,
   "hit_at_3": 1.0,
   "mrr": 1.0,
-  "out_of_domain_queries": 3,
+  "out_of_domain_queries": 5,
   "no_match_rejection_rate": 1.0,
+  "per_language": {
+    "python": {
+      "total": 14,
+      "hit_at_1": 14,
+      "hit_at_3": 14
+    },
+    "javascript": {
+      "total": 4,
+      "hit_at_1": 4,
+      "hit_at_3": 4
+    },
+    "c": {
+      "total": 4,
+      "hit_at_1": 4,
+      "hit_at_3": 4
+    },
+    "cpp": {
+      "total": 4,
+      "hit_at_1": 4,
+      "hit_at_3": 4
+    },
+    "java": {
+      "total": 4,
+      "hit_at_1": 4,
+      "hit_at_3": 4
+    }
+  },
   "results": [
     {
+      "language_slug": "python",
       "query": "initializing best = 0 fails on all negative numbers maximum list",
       "expected_slug": "py-variables-and-initialization",
       "matched": true,
@@ -19,11 +54,12 @@
         "py-variables-and-initialization",
         "py-variables-and-initialization"
       ],
-      "top_raw_similarity": 0.5443,
+      "top_raw_similarity": 0.6025,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "resetting accumulator total = 0 inside loop body loses sum",
       "expected_slug": "py-variables-and-initialization",
       "matched": true,
@@ -32,62 +68,68 @@
         "py-variables-and-initialization",
         "py-variables-and-initialization"
       ],
-      "top_raw_similarity": 0.5378,
+      "top_raw_similarity": 0.5851,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "strict greater than > vs inclusive >= boundary threshold elif order",
       "expected_slug": "py-conditions-and-boolean-logic",
       "matched": true,
       "top_slugs": [
         "py-conditions-and-boolean-logic",
-        "py-conditions-and-boolean-logic"
+        "py-conditions-and-boolean-logic",
+        "py-loops-and-boundaries"
       ],
-      "top_raw_similarity": 0.3564,
+      "top_raw_similarity": 0.3681,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "boolean operator and vs or condition checking",
       "expected_slug": "py-conditions-and-boolean-logic",
       "matched": true,
       "top_slugs": [
         "py-conditions-and-boolean-logic",
         "py-conditions-and-boolean-logic",
-        "py-test-design-and-edge-cases"
+        "py-strings-and-dictionaries"
       ],
-      "top_raw_similarity": 0.5848,
+      "top_raw_similarity": 0.619,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "range(a, b) excludes upper endpoint off-by-one loop boundary",
       "expected_slug": "py-loops-and-boundaries",
       "matched": true,
       "top_slugs": [
         "py-loops-and-boundaries",
         "py-loops-and-boundaries",
-        "py-conditions-and-boolean-logic"
+        "py-variables-and-initialization"
       ],
-      "top_raw_similarity": 0.5048,
+      "top_raw_similarity": 0.5047,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "range(len(arr) - 1) skips final element last iteration",
       "expected_slug": "py-loops-and-boundaries",
       "matched": true,
       "top_slugs": [
         "py-loops-and-boundaries",
         "py-loops-and-boundaries",
-        "py-test-design-and-edge-cases"
+        "py-arrays-and-indexing"
       ],
-      "top_raw_similarity": 0.5043,
+      "top_raw_similarity": 0.4886,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "IndexError list index out of range accessing arr[len(arr)] or arr[i + 1]",
       "expected_slug": "py-arrays-and-indexing",
       "matched": true,
@@ -95,11 +137,12 @@
         "py-arrays-and-indexing",
         "py-arrays-and-indexing"
       ],
-      "top_raw_similarity": 0.6285,
+      "top_raw_similarity": 0.6633,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "function returns None missing return statement",
       "expected_slug": "py-functions-and-returns",
       "matched": true,
@@ -107,36 +150,40 @@
         "py-functions-and-returns",
         "py-functions-and-returns"
       ],
-      "top_raw_similarity": 0.8165,
+      "top_raw_similarity": 0.8056,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "premature return inside for loop exits on first iteration",
       "expected_slug": "py-functions-and-returns",
       "matched": true,
       "top_slugs": [
         "py-functions-and-returns",
         "py-functions-and-returns",
-        "py-loops-and-boundaries"
+        "py-variables-and-initialization"
       ],
-      "top_raw_similarity": 0.5882,
+      "top_raw_similarity": 0.5921,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "SyntaxError missing colon after if or for header unmatched parenthesis",
       "expected_slug": "py-syntax-and-indentation",
       "matched": true,
       "top_slugs": [
         "py-syntax-and-indentation",
-        "py-syntax-and-indentation"
+        "py-syntax-and-indentation",
+        "py-runtime-exceptions"
       ],
-      "top_raw_similarity": 0.44,
+      "top_raw_similarity": 0.5073,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "ZeroDivisionError TypeError NameError AttributeError traceback last line",
       "expected_slug": "py-runtime-exceptions",
       "matched": true,
@@ -144,11 +191,12 @@
         "py-runtime-exceptions",
         "py-strings-and-dictionaries"
       ],
-      "top_raw_similarity": 0.4708,
+      "top_raw_similarity": 0.5057,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "wrong answer hand trace variable state table operator choice logic bug",
       "expected_slug": "py-logic-and-tracing",
       "matched": true,
@@ -156,11 +204,12 @@
         "py-logic-and-tracing",
         "py-logic-and-tracing"
       ],
-      "top_raw_similarity": 0.3454,
+      "top_raw_similarity": 0.3999,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "dictionary frequency counting KeyError use dict.get and string .lower()",
       "expected_slug": "py-strings-and-dictionaries",
       "matched": true,
@@ -169,11 +218,12 @@
         "py-strings-and-dictionaries",
         "py-conditions-and-boolean-logic"
       ],
-      "top_raw_similarity": 0.4681,
+      "top_raw_similarity": 0.4992,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "python",
       "query": "edge case tests single element all negative boundary inputs before submitting",
       "expected_slug": "py-test-design-and-edge-cases",
       "matched": true,
@@ -182,11 +232,234 @@
         "py-conditions-and-boolean-logic",
         "py-loops-and-boundaries"
       ],
-      "top_raw_similarity": 0.5149,
+      "top_raw_similarity": 0.4937,
       "rank": 1,
       "passed": true
     },
     {
+      "language_slug": "javascript",
+      "query": "JavaScript strict equality === vs == coercion let const ReferenceError",
+      "expected_slug": "js-syntax-types-and-equality",
+      "matched": true,
+      "top_slugs": [
+        "js-syntax-types-and-equality",
+        "js-syntax-types-and-equality",
+        "js-functions-and-returns"
+      ],
+      "top_raw_similarity": 0.5671,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "javascript",
+      "query": "JavaScript for loop i <= b inclusive boundary string concatenation Number parse",
+      "expected_slug": "js-loops-and-boundaries",
+      "matched": true,
+      "top_slugs": [
+        "js-loops-and-boundaries",
+        "js-loops-and-boundaries",
+        "js-syntax-types-and-equality"
+      ],
+      "top_raw_similarity": 0.5106,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "javascript",
+      "query": "JavaScript array out of bounds arr[arr.length] returns undefined NaN",
+      "expected_slug": "js-arrays-and-indexing",
+      "matched": true,
+      "top_slugs": [
+        "js-arrays-and-indexing",
+        "js-arrays-and-indexing",
+        "js-functions-and-returns"
+      ],
+      "top_raw_similarity": 0.6514,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "javascript",
+      "query": "JavaScript function missing return evaluates undefined Node.js stack trace",
+      "expected_slug": "js-functions-and-returns",
+      "matched": true,
+      "top_slugs": [
+        "js-functions-and-returns",
+        "js-functions-and-returns",
+        "js-arrays-and-indexing"
+      ],
+      "top_raw_similarity": 0.7354,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "c",
+      "query": "GCC compiler missing semicolon stdio.h scanf address-of & SIGSEGV",
+      "expected_slug": "c-compiler-syntax-and-scanf",
+      "matched": true,
+      "top_slugs": [
+        "c-compiler-syntax-and-scanf",
+        "c-compiler-syntax-and-scanf",
+        "c-arrays-and-bounds"
+      ],
+      "top_raw_similarity": 0.6303,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "c",
+      "query": "C uninitialized local variable int sum garbage stack memory loop i <= b",
+      "expected_slug": "c-loops-and-initialization",
+      "matched": true,
+      "top_slugs": [
+        "c-loops-and-initialization",
+        "c-loops-and-initialization"
+      ],
+      "top_raw_similarity": 0.4958,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "c",
+      "query": "C array bounds checking arr[N] segmentation fault SIGSEGV integer division SIGFPE",
+      "expected_slug": "c-arrays-and-bounds",
+      "matched": true,
+      "top_slugs": [
+        "c-arrays-and-bounds",
+        "c-arrays-and-bounds",
+        "c-compiler-syntax-and-scanf"
+      ],
+      "top_raw_similarity": 0.5682,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "c",
+      "query": "C if assignment = vs == comparison non-void function return 0 in main",
+      "expected_slug": "c-functions-and-conditions",
+      "matched": true,
+      "top_slugs": [
+        "c-functions-and-conditions",
+        "c-compiler-syntax-and-scanf",
+        "c-compiler-syntax-and-scanf"
+      ],
+      "top_raw_similarity": 0.6993,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "cpp",
+      "query": "g++ compiler was not declared in this scope iostream std::cin while stream",
+      "expected_slug": "cpp-compiler-streams-and-types",
+      "matched": true,
+      "top_slugs": [
+        "cpp-compiler-streams-and-types",
+        "cpp-compiler-streams-and-types"
+      ],
+      "top_raw_similarity": 0.5906,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "cpp",
+      "query": "C++ loop size_t unsigned underflow v.size() - 1 long long total initialization",
+      "expected_slug": "cpp-loops-and-initialization",
+      "matched": true,
+      "top_slugs": [
+        "cpp-loops-and-initialization",
+        "cpp-loops-and-initialization",
+        "cpp-vectors-and-indexing"
+      ],
+      "top_raw_similarity": 0.5684,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "cpp",
+      "query": "C++ std::vector bounds v.at(i) out_of_range undefined behavior static_cast",
+      "expected_slug": "cpp-vectors-and-indexing",
+      "matched": true,
+      "top_slugs": [
+        "cpp-vectors-and-indexing",
+        "cpp-functions-conditions-and-logic",
+        "cpp-loops-and-initialization"
+      ],
+      "top_raw_similarity": 0.6397,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "cpp",
+      "query": "C++ non-void function missing return undefined behavior early return inside loop",
+      "expected_slug": "cpp-functions-conditions-and-logic",
+      "matched": true,
+      "top_slugs": [
+        "cpp-functions-conditions-and-logic",
+        "cpp-compiler-streams-and-types",
+        "cpp-loops-and-initialization"
+      ],
+      "top_raw_similarity": 0.7615,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "java",
+      "query": "Java javac public class Main Main.java public static void main import java.util",
+      "expected_slug": "java-javac-syntax-and-main-class",
+      "matched": true,
+      "top_slugs": [
+        "java-javac-syntax-and-main-class",
+        "java-javac-syntax-and-main-class",
+        "java-methods-returns-and-exceptions"
+      ],
+      "top_raw_similarity": 0.7104,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "java",
+      "query": "Java loop i < arr.length uninitialized local variable nums[0] maximum",
+      "expected_slug": "java-loops-and-initialization",
+      "matched": true,
+      "top_slugs": [
+        "java-loops-and-initialization",
+        "java-javac-syntax-and-main-class",
+        "java-methods-returns-and-exceptions"
+      ],
+      "top_raw_similarity": 0.5516,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "java",
+      "query": "Java ArrayIndexOutOfBoundsException String comparison s1.equals(s2) instead of ==",
+      "expected_slug": "java-arrays-indexing-and-strings",
+      "matched": true,
+      "top_slugs": [
+        "java-arrays-indexing-and-strings",
+        "java-javac-syntax-and-main-class",
+        "java-loops-and-initialization"
+      ],
+      "top_raw_similarity": 0.5899,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "java",
+      "query": "Java non-void method missing return NullPointerException ArithmeticException sc.hasNextInt",
+      "expected_slug": "java-methods-returns-and-exceptions",
+      "matched": true,
+      "top_slugs": [
+        "java-methods-returns-and-exceptions",
+        "java-loops-and-initialization",
+        "java-javac-syntax-and-main-class"
+      ],
+      "top_raw_similarity": 0.6602,
+      "rank": 1,
+      "passed": true
+    },
+    {
+      "language_slug": "ood",
       "query": "medieval french cathedral flying buttress limestone masonry architecture",
       "expected_slug": null,
       "matched": false,
@@ -194,6 +467,7 @@
       "passed": true
     },
     {
+      "language_slug": "ood",
       "query": "sourdough bread fermentation hydration starter recipe oven temperature",
       "expected_slug": null,
       "matched": false,
@@ -201,7 +475,24 @@
       "passed": true
     },
     {
+      "language_slug": "ood",
       "query": "photosynthesis chlorophyll thylakoid membrane calvin cycle botany",
+      "expected_slug": null,
+      "matched": false,
+      "top_slugs": [],
+      "passed": true
+    },
+    {
+      "language_slug": "ood",
+      "query": "world cup football offside rule goalkeeper penalty shootout",
+      "expected_slug": null,
+      "matched": false,
+      "top_slugs": [],
+      "passed": true
+    },
+    {
+      "language_slug": "ood",
+      "query": "espresso extraction portafilter grind size crema roast profile",
       "expected_slug": null,
       "matched": false,
       "top_slugs": [],
