@@ -452,7 +452,11 @@ class ClassroomRepository:
             return {}
         res = await self._session.execute(
             select(AssignmentSubmission)
-            .options(selectinload(AssignmentSubmission.grade))
+            .options(
+                selectinload(AssignmentSubmission.attempts),
+                selectinload(AssignmentSubmission.grade),
+                selectinload(AssignmentSubmission.feedback_entries),
+            )
             .where(
                 AssignmentSubmission.student_id == student_id,
                 AssignmentSubmission.assignment_id.in_(assignment_ids),
@@ -700,7 +704,7 @@ class ClassroomRepository:
         return [(str(row[0]), int(row[1])) for row in res.all()]
 
     async def aggregate_skill_gaps_for_students(
-        self, student_ids: list[UUID]
+        self, student_ids: list[UUID], *, limit: int | None = 8
     ) -> list[tuple[str, int, int]]:
         if not student_ids:
             return []
@@ -717,7 +721,8 @@ class ClassroomRepository:
             else:
                 b[0] += int(cnt)
         ranked = sorted(buckets.items(), key=lambda kv: (-kv[1][0], kv[0]))
-        return [(slug, vals[0], vals[1]) for slug, vals in ranked[:8]]
+        sliced = ranked if limit is None else ranked[:limit]
+        return [(slug, vals[0], vals[1]) for slug, vals in sliced]
 
     async def count_hints_and_transfers_for_students(
         self, student_ids: list[UUID]
