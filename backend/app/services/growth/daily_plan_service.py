@@ -45,6 +45,34 @@ from app.services.learning.lessons_service import (
 from app.services.learning.skill_graph import SkillGraphService
 
 
+def _strip_leading_prefixes(title: str, prefixes: tuple[str, ...]) -> str:
+    """Remove redundant leading label prefixes (case-insensitive) like 'Debug:' or 'Transfer:'."""
+    cleaned = title.strip()
+    changed = True
+    while changed and cleaned:
+        changed = False
+        lowered = cleaned.lower()
+        for pref in prefixes:
+            token = f"{pref.lower()}:"
+            if lowered.startswith(token):
+                cleaned = cleaned[len(token) :].strip()
+                changed = True
+                break
+    return cleaned or title.strip()
+
+
+def _format_task_title(
+    prefix: str,
+    raw_title: str,
+    *,
+    strip_prefixes: tuple[str, ...] = (),
+) -> str:
+    """Format a prefixed Daily Learning Plan title without duplicating prefixes."""
+    all_prefixes = (prefix, *strip_prefixes)
+    cleaned = _strip_leading_prefixes(raw_title, all_prefixes)
+    return f"{prefix}: {cleaned}"
+
+
 def _plan_to_view(plan: DailyLearningPlan) -> DailyLearningPlanView:
     ordered_tasks = sorted(plan.tasks, key=lambda t: t.task_order)
     task_views = [
@@ -355,8 +383,16 @@ class DailyPlanService:
                                 else "variables",
                                 "target_id": str(prob.id),
                                 "target_slug": prob.slug,
-                                "title_en": f"Transfer Check: {transfer_ver.title}",
-                                "title_bn": f"স্বাধীন ট্রান্সফার যাচাই: {transfer_ver.title}",
+                                "title_en": _format_task_title(
+                                    "Transfer Check",
+                                    transfer_ver.title,
+                                    strip_prefixes=("Transfer",),
+                                ),
+                                "title_bn": _format_task_title(
+                                    "স্বাধীন ট্রান্সফার যাচাই",
+                                    transfer_ver.title,
+                                    strip_prefixes=("Transfer Check", "Transfer"),
+                                ),
                                 "reason_en": (
                                     f"Unlocked after fixing '{ver.title}'. Solve with 0 AI hints "
                                     "to prove independent transfer on Judge0."
@@ -383,8 +419,16 @@ class DailyPlanService:
                         "skill_slug": "debugging_basics" if is_debug else "mixed_problem_solving",
                         "target_id": str(prob.id),
                         "target_slug": prob.slug,
-                        "title_en": f"{'Debug' if is_debug else 'Solve'}: {ver.title}",
-                        "title_bn": f"{'ডিবাগ অনুশীলন' if is_debug else 'সমস্যা সমাধান'}: {ver.title}",
+                        "title_en": _format_task_title(
+                            "Debug" if is_debug else "Solve",
+                            ver.title,
+                            strip_prefixes=("Debug", "Solve"),
+                        ),
+                        "title_bn": _format_task_title(
+                            "ডিবাগ অনুশীলন" if is_debug else "সমস্যা সমাধান",
+                            ver.title,
+                            strip_prefixes=("Debug", "Solve"),
+                        ),
                         "reason_en": (
                             f"Practice Judge0 debugging with ML diagnosis & Socratic AI Mentor on '{ver.title}'."
                             if is_debug
