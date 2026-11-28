@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type { TeacherDashboardView } from "@/types/classroom";
 
 interface TeacherDashboardClientProps {
@@ -273,7 +274,7 @@ export function TeacherDashboardClient({
                   </p>
                   <p className="mt-0.5 text-[11px] text-slate-500">
                     Due:{" "}
-                    {a.due_at ? new Date(a.due_at).toLocaleString() : "No due date"}
+                    {a.due_at ? formatUtcDateTime(a.due_at) : "No due date"}
                   </p>
                 </Link>
               ))}

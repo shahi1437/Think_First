@@ -16,6 +16,7 @@ import {
   fetchRetentionOverview,
   submitRetentionAttempt,
 } from "@/lib/api-client";
+import { formatUtcDateTime } from "@/lib/format-date";
 import { getLanguageDisplayName } from "@/lib/languages";
 import type {
   RetentionAttemptView,
@@ -437,7 +438,7 @@ export function RetentionClient({
                   <p className="mt-1 text-slate-600">{att.summary_message}</p>
                 </div>
                 <span className="text-[11px] text-slate-500">
-                  {new Date(att.created_at).toLocaleString()}
+                  {formatUtcDateTime(att.created_at)}
                 </span>
               </div>
             ))}

@@ -13,6 +13,7 @@ import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { DebuggingTimelinePanel } from "@/features/growth/debugging-timeline-panel";
 import { fetchLearningHistory } from "@/lib/api-client";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type {
   DebuggingTimelineResponseView,
   HistoryCategory,
@@ -396,7 +397,7 @@ export function LearningHistoryClient({
                 <div className="flex flex-col items-end gap-1.5 text-[11px] text-slate-500">
                   <span className="inline-flex items-center gap-1">
                     <Clock className="h-3 w-3" aria-hidden="true" />
-                    {new Date(item.occurred_at).toLocaleString()}
+                    {formatUtcDateTime(item.occurred_at)}
                   </span>
                   {item.href ? (
                     <Link

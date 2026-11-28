@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { computeLineDiff } from "@/lib/code-diff";
+import { formatUtcDateTime } from "@/lib/format-date";
 import { getLanguageDisplayName } from "@/lib/languages";
 import type {
   DebuggingJourneyOutcome,
@@ -236,8 +237,8 @@ export function DebuggingTimelinePanel({
               : null;
             const stepDiff =
               currentStep?.code_excerpt &&
-              prevCode &&
-              prevCode !== currentStep.code_excerpt
+                prevCode &&
+                prevCode !== currentStep.code_excerpt
                 ? computeLineDiff(prevCode, currentStep.code_excerpt)
                 : null;
             const outcome = OUTCOME_BADGE[journey.outcome_status];
@@ -279,11 +280,10 @@ export function DebuggingTimelinePanel({
                         onClick={() =>
                           setReplayMode(journey.problem_id, !isReplay)
                         }
-                        className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                          isReplay
-                            ? "border-teal-700 bg-teal-700 text-white"
-                            : "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100"
-                        }`}
+                        className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${isReplay
+                          ? "border-teal-700 bg-teal-700 text-white"
+                          : "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100"
+                          }`}
                       >
                         <Play className="h-3 w-3" aria-hidden="true" />
                         <span>{isReplay ? "List View" : "Replay Journey"}</span>
@@ -397,13 +397,12 @@ export function DebuggingTimelinePanel({
                               journey.steps.length,
                             )
                           }
-                          className={`rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums transition-colors ${
-                            idx === currentIdx
-                              ? "border-teal-700 bg-teal-700 text-white"
-                              : idx < currentIdx
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-                          }`}
+                          className={`rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums transition-colors ${idx === currentIdx
+                            ? "border-teal-700 bg-teal-700 text-white"
+                            : idx < currentIdx
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                            }`}
                         >
                           {idx + 1}. {STEP_META[st.step_kind].label}
                         </button>
@@ -420,7 +419,7 @@ export function DebuggingTimelinePanel({
                           {currentStep.title}
                         </h4>
                         <time className="text-[11px] text-slate-500 tabular-nums">
-                          {new Date(currentStep.occurred_at).toLocaleString()}
+                          {formatUtcDateTime(currentStep.occurred_at)}
                         </time>
                       </div>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
@@ -428,10 +427,7 @@ export function DebuggingTimelinePanel({
                       </p>
 
                       {stepDiff ? (
-                        <div
-                          data-testid="debugging-replay-diff"
-                          className="mt-3 space-y-1.5"
-                        >
+                        <div className="mt-3 space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 tabular-nums">
                             <span>Code diff vs. previous snapshot</span>
                             <span>
@@ -514,7 +510,7 @@ export function DebuggingTimelinePanel({
                                 </span>
                               </div>
                               <time className="text-[11px] text-slate-400 tabular-nums">
-                                {new Date(step.occurred_at).toLocaleString()}
+                                {formatUtcDateTime(step.occurred_at)}
                               </time>
                             </div>
                             <p className="mt-1 text-xs leading-relaxed text-slate-600">

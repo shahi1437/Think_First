@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { TeacherManagementSection } from "@/features/admin/teacher-management-section";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type {
   AdminDashboardOverview,
   AdminOperationsHealth,
@@ -513,7 +514,7 @@ export function AdminDashboardClient({
                   </p>
                 </div>
                 <span className="shrink-0 text-[10px] text-slate-500">
-                  {new Date(log.created_at).toLocaleString()}
+                  {formatUtcDateTime(log.created_at)}
                 </span>
               </div>
             ))}

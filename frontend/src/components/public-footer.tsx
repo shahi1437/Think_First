@@ -93,7 +93,7 @@ export function PublicFooter() {
 
       <div className="border-t border-slate-800/80">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-5 text-xs text-slate-400 sm:px-6">
-          <p>© {new Date().getFullYear()} Think_First · CodeMentor AI.</p>
+          <p>© {new Date().getUTCFullYear()} Think_First · CodeMentor AI.</p>
           <p>Python Programming · Error Diagnosis · Guided Learning</p>
         </div>
       </div>

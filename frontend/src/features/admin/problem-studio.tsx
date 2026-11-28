@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { formatUtcDateTime } from "@/lib/format-date";
 import {
   approveAdminProblem,
   archiveAdminProblem,
@@ -1243,7 +1244,7 @@ export function AdminProblemStudio({
                       {r.notes}
                     </span>
                     <span className="text-[11px] text-slate-500">
-                      {new Date(r.created_at).toLocaleString()}
+                      {formatUtcDateTime(r.created_at)}
                     </span>
                   </div>
                 ))}

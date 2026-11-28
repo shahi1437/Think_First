@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { formatUtcDate } from "@/lib/format-date";
 import {
   createAdminTeacherInvitation,
   fetchAdminTeacherManagement,
@@ -185,7 +186,7 @@ export function TeacherManagementSection({
       await refreshTeacherData();
       setLatestAcceptPath(res.accept_path ?? null);
       setFeedback(
-        `Resent and rotated invitation token for ${inv.email} (valid until ${new Date(res.invitation.expires_at).toLocaleDateString()}).`,
+        `Resent and rotated invitation token for ${inv.email} (valid until ${formatUtcDate(res.invitation.expires_at)}).`,
       );
     } catch (err) {
       setErrorMsg(
@@ -733,7 +734,7 @@ export function TeacherManagementSection({
 
                   <p className="text-[11px] text-slate-500">
                     <Clock className="mr-1 inline h-3 w-3" />
-                    Expires: {new Date(inv.expires_at).toLocaleDateString()} ·
+                    Expires: {formatUtcDate(inv.expires_at)} ·
                     Token: <code className="font-mono">{inv.token_preview}</code>
                     {inv.resend_count > 0
                       ? ` · Resent ${inv.resend_count}x`
