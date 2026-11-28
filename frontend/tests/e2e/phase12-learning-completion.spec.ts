@@ -7,8 +7,9 @@ const BACKEND_PYTHON = path.join(
   REPO_ROOT,
   "backend",
   ".venv",
-  "Scripts",
-  "python.exe",
+  ...(process.platform === "win32"
+    ? ["Scripts", "python.exe"]
+    : ["bin", "python"]),
 );
 const BOOTSTRAP_SCRIPT = path.join(
   REPO_ROOT,

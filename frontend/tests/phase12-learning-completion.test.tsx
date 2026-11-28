@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DebuggingTimelinePanel } from "@/features/growth/debugging-timeline-panel";
+import { LearningHistoryClient } from "@/features/growth/learning-history-client";
 import { PersonalizedLearningHub } from "@/features/learning/personalized-learning-hub";
 import { ProblemBankClient } from "@/features/problems/problem-bank-client";
 import { TeacherClassDetailClient } from "@/features/teacher/teacher-class-detail-client";
@@ -12,6 +13,7 @@ import type {
 } from "@/types/classroom";
 import type {
   DebuggingTimelineResponseView,
+  LearningHistoryResponseView,
   VerifiedLearningProgressView,
 } from "@/types/growth";
 import type { LearningDashboardView } from "@/types/learning";
@@ -19,6 +21,7 @@ import type { StudentProblemListItem } from "@/types/problems";
 
 const mockFetchProblems = vi.fn();
 const mockFetchTeacherStudentPerformance = vi.fn();
+const mockFetchLearningHistory = vi.fn();
 
 vi.mock("@/lib/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api-client")>();
@@ -27,6 +30,8 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
     fetchProblems: (...args: unknown[]) => mockFetchProblems(...args),
     fetchTeacherStudentPerformance: (...args: unknown[]) =>
       mockFetchTeacherStudentPerformance(...args),
+    fetchLearningHistory: (...args: unknown[]) =>
+      mockFetchLearningHistory(...args),
   };
 });
 
@@ -455,5 +460,50 @@ describe("Phase 12 Remaining Features Completion", () => {
     expect(
       screen.queryByTestId("teacher-student-drilldown"),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses initialHistory.limit for pagination, keeps offset on failure, and ignores stale responses", async () => {
+    const initialHistory: LearningHistoryResponseView = {
+      items: [
+        {
+          id: "ev-1",
+          category: "submission",
+          title_en: "Initial Event",
+          title_bn: "প্রাথমিক ইভেন্ট",
+          summary_en: "Accepted run",
+          summary_bn: "গৃহীত",
+          verdict_or_status: "accepted",
+          skill_slug: "loops",
+          href: "/student/problems/sum-range",
+          metadata: {},
+          occurred_at: "2026-11-27T10:00:00Z",
+        },
+      ],
+      total: 80,
+      limit: 50,
+      offset: 0,
+      category_counts: { submission: 80 },
+    };
+
+    mockFetchLearningHistory.mockRejectedValueOnce(new Error("Network offline"));
+
+    render(
+      <LearningHistoryClient
+        accessToken="tok-stu"
+        initialHistory={initialHistory}
+        initialLanguage="en"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => {
+      expect(mockFetchLearningHistory).toHaveBeenCalledWith(
+        "tok-stu",
+        expect.objectContaining({ limit: 50, offset: 50 }),
+      );
+    });
+    expect(await screen.findByText("Network offline")).toBeInTheDocument();
+    // Offset remains at 0 (Showing 1–1 of 80 events) because the fetch failed
+    expect(screen.getByText(/Showing 1–1 of 80 events/)).toBeInTheDocument();
   });
 });

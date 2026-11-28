@@ -9,7 +9,7 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { DebuggingTimelinePanel } from "@/features/growth/debugging-timeline-panel";
 import { fetchLearningHistory } from "@/lib/api-client";
@@ -79,11 +79,12 @@ export function LearningHistoryClient({
   >("");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [offset, setOffset] = useState<number>(0);
+  const [offset, setOffset] = useState<number>(initialHistory.offset ?? 0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestSeqRef = useRef(0);
   const isBn = lang === "bn";
-  const pageSize = 25;
+  const pageSize = initialHistory.limit > 0 ? initialHistory.limit : 25;
 
   async function runFilter(overrides?: {
     q?: string;
@@ -109,7 +110,7 @@ export function LearningHistoryClient({
       overrides?.date_to !== undefined ? overrides.date_to : dateTo;
     const nextOffset = overrides?.offset !== undefined ? overrides.offset : 0;
 
-    setOffset(nextOffset);
+    const seq = ++requestSeqRef.current;
     setError(null);
     setLoading(true);
     try {
@@ -123,13 +124,18 @@ export function LearningHistoryClient({
         limit: pageSize,
         offset: nextOffset,
       });
+      if (seq !== requestSeqRef.current) return;
       setHistory(updated);
+      setOffset(nextOffset);
     } catch (err) {
+      if (seq !== requestSeqRef.current) return;
       setError(
         err instanceof Error ? err.message : "Could not search learning history.",
       );
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }
 
