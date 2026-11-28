@@ -18,6 +18,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/api-client";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type { RoleName } from "@/types/identity";
 import type {
   NotificationCategory,
@@ -70,17 +71,8 @@ const CATEGORY_META: Record<
   },
 };
 
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const diffMin = Math.max(0, Math.floor((Date.now() - then) / 60000));
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
+function formatNotificationTimestamp(iso: string): string {
+  return formatUtcDateTime(iso);
 }
 
 export function NotificationCenter({
@@ -356,7 +348,7 @@ export function NotificationCenter({
                         ) : null}
                       </div>
                       <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">
-                        {formatRelativeTime(item.created_at)}
+                        {formatNotificationTimestamp(item.created_at)}
                       </span>
                     </div>
 

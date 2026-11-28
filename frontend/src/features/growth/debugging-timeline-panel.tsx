@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { computeLineDiff } from "@/lib/code-diff";
+import { formatUtcDateTime } from "@/lib/format-date";
 import { getLanguageDisplayName } from "@/lib/languages";
 import type {
   DebuggingJourneyOutcome,
@@ -420,7 +421,7 @@ export function DebuggingTimelinePanel({
                           {currentStep.title}
                         </h4>
                         <time className="text-[11px] text-slate-500 tabular-nums">
-                          {new Date(currentStep.occurred_at).toLocaleString()}
+                          {formatUtcDateTime(currentStep.occurred_at)}
                         </time>
                       </div>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
@@ -514,7 +515,7 @@ export function DebuggingTimelinePanel({
                                 </span>
                               </div>
                               <time className="text-[11px] text-slate-400 tabular-nums">
-                                {new Date(step.occurred_at).toLocaleString()}
+                                {formatUtcDateTime(step.occurred_at)}
                               </time>
                             </div>
                             <p className="mt-1 text-xs leading-relaxed text-slate-600">

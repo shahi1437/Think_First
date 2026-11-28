@@ -93,7 +93,7 @@ class WorkerTestCaseOutcomeInput(BaseModel):
     compile_output: str | None = Field(default=None, max_length=131072)
     runtime_ms: int | None = Field(default=None, ge=0, le=120000)
     memory_kb: int | None = Field(default=None, ge=0, le=8388608)
-    execution_provider: Literal["judge0"] = "judge0"
+    execution_provider: Literal["judge0", "piston"] = "judge0"
 
 
 class WorkerJobResultRequest(BaseModel):
@@ -118,6 +118,18 @@ class WorkerJobReleaseRequest(BaseModel):
     claim_token: UUID
     reason: str = Field(default="worker_shutdown", max_length=200)
     requeue: bool = True
+
+
+class WorkerJobRenewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_token: UUID
+
+
+class WorkerJobRenewResponse(BaseModel):
+    job_id: UUID
+    renewed: bool
+    lease_expires_at: datetime | None = None
 
 
 class WorkerOfflineRequest(BaseModel):

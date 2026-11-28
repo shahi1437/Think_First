@@ -17,6 +17,7 @@ import {
   gradeStudentSubmission,
   publishTeacherAssignment,
 } from "@/lib/api-client";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type {
   TeacherAssignmentDetailView,
   TeacherSubmissionReviewItem,
@@ -315,9 +316,7 @@ export function TeacherAssignmentReviewClient({
                     <p className="text-xs font-semibold text-slate-700">
                       Latest Submitted Source Code (Attempt #
                       {activeSub.latest_attempt.attempt_number} ·{" "}
-                      {new Date(
-                        activeSub.latest_attempt.submitted_at,
-                      ).toLocaleString()}
+                      {formatUtcDateTime(activeSub.latest_attempt.submitted_at)}
                       )
                     </p>
                     <pre className="max-h-72 overflow-auto rounded-xl bg-slate-950 p-3.5 font-mono text-xs text-slate-100">
@@ -429,7 +428,7 @@ export function TeacherAssignmentReviewClient({
                           <div className="flex items-center justify-between gap-2">
                             <Badge variant="indigo">{f.feedback_type}</Badge>
                             <span className="text-[10px] text-slate-500">
-                              {new Date(f.created_at).toLocaleString()}
+                              {formatUtcDateTime(f.created_at)}
                             </span>
                           </div>
                           <p className="mt-1 text-slate-800">{f.body_md}</p>

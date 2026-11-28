@@ -19,6 +19,11 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.rate_limit import InMemorySlidingWindowRateLimiter
 from app.schemas.common import ErrorResponse
+from app.services.execution.embedded_worker import (
+    EmbeddedExecutionWorker,
+    start_embedded_worker_if_enabled,
+    stop_embedded_worker,
+)
 
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -99,10 +104,12 @@ def _extract_client_ip(
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings: Settings = getattr(app.state, "settings", None) or get_settings()
+    embedded_worker: EmbeddedExecutionWorker | None = None
     if settings.app_env != "test":
         get_ml_classifier_service(settings).warmup()
+        embedded_worker = start_embedded_worker_if_enabled(settings=settings)
     prod_issues = settings.validate_production_readiness()
     if prod_issues:
         logger.warning("production_config_warnings", warnings=prod_issues)
@@ -111,10 +118,15 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         service=settings.app_name,
         version=settings.app_version,
         environment=settings.app_env,
+        embedded_worker_active=embedded_worker is not None,
     )
-    yield
-    await get_db_manager().dispose()
-    logger.info("application_shutdown")
+    try:
+        yield
+    finally:
+        if embedded_worker is not None:
+            await stop_embedded_worker(embedded_worker)
+        await get_db_manager().dispose()
+        logger.info("application_shutdown")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -130,6 +142,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs" if resolved_settings.app_env != "production" else None,
         redoc_url="/redoc" if resolved_settings.app_env != "production" else None,
     )
+    app.state.settings = resolved_settings
 
     app.add_middleware(
         CORSMiddleware,

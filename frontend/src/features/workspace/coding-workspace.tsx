@@ -36,6 +36,7 @@ import {
   saveWorkspaceRevision,
 } from "@/lib/api-client";
 import { computeLineDiff } from "@/lib/code-diff";
+import { formatUtcDateTime, formatUtcTime } from "@/lib/format-date";
 import type {
   MentorSessionDetail,
   TransferChallengeSummary,
@@ -193,7 +194,7 @@ export function CodingWorkspace({
     const rev = revisions.find((r) => r.id === compareRevisionId);
     if (!rev) return null;
     return {
-      label: `${rev.revision_type} (${new Date(rev.created_at).toLocaleTimeString()})`,
+      label: `${rev.revision_type} (${formatUtcTime(rev.created_at)})`,
       diff: computeLineDiff(rev.source_code, code),
     };
   }, [compareRevisionId, initialStarter, code, revisions]);
@@ -1409,7 +1410,7 @@ export function CodingWorkspace({
                               </span>
                             </Badge>
                             <span className="text-slate-400">
-                              {new Date(sub.created_at).toLocaleString()}
+                              {formatUtcDateTime(sub.created_at)}
                             </span>
                           </div>
                           <button
@@ -1530,7 +1531,7 @@ export function CodingWorkspace({
                               {rev.language_slug}
                             </span>
                             <span className="text-slate-400 tabular-nums">
-                              {new Date(rev.created_at).toLocaleString()}
+                              {formatUtcDateTime(rev.created_at)}
                             </span>
                           </div>
                           <div className="flex items-center gap-3">

@@ -24,6 +24,7 @@ import {
   getLanguageDisplayName,
   getMonacoLanguageForSlug,
 } from "@/lib/languages";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type { AssessmentMode, DiagnosticSessionView } from "@/types/learning";
 
 interface DiagnosticWorkspaceProps {
@@ -689,7 +690,7 @@ export function DiagnosticWorkspace({
                   ) : null}
                 </div>
                 <span className="text-slate-400">
-                  {new Date(item.started_at).toLocaleString()}
+                  {formatUtcDateTime(item.started_at)}
                 </span>
               </li>
             ))}

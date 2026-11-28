@@ -20,6 +20,7 @@ import {
   saveWorkspaceRevision,
   submitStudentAssignment,
 } from "@/lib/api-client";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type {
   AssignmentAttemptView,
   StudentAssignmentDetailView,
@@ -222,7 +223,7 @@ export function StudentAssignmentDetailClient({
               <Clock className="h-3.5 w-3.5" />
               Due:{" "}
               {detail.assignment.due_at
-                ? new Date(detail.assignment.due_at).toLocaleString()
+                ? formatUtcDateTime(detail.assignment.due_at)
                 : "No deadline"}
             </p>
             <p className="mt-0.5">
@@ -481,7 +482,7 @@ export function StudentAssignmentDetailClient({
                         ) : null}
                       </div>
                       <span className="text-[11px] text-slate-500">
-                        {new Date(att.submitted_at).toLocaleString()}
+                        {formatUtcDateTime(att.submitted_at)}
                       </span>
                     </div>
                   ))

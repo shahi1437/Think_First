@@ -15,6 +15,7 @@ import {
   inspectTeacherInvitation,
 } from "@/lib/api-client";
 import { isSupabaseConfigured } from "@/lib/env";
+import { formatUtcDateTime } from "@/lib/format-date";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TeacherInvitationInspectResponse } from "@/types/admin";
 
@@ -215,7 +216,7 @@ export function AcceptTeacherInviteClient({
             </p>
           ) : null}
           <p className="text-xs text-slate-600">
-            Expires: {new Date(invitation.expires_at).toLocaleString()}
+            Expires: {formatUtcDateTime(invitation.expires_at)}
           </p>
         </div>
       ) : null}

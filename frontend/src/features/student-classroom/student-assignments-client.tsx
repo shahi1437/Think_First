@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { fetchStudentAssignments } from "@/lib/api-client";
+import { formatUtcDateTime } from "@/lib/format-date";
 import type {
   StudentAssignmentFilter,
   StudentAssignmentListItemView,
@@ -155,7 +156,7 @@ export function StudentAssignmentsClient({
                   <span>
                     Due:{" "}
                     {a.due_at
-                      ? new Date(a.due_at).toLocaleString()
+                      ? formatUtcDateTime(a.due_at)
                       : "No deadline"}{" "}
                     · {a.problem_count} problem(s) ·{" "}
                     {a.allow_ai_hints

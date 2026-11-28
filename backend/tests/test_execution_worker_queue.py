@@ -323,3 +323,137 @@ def test_runner_ctl_detached_creation_flags_cross_platform(
     monkeypatch.setattr(runner_ctl.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
     monkeypatch.setattr(runner_ctl.subprocess, "DETACHED_PROCESS", 0x8, raising=False)
     assert runner_ctl._windows_detached_creation_flags() == (0x200 | 0x8)
+
+
+def test_embedded_worker_upstream_url_resolution_and_production_safety() -> None:
+    from app.services.execution.embedded_worker import resolve_embedded_upstream_settings
+
+    # Production worker_queue with default embedded Judge0 CE URL resolves safely to HTTPS
+    prod_default = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        database_url="postgresql+asyncpg://u:p@pooler.supabase.com:5432/postgres",
+        supabase_url="https://vsmrwfoqqjvomtjpypyv.supabase.co",
+        cors_origins=["https://think-first-pi.vercel.app"],
+        judge0_auth_mode="worker_queue",
+        execution_worker_token=_STRONG_WORKER_TOKEN,
+    )
+    resolved = resolve_embedded_upstream_settings(prod_default)
+    assert resolved is not None
+    assert resolved.judge0_base_url == "https://ce.judge0.com"
+    assert prod_default.validate_production_readiness() == []
+
+    # Production refuses loopback or plain HTTP embedded Judge0 URLs
+    unsafe_loopback = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        database_url="postgresql+asyncpg://u:p@pooler.supabase.com:5432/postgres",
+        supabase_url="https://vsmrwfoqqjvomtjpypyv.supabase.co",
+        cors_origins=["https://think-first-pi.vercel.app"],
+        judge0_auth_mode="worker_queue",
+        execution_worker_token=_STRONG_WORKER_TOKEN,
+        execution_embedded_judge0_base_url="http://127.0.0.1:2359",
+    )
+    assert resolve_embedded_upstream_settings(unsafe_loopback) is None
+    assert any(
+        "EXECUTION_EMBEDDED_JUDGE0_BASE_URL" in w
+        for w in unsafe_loopback.validate_production_readiness()
+    )
+
+    # Non-loopback primary JUDGE0_BASE_URL (e.g., RapidAPI or VPS) takes precedence
+    rapid_override = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        app_env="production",
+        judge0_auth_mode="worker_queue",
+        judge0_base_url="https://judge0-ce.p.rapidapi.com",
+        judge0_rapidapi_key="rapid-secret-demo",
+        execution_worker_token=_STRONG_WORKER_TOKEN,
+    )
+    resolved_rapid = resolve_embedded_upstream_settings(rapid_override)
+    assert resolved_rapid is not None
+    assert resolved_rapid.judge0_base_url == "https://judge0-ce.p.rapidapi.com"
+    assert resolved_rapid.judge0_auth_mode == "rapidapi"
+
+
+@pytest.mark.asyncio
+async def test_embedded_worker_prevents_duplicate_consumers_and_stops_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.execution import embedded_worker as ew
+
+    settings = _worker_settings(
+        execution_embedded_worker_enabled=True,
+        execution_embedded_judge0_base_url="https://ce.judge0.com",
+    )
+
+    # Stub probe/heartbeat/offline so no network or DB is touched in unit test
+    monkeypatch.setattr(
+        ew.EmbeddedExecutionWorker,
+        "probe_upstream",
+        AsyncMock(return_value=(True, "1.14.0")),
+    )
+    monkeypatch.setattr(
+        ew.EmbeddedExecutionWorker,
+        "_send_heartbeat",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        ew.EmbeddedExecutionWorker,
+        "_sweep_and_claim",
+        AsyncMock(return_value=None),
+    )
+    mark_offline = AsyncMock(return_value=None)
+    monkeypatch.setattr(ew.EmbeddedExecutionWorker, "_mark_offline", mark_offline)
+
+    w1 = ew.start_embedded_worker_if_enabled(settings=settings)
+    assert w1 is not None
+    assert w1.is_running
+    # Second call in the same process must return the exact same consumer instance
+    w2 = ew.start_embedded_worker_if_enabled(settings=settings)
+    assert w2 is w1
+    assert ew.get_active_embedded_worker() is w1
+
+    await ew.stop_embedded_worker(w1)
+    assert not w1.is_running
+    assert ew.get_active_embedded_worker() is None
+    mark_offline.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_worker_renew_endpoint_and_piston_provider_outcome_schema() -> None:
+    from app.schemas.execution_queue import WorkerJobRenewResponse, WorkerTestCaseOutcomeInput
+
+    outcome = WorkerTestCaseOutcomeInput(
+        ordinal=1,
+        status_id=3,
+        status_description="Accepted (Piston)",
+        verdict="accepted",
+        stdout="30\n",
+        execution_provider="piston",
+    )
+    assert outcome.execution_provider == "piston"
+
+    settings = _worker_settings()
+    app = create_app(settings=settings)
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    job_id = uuid4()
+    claim_token = uuid4()
+    fake_worker_svc = MagicMock()
+    fake_worker_svc.renew_job_lease = AsyncMock(
+        return_value=WorkerJobRenewResponse(
+            job_id=job_id,
+            renewed=True,
+            lease_expires_at=datetime.now(UTC) + timedelta(seconds=45),
+        )
+    )
+    app.dependency_overrides[get_execution_worker_service] = lambda: fake_worker_svc
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post(
+            f"/api/v1/internal/execution-worker/jobs/{job_id}/renew",
+            headers={"X-Worker-Token": _STRONG_WORKER_TOKEN, "X-Worker-Id": "win-shahi"},
+            json={"claim_token": str(claim_token)},
+        )
+    assert res.status_code == 200
+    assert res.json()["renewed"] is True

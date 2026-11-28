@@ -84,10 +84,10 @@ async def get_admin_operations_health(
                     lat = round((time.perf_counter() - j_start) * 1000, 2)
                     ok = active_workers > 0
                     detail = (
-                        f"Outbound local Judge0 worker online "
+                        f"Execution queue worker online "
                         f"(workers={active_workers}, queue={q_depth})."
                         if ok
-                        else f"Outbound local Judge0 worker offline (queue={q_depth})."
+                        else f"Execution queue worker offline (queue={q_depth})."
                     )
                     break
             except Exception as exc:

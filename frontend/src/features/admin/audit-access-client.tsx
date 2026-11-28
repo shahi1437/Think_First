@@ -16,6 +16,7 @@ import {
   revokeAdminUserRole,
 } from "@/lib/api-client";
 import type { AdminAuditLogItem, AdminUserSummary } from "@/types/admin";
+import { formatUtcDateTime } from "@/lib/format-date";
 
 interface AuditAccessClientProps {
   accessToken: string;
@@ -350,7 +351,7 @@ export function AuditAccessClient({
                   {log.action}
                 </span>
                 <span className="text-[11px] text-slate-500">
-                  {new Date(log.created_at).toLocaleString()}
+                  {formatUtcDateTime(log.created_at)}
                 </span>
               </div>
               <p className="mt-1 text-slate-700">
