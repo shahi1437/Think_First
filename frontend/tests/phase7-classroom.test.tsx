@@ -39,6 +39,7 @@ const mockDashboard: TeacherDashboardView = {
   pending_grading_count: 3,
   graded_submissions_count: 12,
   courses: mockCourses,
+  class_comparison: [],
   upcoming_deadlines: [
     {
       id: "asg-1",

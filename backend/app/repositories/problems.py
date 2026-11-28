@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.identity import AuditLog
+from app.models.learning import StudentSkillState
 from app.models.problems import (
     CodeRevision,
     ContentReview,
@@ -77,6 +78,31 @@ class ProblemRepository:
         return existing
 
     # --- Student Published Problem Queries ---
+
+    async def get_student_problem_progress_map(
+        self, student_id: UUID
+    ) -> dict[UUID, tuple[int, bool]]:
+        """Return {problem_id: (attempts_count, has_accepted_submission)} from real submissions."""
+        stmt = (
+            select(
+                Submission.problem_id,
+                func.count(Submission.id),
+                func.bool_or(Submission.verdict == "accepted"),
+            )
+            .where(Submission.student_id == student_id)
+            .group_by(Submission.problem_id)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return {row[0]: (int(row[1]), bool(row[2])) for row in rows}
+
+    async def list_student_weak_skills(self, student_id: UUID) -> set[str]:
+        """Return developing skill slugs for adaptive problem recommendations."""
+        stmt = select(StudentSkillState.skill_slug).where(
+            StudentSkillState.student_id == student_id,
+            StudentSkillState.state.in_(["unobserved", "introduced", "guided", "emerging"]),
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return {str(s) for s in rows}
 
     async def list_published_problems(
         self,

@@ -19,6 +19,7 @@ import { LanguageSelector } from "@/components/language-selector";
 import { Badge } from "@/components/ui/badge";
 import { DebuggingTimelinePanel } from "@/features/growth/debugging-timeline-panel";
 import { VerifiedProgressPanel } from "@/features/growth/verified-progress-panel";
+import { PersonalizedLearningHub } from "@/features/learning/personalized-learning-hub";
 import { SkillGraphPanel } from "@/features/learning/skill-graph-panel";
 import { selectLearningTrack } from "@/lib/api-client";
 import { getLanguageDisplayName } from "@/lib/languages";
@@ -502,6 +503,15 @@ export function LearningDashboardClient({
       {verifiedProgress ? (
         <VerifiedProgressPanel progress={verifiedProgress} language={lang} />
       ) : null}
+
+      {/* Phase 9: Unified 5-Question Personalized Learning Coach */}
+      <PersonalizedLearningHub
+        dashboard={initialDashboard}
+        verifiedProgress={verifiedProgress}
+        retentionSummary={retentionSummary}
+        dailyPlanSummary={dailyPlanSummary}
+        language={lang}
+      />
 
       {/* Phase 11 Feature 1 Preview: AI Debugging Timeline */}
       {debuggingTimeline ? (

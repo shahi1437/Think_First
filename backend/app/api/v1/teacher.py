@@ -29,6 +29,7 @@ from app.schemas.classroom import (
     TeacherAssignmentDetailView,
     TeacherCourseDetailView,
     TeacherDashboardView,
+    TeacherStudentPerformanceView,
     TeacherSubmissionReviewItem,
 )
 from app.services.classroom.analytics_service import TeacherAnalyticsService
@@ -81,6 +82,22 @@ async def get_teacher_class_detail(
 ) -> TeacherCourseDetailView:
     """Inspect class details, invitations, roster, assignments, and class-level analytics."""
     return await service.get_teacher_course_detail(teacher=teacher, course_id=course_id)
+
+
+@teacher_classroom_router.get(
+    "/classes/{course_id}/students/{student_id}/performance",
+    response_model=TeacherStudentPerformanceView,
+)
+async def get_teacher_student_performance(
+    course_id: UUID,
+    student_id: UUID,
+    teacher: UserRecord = Depends(_TEACHER_ROLES),
+    service: TeacherAnalyticsService = Depends(get_teacher_analytics_service),
+) -> TeacherStudentPerformanceView:
+    """Drill down from class analytics into an individual enrolled student's performance."""
+    return await service.get_student_performance_in_course(
+        teacher=teacher, course_id=course_id, student_id=student_id
+    )
 
 
 @teacher_classroom_router.patch("/classes/{course_id}", response_model=CourseSummaryView)

@@ -238,6 +238,24 @@ class OperationalCheckStatus(BaseModel):
     detail: str
 
 
+class AdminExecutionFailureStats(BaseModel):
+    window_days: int = 7
+    total_executions: int = 0
+    accepted_executions: int = 0
+    failed_executions: int = 0
+    failure_rate_pct: float | None = None
+    verdict_counts: dict[str, int] = Field(default_factory=dict)
+    failures_by_language: dict[str, int] = Field(default_factory=dict)
+
+
+class AdminUserActivityOverview(BaseModel):
+    active_learners_24h: int = 0
+    active_learners_7d: int = 0
+    submissions_24h: int = 0
+    diagnoses_24h: int = 0
+    notifications_total: int = 0
+
+
 class AdminOperationsHealthResponse(BaseModel):
     overall_status: Literal["ok", "degraded"]
     environment: str
@@ -246,3 +264,5 @@ class AdminOperationsHealthResponse(BaseModel):
     llm_provider: str
     llm_model: str
     checks: list[OperationalCheckStatus] = Field(default_factory=list)
+    execution_stats: AdminExecutionFailureStats | None = None
+    activity_overview: AdminUserActivityOverview | None = None

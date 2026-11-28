@@ -8,6 +8,7 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.problems import (
     Difficulty,
     LanguageItem,
+    ProblemCompletionStatus,
     ProblemMode,
     StudentProblemDetail,
     StudentProblemListItem,
@@ -36,12 +37,14 @@ async def list_problems(
     topic: str | None = Query(default=None, max_length=64),
     track: TrackSlug | None = Query(default=None),
     language: str | None = Query(default=None, max_length=32),
+    completion_status: ProblemCompletionStatus | None = Query(default=None),
+    recommended_only: bool = Query(default=False),
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
-    _user: UserRecord = Depends(get_current_user),
+    user: UserRecord = Depends(get_current_user),
     service: ProblemService = Depends(get_problem_service),
 ) -> PaginatedResponse[StudentProblemListItem]:
-    """Search and filter published programming & debugging problems."""
+    """Search and filter published programming & debugging problems with real adaptive signals."""
     return await service.list_published_problems(
         search=search,
         difficulty=difficulty,
@@ -49,6 +52,9 @@ async def list_problems(
         topic=topic,
         track=track,
         language=language,
+        student_id=user.id,
+        completion_status=completion_status,
+        recommended_only=recommended_only,
         limit=limit,
         offset=offset,
     )

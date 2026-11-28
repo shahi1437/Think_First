@@ -5,21 +5,26 @@ import {
   Bug,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Code2,
   ExternalLink,
   Flag,
   Lightbulb,
+  Play,
   PlayCircle,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { computeLineDiff } from "@/lib/code-diff";
 import { getLanguageDisplayName } from "@/lib/languages";
 import type {
   DebuggingJourneyOutcome,
   DebuggingStepKind,
   DebuggingTimelineResponseView,
+  DebuggingTimelineStepView,
 } from "@/types/growth";
 
 interface DebuggingTimelinePanelProps {
@@ -91,6 +96,18 @@ const OUTCOME_BADGE: Record<
   },
 };
 
+function findPreviousCode(
+  steps: DebuggingTimelineStepView[],
+  currentIndex: number,
+): string | null {
+  for (let i = currentIndex - 1; i >= 0; i -= 1) {
+    if (steps[i]?.code_excerpt) {
+      return steps[i].code_excerpt;
+    }
+  }
+  return null;
+}
+
 export function DebuggingTimelinePanel({
   timeline,
   language = "en",
@@ -101,6 +118,12 @@ export function DebuggingTimelinePanel({
     timeline.journeys.length > 0
       ? { [timeline.journeys[0].problem_id]: true }
       : {},
+  );
+  const [replayModeById, setReplayModeById] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [replayStepById, setReplayStepById] = useState<Record<string, number>>(
+    {},
   );
 
   const verifiedTransferCount = timeline.journeys.filter(
@@ -114,6 +137,20 @@ export function DebuggingTimelinePanel({
     setExpandedIds((prev) => ({ ...prev, [problemId]: !prev[problemId] }));
   }
 
+  function setReplayMode(problemId: string, enabled: boolean) {
+    setExpandedIds((prev) => ({ ...prev, [problemId]: true }));
+    setReplayModeById((prev) => ({ ...prev, [problemId]: enabled }));
+    setReplayStepById((prev) => ({
+      ...prev,
+      [problemId]: prev[problemId] ?? 0,
+    }));
+  }
+
+  function setStepIndex(problemId: string, idx: number, maxLen: number) {
+    const clamped = Math.max(0, Math.min(maxLen - 1, idx));
+    setReplayStepById((prev) => ({ ...prev, [problemId]: clamped }));
+  }
+
   return (
     <section
       aria-label="AI Debugging Timeline"
@@ -124,8 +161,8 @@ export function DebuggingTimelinePanel({
         <div>
           <p className="text-xs font-semibold text-teal-700">
             {isBn
-              ? "AI ডিবাগিং যাত্রা"
-              : "AI Debugging Timeline · Real Execution Trail"}
+              ? "AI ডিবাগিং যাত্রা ও রিপ্লে"
+              : "AI Debugging Timeline & Chronological Replay"}
           </p>
           <h2 className="mt-1 text-lg font-bold tracking-tight text-slate-950">
             {isBn
@@ -188,7 +225,23 @@ export function DebuggingTimelinePanel({
         <div className="mt-5 space-y-4">
           {visibleJourneys.map((journey) => {
             const expanded = Boolean(expandedIds[journey.problem_id]);
+            const isReplay = Boolean(replayModeById[journey.problem_id]);
+            const currentIdx = Math.min(
+              replayStepById[journey.problem_id] ?? 0,
+              Math.max(0, journey.steps.length - 1),
+            );
+            const currentStep = journey.steps[currentIdx];
+            const prevCode = currentStep?.code_excerpt
+              ? findPreviousCode(journey.steps, currentIdx)
+              : null;
+            const stepDiff =
+              currentStep?.code_excerpt &&
+              prevCode &&
+              prevCode !== currentStep.code_excerpt
+                ? computeLineDiff(prevCode, currentStep.code_excerpt)
+                : null;
             const outcome = OUTCOME_BADGE[journey.outcome_status];
+
             return (
               <article
                 key={journey.problem_id}
@@ -217,7 +270,25 @@ export function DebuggingTimelinePanel({
                     </h3>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {journey.steps.length > 1 ? (
+                      <button
+                        type="button"
+                        data-testid="debugging-replay-toggle"
+                        aria-pressed={isReplay}
+                        onClick={() =>
+                          setReplayMode(journey.problem_id, !isReplay)
+                        }
+                        className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          isReplay
+                            ? "border-teal-700 bg-teal-700 text-white"
+                            : "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100"
+                        }`}
+                      >
+                        <Play className="h-3 w-3" aria-hidden="true" />
+                        <span>{isReplay ? "List View" : "Replay Journey"}</span>
+                      </button>
+                    ) : null}
                     <Link
                       href={journey.href}
                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50"
@@ -231,7 +302,11 @@ export function DebuggingTimelinePanel({
                       aria-expanded={expanded}
                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
                     >
-                      <span>{expanded ? "Hide steps" : `View ${journey.steps.length} steps`}</span>
+                      <span>
+                        {expanded
+                          ? "Hide steps"
+                          : `View ${journey.steps.length} steps`}
+                      </span>
                       {expanded ? (
                         <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
                       ) : (
@@ -244,7 +319,163 @@ export function DebuggingTimelinePanel({
                   </div>
                 </div>
 
-                {expanded ? (
+                {expanded && isReplay && currentStep ? (
+                  <div
+                    data-testid="debugging-replay-stage"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowLeft") {
+                        setStepIndex(
+                          journey.problem_id,
+                          currentIdx - 1,
+                          journey.steps.length,
+                        );
+                      } else if (e.key === "ArrowRight") {
+                        setStepIndex(
+                          journey.problem_id,
+                          currentIdx + 1,
+                          journey.steps.length,
+                        );
+                      }
+                    }}
+                    className="space-y-4 border-t border-slate-200 bg-white p-4 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600/30"
+                  >
+                    {/* Step Scrubber Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-700 tabular-nums">
+                        Step {currentIdx + 1} of {journey.steps.length} ·{" "}
+                        {STEP_META[currentStep.step_kind].label}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={currentIdx === 0}
+                          onClick={() =>
+                            setStepIndex(
+                              journey.problem_id,
+                              currentIdx - 1,
+                              journey.steps.length,
+                            )
+                          }
+                          aria-label="Previous debugging step"
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                          Prev
+                        </button>
+                        <button
+                          type="button"
+                          disabled={currentIdx >= journey.steps.length - 1}
+                          onClick={() =>
+                            setStepIndex(
+                              journey.problem_id,
+                              currentIdx + 1,
+                              journey.steps.length,
+                            )
+                          }
+                          aria-label="Next debugging step"
+                          className="inline-flex items-center gap-1 rounded-md bg-[#0b1221] px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+                        >
+                          Next
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Clickable Chronological Step Pills */}
+                    <div className="flex flex-wrap gap-1.5" role="tablist">
+                      {journey.steps.map((st, idx) => (
+                        <button
+                          key={st.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={idx === currentIdx}
+                          onClick={() =>
+                            setStepIndex(
+                              journey.problem_id,
+                              idx,
+                              journey.steps.length,
+                            )
+                          }
+                          className={`rounded-md border px-2 py-1 text-[11px] font-medium tabular-nums transition-colors ${
+                            idx === currentIdx
+                              ? "border-teal-700 bg-teal-700 text-white"
+                              : idx < currentIdx
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {idx + 1}. {STEP_META[st.step_kind].label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Active Step Detail Card */}
+                    <div
+                      aria-live="polite"
+                      className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-sm font-bold text-slate-950">
+                          {currentStep.title}
+                        </h4>
+                        <time className="text-[11px] text-slate-500 tabular-nums">
+                          {new Date(currentStep.occurred_at).toLocaleString()}
+                        </time>
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
+                        {currentStep.detail}
+                      </p>
+
+                      {stepDiff ? (
+                        <div
+                          data-testid="debugging-replay-diff"
+                          className="mt-3 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 tabular-nums">
+                            <span>Code diff vs. previous snapshot</span>
+                            <span>
+                              <span className="text-emerald-700">
+                                +{stepDiff.addedCount}
+                              </span>{" "}
+                              /{" "}
+                              <span className="text-rose-700">
+                                -{stepDiff.removedCount}
+                              </span>
+                            </span>
+                          </div>
+                          <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed">
+                            {stepDiff.lines.map((ln, lIdx) => (
+                              <div
+                                key={`${ln.kind}-${lIdx}`}
+                                className={
+                                  ln.kind === "added"
+                                    ? "bg-emerald-950/70 text-emerald-200"
+                                    : ln.kind === "removed"
+                                      ? "bg-rose-950/70 text-rose-200"
+                                      : "text-slate-300"
+                                }
+                              >
+                                <span className="mr-2 inline-block w-3 select-none opacity-70">
+                                  {ln.kind === "added"
+                                    ? "+"
+                                    : ln.kind === "removed"
+                                      ? "-"
+                                      : " "}
+                                </span>
+                                {ln.text}
+                              </div>
+                            ))}
+                          </pre>
+                        </div>
+                      ) : currentStep.code_excerpt ? (
+                        <pre className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-slate-950 px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-100">
+                          <code>{currentStep.code_excerpt}</code>
+                        </pre>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : expanded ? (
                   <ol className="space-y-3 border-t border-slate-200 px-4 py-4">
                     {journey.steps.map((step, idx) => {
                       const meta = STEP_META[step.step_kind];

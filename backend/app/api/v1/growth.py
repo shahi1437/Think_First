@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -34,7 +35,7 @@ from app.schemas.learning import LanguageSlug
 from app.services.growth.daily_plan_service import DailyPlanService
 from app.services.growth.debugging_timeline_service import DebuggingTimelineService
 from app.services.growth.dna_service import LearningDnaService
-from app.services.growth.history_service import LearningHistoryService
+from app.services.growth.history_service import HistoryStatusFilter, LearningHistoryService
 from app.services.growth.retention_service import RetentionVerificationService
 from app.services.growth.verified_progress_service import VerifiedProgressService
 
@@ -101,6 +102,10 @@ async def get_learning_history(
     q: str | None = Query(default=None, max_length=120),
     category: HistoryCategory | None = Query(default=None),
     language: LanguageSlug | None = Query(default=None),
+    status_filter: HistoryStatusFilter | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    problem_q: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=40, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     user: UserRecord = Depends(_STUDENT_ROLES),
@@ -112,6 +117,10 @@ async def get_learning_history(
         q=q,
         category=category,
         language_slug=language,
+        status_filter=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        problem_q=problem_q,
         limit=limit,
         offset=offset,
     )

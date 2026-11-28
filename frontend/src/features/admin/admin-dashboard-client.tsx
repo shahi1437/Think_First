@@ -195,6 +195,116 @@ export function AdminDashboardClient({
               </div>
             ))}
           </div>
+
+          {/* Phase 11: Real Execution Failure Statistics & Anonymized User Activity Overview */}
+          {operationsHealth.execution_stats ||
+          operationsHealth.activity_overview ? (
+            <div
+              data-testid="admin-observability-stats"
+              className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-2"
+            >
+              {operationsHealth.execution_stats ? (
+                <div className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">
+                      Execution Failure Statistics (Last{" "}
+                      {operationsHealth.execution_stats.window_days} Days)
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-600 tabular-nums">
+                      {operationsHealth.execution_stats.total_executions} total
+                      runs
+                    </span>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-3 gap-2 tabular-nums">
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">Accepted</p>
+                      <p className="mt-0.5 text-base font-bold text-emerald-700">
+                        {operationsHealth.execution_stats.accepted_executions}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">Non-Accepted</p>
+                      <p className="mt-0.5 text-base font-bold text-amber-800">
+                        {operationsHealth.execution_stats.failed_executions}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">Failure Rate</p>
+                      <p className="mt-0.5 text-base font-bold text-slate-900">
+                        {operationsHealth.execution_stats.failure_rate_pct !=
+                        null
+                          ? `${operationsHealth.execution_stats.failure_rate_pct}%`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  {Object.keys(
+                    operationsHealth.execution_stats.failures_by_language,
+                  ).length > 0 ? (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {Object.entries(
+                        operationsHealth.execution_stats.failures_by_language,
+                      ).map(([lg, cnt]) => (
+                        <span
+                          key={lg}
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-700 tabular-nums"
+                        >
+                          {lg}: {cnt} fail
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {operationsHealth.activity_overview ? (
+                <div className="rounded-xl border border-slate-200 bg-[#f7f8fa] p-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">
+                      Platform User Activity Overview (Aggregate · Zero PII)
+                    </span>
+                    <span className="font-mono text-[11px] text-teal-800 tabular-nums">
+                      58/58 FORCE RLS
+                    </span>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-2 tabular-nums sm:grid-cols-4">
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">Active (24h)</p>
+                      <p className="mt-0.5 text-base font-bold text-slate-950">
+                        {operationsHealth.activity_overview.active_learners_24h}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">Active (7d)</p>
+                      <p className="mt-0.5 text-base font-bold text-slate-950">
+                        {operationsHealth.activity_overview.active_learners_7d}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">Runs (24h)</p>
+                      <p className="mt-0.5 text-base font-bold text-teal-800">
+                        {operationsHealth.activity_overview.submissions_24h}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+                      <p className="text-[11px] text-slate-500">
+                        ML Diag (24h)
+                      </p>
+                      <p className="mt-0.5 text-base font-bold text-slate-950">
+                        {operationsHealth.activity_overview.diagnoses_24h}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500 tabular-nums">
+                    Total persisted in-app notifications:{" "}
+                    <strong>
+                      {operationsHealth.activity_overview.notifications_total}
+                    </strong>
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

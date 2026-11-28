@@ -15,6 +15,9 @@ Aggregates real persisted database events across Phases 3-6:
 
 from __future__ import annotations
 
+from datetime import date
+from typing import Literal
+
 from app.repositories.growth import GrowthRepository
 from app.repositories.identity import UserRecord
 from app.schemas.growth import (
@@ -22,6 +25,25 @@ from app.schemas.growth import (
     LearningHistoryItemView,
     LearningHistoryResponseView,
 )
+
+HistoryStatusFilter = Literal["accepted", "failed", "completed", "in_progress"]
+_ACCEPTED_STATUSES = frozenset({"accepted", "verified_independent", "retained_verified"})
+_FAILED_STATUSES = frozenset(
+    {
+        "wrong_answer",
+        "compilation_error",
+        "runtime_error",
+        "time_limit_exceeded",
+        "memory_limit_exceeded",
+        "internal_error",
+        "failed",
+        "needs_review",
+    }
+)
+_COMPLETED_STATUSES = frozenset(
+    {"completed", "accepted", "verified_independent", "retained_verified", "retained"}
+)
+_IN_PROGRESS_STATUSES = frozenset({"in_progress", "pending", "introduced", "guided", "emerging"})
 
 
 class LearningHistoryService:
@@ -37,6 +59,10 @@ class LearningHistoryService:
         q: str | None = None,
         category: HistoryCategory | None = None,
         language_slug: str | None = None,
+        status_filter: HistoryStatusFilter | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        problem_q: str | None = None,
         limit: int = 40,
         offset: int = 0,
     ) -> LearningHistoryResponseView:
@@ -317,15 +343,84 @@ class LearningHistoryService:
                 )
             )
 
+        # 11. Persisted ML Error Diagnoses (complete AI diagnosis history)
+        if hasattr(self._growth_repo, "list_student_diagnoses"):
+            diagnoses = await self._growth_repo.list_student_diagnoses(student_id=user.id, limit=60)
+            for diag in diagnoses:
+                conf_pct = round(float(diag.confidence) * 100.0, 1)
+                events.append(
+                    LearningHistoryItemView(
+                        id=f"diagnosis:{diag.id}",
+                        category="mentor",
+                        title_en=f"ML Error Diagnosis: {diag.predicted_error_code.replace('_', ' ')}",
+                        title_bn=f"ML ত্রুটি বিশ্লেষণ: {diag.predicted_error_code.replace('_', ' ')}",
+                        summary_en=(
+                            f"Model {diag.model_version_tag} classified error as "
+                            f"{diag.predicted_error_code} ({conf_pct}% confidence)."
+                        ),
+                        summary_bn=(
+                            f"মডেল {diag.model_version_tag} ত্রুটি শনাক্ত করেছে: "
+                            f"{diag.predicted_error_code} ({conf_pct}% নিশ্চয়তা)।"
+                        ),
+                        verdict_or_status=diag.predicted_error_code,
+                        skill_slug=None,
+                        href="/student/history",
+                        metadata={
+                            "event_subtype": "ml_diagnosis",
+                            "confidence": round(float(diag.confidence), 4),
+                            "model_version": diag.model_version_tag,
+                        },
+                        occurred_at=diag.created_at,
+                    )
+                )
+
         # Compute category counts before filtering by category
         category_counts: dict[str, int] = {}
         for ev in events:
             category_counts[ev.category] = category_counts.get(ev.category, 0) + 1
 
-        # Apply search & category filters
+        # Apply search, category, status, problem, and date range filters
         filtered = events
         if category is not None:
             filtered = [ev for ev in filtered if ev.category == category]
+        if status_filter is not None:
+            if status_filter == "accepted":
+                filtered = [
+                    ev
+                    for ev in filtered
+                    if (ev.verdict_or_status or "").lower() in _ACCEPTED_STATUSES
+                ]
+            elif status_filter == "failed":
+                filtered = [
+                    ev
+                    for ev in filtered
+                    if (ev.verdict_or_status or "").lower() in _FAILED_STATUSES
+                ]
+            elif status_filter == "completed":
+                filtered = [
+                    ev
+                    for ev in filtered
+                    if (ev.verdict_or_status or "").lower() in _COMPLETED_STATUSES
+                ]
+            elif status_filter == "in_progress":
+                filtered = [
+                    ev
+                    for ev in filtered
+                    if (ev.verdict_or_status or "").lower() in _IN_PROGRESS_STATUSES
+                ]
+        if date_from is not None:
+            filtered = [ev for ev in filtered if ev.occurred_at.date() >= date_from]
+        if date_to is not None:
+            filtered = [ev for ev in filtered if ev.occurred_at.date() <= date_to]
+        if problem_q and problem_q.strip():
+            p_needle = problem_q.strip().lower()
+            filtered = [
+                ev
+                for ev in filtered
+                if p_needle in ev.title_en.lower()
+                or p_needle in str(ev.metadata.get("problem_slug", "")).lower()
+                or (ev.skill_slug and p_needle in ev.skill_slug.lower())
+            ]
         if q and q.strip():
             needle = q.strip().lower()
             filtered = [

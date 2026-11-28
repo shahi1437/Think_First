@@ -73,18 +73,55 @@ export function LearningHistoryClient({
   const [selectedCategory, setSelectedCategory] = useState<
     HistoryCategory | ""
   >("");
+  const [languageFilter, setLanguageFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<
+    "accepted" | "failed" | "completed" | "in_progress" | ""
+  >("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [offset, setOffset] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isBn = lang === "bn";
+  const pageSize = 25;
 
-  async function runFilter(nextQ: string, nextCat: HistoryCategory | "") {
+  async function runFilter(overrides?: {
+    q?: string;
+    category?: HistoryCategory | "";
+    language?: string;
+    status_filter?: "accepted" | "failed" | "completed" | "in_progress" | "";
+    date_from?: string;
+    date_to?: string;
+    offset?: number;
+  }) {
+    const nextQ = overrides?.q !== undefined ? overrides.q : query;
+    const nextCat =
+      overrides?.category !== undefined ? overrides.category : selectedCategory;
+    const nextLang =
+      overrides?.language !== undefined ? overrides.language : languageFilter;
+    const nextStatus =
+      overrides?.status_filter !== undefined
+        ? overrides.status_filter
+        : statusFilter;
+    const nextFrom =
+      overrides?.date_from !== undefined ? overrides.date_from : dateFrom;
+    const nextTo =
+      overrides?.date_to !== undefined ? overrides.date_to : dateTo;
+    const nextOffset = overrides?.offset !== undefined ? overrides.offset : 0;
+
+    setOffset(nextOffset);
     setError(null);
     setLoading(true);
     try {
       const updated = await fetchLearningHistory(accessToken, {
         q: nextQ,
         category: nextCat,
-        limit: 50,
+        language: nextLang || undefined,
+        status_filter: nextStatus || undefined,
+        date_from: nextFrom || undefined,
+        date_to: nextTo || undefined,
+        limit: pageSize,
+        offset: nextOffset,
       });
       setHistory(updated);
     } catch (err) {
@@ -149,44 +186,113 @@ export function LearningHistoryClient({
           </div>
         </div>
 
-        {/* Search Form */}
+        {/* Search & Multi-Facet Filter Form */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void runFilter(query, selectedCategory);
+            void runFilter({ offset: 0 });
           }}
-          className="mt-5 flex flex-wrap gap-2"
+          className="mt-5 space-y-3"
         >
-          <div className="relative min-w-0 flex-1">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              aria-hidden="true"
-            />
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label={isBn ? "ইতিহাস অনুসন্ধান" : "Search learning history"}
+                placeholder={
+                  isBn
+                    ? "দক্ষতা, লেসন, প্রবলেম, Judge0 বা ফলাফল দিয়ে খুঁজুন..."
+                    : "Search by problem, skill, lesson, verdict, or ML diagnosis..."
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0b1221] px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Search className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>{isBn ? "খুঁজুন" : "Search"}</span>
+            </button>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-4">
+            <select
+              aria-label="Filter history by language"
+              data-testid="history-language-filter"
+              value={languageFilter}
+              onChange={(e) => {
+                setLanguageFilter(e.target.value);
+                void runFilter({ language: e.target.value, offset: 0 });
+              }}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
+            >
+              <option value="">All languages</option>
+              <option value="python">Python 3</option>
+              <option value="javascript">JavaScript</option>
+              <option value="c">C</option>
+              <option value="cpp">C++</option>
+              <option value="java">Java</option>
+            </select>
+
+            <select
+              aria-label="Filter history by status"
+              data-testid="history-status-filter"
+              value={statusFilter}
+              onChange={(e) => {
+                const v = e.target.value as
+                  | "accepted"
+                  | "failed"
+                  | "completed"
+                  | "in_progress"
+                  | "";
+                setStatusFilter(v);
+                void runFilter({ status_filter: v, offset: 0 });
+              }}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
+            >
+              <option value="">All statuses</option>
+              <option value="accepted">Accepted / Verified</option>
+              <option value="failed">Failed / Wrong Answer</option>
+              <option value="completed">Completed</option>
+              <option value="in_progress">In Progress</option>
+            </select>
+
             <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label={isBn ? "ইতিহাস অনুসন্ধান" : "Search learning history"}
-              placeholder={
-                isBn
-                  ? "দক্ষতা, লেসন, Judge0 বা ফলাফল দিয়ে খুঁজুন..."
-                  : "Search by skill, lesson, verdict, mentor turn, or retention..."
-              }
-              className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              type="date"
+              aria-label="Filter history from date"
+              data-testid="history-date-from"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                void runFilter({ date_from: e.target.value, offset: 0 });
+              }}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-teal-600 focus:outline-none"
+            />
+
+            <input
+              type="date"
+              aria-label="Filter history to date"
+              data-testid="history-date-to"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                void runFilter({ date_to: e.target.value, offset: 0 });
+              }}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-teal-600 focus:outline-none"
             />
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-60"
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Search className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            <span>{isBn ? "খুঁজুন" : "Search"}</span>
-          </button>
         </form>
 
         {/* Category Filter Chips */}
@@ -211,9 +317,9 @@ export function LearningHistoryClient({
                 aria-pressed={active}
                 onClick={() => {
                   setSelectedCategory(cat.value);
-                  void runFilter(query, cat.value);
+                  void runFilter({ category: cat.value, offset: 0 });
                 }}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold tabular-nums transition ${
                   active
                     ? "bg-slate-900 text-white"
                     : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
@@ -300,6 +406,37 @@ export function LearningHistoryClient({
             </article>
           ))
         )}
+
+        {/* Pagination Controls */}
+        {history.total > pageSize ? (
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs">
+            <span className="text-slate-600 tabular-nums">
+              Showing {offset + 1}–
+              {Math.min(offset + history.items.length, history.total)} of{" "}
+              {history.total} events
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={offset === 0 || loading}
+                onClick={() =>
+                  void runFilter({ offset: Math.max(0, offset - pageSize) })
+                }
+                className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={offset + pageSize >= history.total || loading}
+                onClick={() => void runFilter({ offset: offset + pageSize })}
+                className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
   );

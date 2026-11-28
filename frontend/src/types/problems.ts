@@ -7,6 +7,14 @@ export const difficultySchema = z.enum([
   "advanced",
 ]);
 export const problemModeSchema = z.enum(["coding", "debugging"]);
+export const problemCompletionStatusSchema = z.enum([
+  "unattempted",
+  "attempted",
+  "solved",
+]);
+export type ProblemCompletionStatus = z.infer<
+  typeof problemCompletionStatusSchema
+>;
 export const problemStatusSchema = z.enum([
   "draft",
   "validated",
@@ -70,6 +78,12 @@ export const studentProblemListItemSchema = z.object({
   skills: z.array(z.string()),
   supported_languages: z.array(z.string()),
   published_at: z.string().nullable().optional(),
+  completion_status: problemCompletionStatusSchema
+    .optional()
+    .default("unattempted"),
+  attempts_count: z.number().int().optional().default(0),
+  is_recommended: z.boolean().optional().default(false),
+  recommendation_reason: z.string().nullable().optional(),
 });
 
 export const paginatedProblemsSchema = z.object({

@@ -25,6 +25,7 @@ import {
   type AdminValidationReport,
   type Difficulty,
   type ExecutionAvailability,
+  type ProblemCompletionStatus,
   type ProblemMode,
   type ProblemStatus,
   type RevisionResponse,
@@ -139,6 +140,7 @@ import {
   teacherAssignmentDetailViewSchema,
   teacherCourseDetailViewSchema,
   teacherDashboardViewSchema,
+  teacherStudentPerformanceViewSchema,
   teacherSubmissionReviewItemSchema,
   type AssignmentSummaryView,
   type ClassInvitationView,
@@ -154,6 +156,7 @@ import {
   type TeacherAssignmentDetailView,
   type TeacherCourseDetailView,
   type TeacherDashboardView,
+  type TeacherStudentPerformanceView,
   type TeacherSubmissionReviewItem,
 } from "@/types/classroom";
 
@@ -384,6 +387,8 @@ export async function fetchProblems(
     mode?: ProblemMode | "";
     topic?: string;
     language?: string;
+    completion_status?: ProblemCompletionStatus | "";
+    recommended_only?: boolean;
     limit?: number;
     offset?: number;
   },
@@ -395,6 +400,9 @@ export async function fetchProblems(
   if (params?.mode) query.set("mode", params.mode);
   if (params?.topic) query.set("topic", params.topic);
   if (params?.language) query.set("language", params.language);
+  if (params?.completion_status)
+    query.set("completion_status", params.completion_status);
+  if (params?.recommended_only) query.set("recommended_only", "true");
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.offset) query.set("offset", String(params.offset));
   const qs = query.toString();
@@ -1085,6 +1093,11 @@ export async function fetchLearningHistory(
   params: {
     q?: string;
     category?: HistoryCategory | "";
+    language?: string;
+    status_filter?: "accepted" | "failed" | "completed" | "in_progress" | "";
+    date_from?: string;
+    date_to?: string;
+    problem_q?: string;
     limit?: number;
     offset?: number;
   } = {},
@@ -1093,8 +1106,14 @@ export async function fetchLearningHistory(
   const sp = new URLSearchParams();
   if (params.q?.trim()) sp.set("q", params.q.trim());
   if (params.category) sp.set("category", params.category);
+  if (params.language) sp.set("language", params.language);
+  if (params.status_filter) sp.set("status_filter", params.status_filter);
+  if (params.date_from) sp.set("date_from", params.date_from);
+  if (params.date_to) sp.set("date_to", params.date_to);
+  if (params.problem_q?.trim()) sp.set("problem_q", params.problem_q.trim());
   if (params.limit) sp.set("limit", String(params.limit));
-  if (params.offset) sp.set("offset", String(params.offset));
+  if (params.offset !== undefined && params.offset > 0)
+    sp.set("offset", String(params.offset));
   const qs = sp.toString();
   const response = await safeFetch(
     `${baseUrl}/api/v1/growth/history${qs ? `?${qs}` : ""}`,
@@ -1334,6 +1353,23 @@ export async function fetchTeacherClassDetail(
   );
   if (!response.ok) throw await parseErrorResponse(response);
   return teacherCourseDetailViewSchema.parse(await response.json());
+}
+
+export async function fetchTeacherStudentPerformance(
+  accessToken: string,
+  courseId: string,
+  studentId: string,
+  baseUrl: string = publicEnv.NEXT_PUBLIC_API_BASE_URL,
+): Promise<TeacherStudentPerformanceView> {
+  const response = await safeFetch(
+    `${baseUrl}/api/v1/teacher/classes/${courseId}/students/${studentId}/performance`,
+    {
+      headers: authHeaders(accessToken),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw await parseErrorResponse(response);
+  return teacherStudentPerformanceViewSchema.parse(await response.json());
 }
 
 export async function updateTeacherClass(

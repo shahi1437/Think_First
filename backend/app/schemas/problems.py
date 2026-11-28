@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 Difficulty = Literal["beginner", "basic", "intermediate", "advanced"]
 TrackSlug = Literal["absolute_beginner", "basic_university", "intermediate", "advanced"]
 ProblemMode = Literal["coding", "debugging"]
+ProblemCompletionStatus = Literal["unattempted", "attempted", "solved"]
 ProblemStatus = Literal["draft", "validated", "in_review", "approved", "published", "archived"]
 SubmissionKind = Literal["run", "submit"]
 SubmissionStatus = Literal["queued", "running", "completed", "failed"]
@@ -74,6 +75,10 @@ class StudentProblemListItem(BaseModel):
     skills: list[str]
     supported_languages: list[str]
     published_at: datetime | None = None
+    completion_status: ProblemCompletionStatus = "unattempted"
+    attempts_count: int = 0
+    is_recommended: bool = False
+    recommendation_reason: str | None = None
 
 
 class StudentProblemDetail(BaseModel):

@@ -2,9 +2,11 @@
 
 import asyncio
 import time
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
 
 from app.api.v1.deps import (
     get_admin_overview_service,
@@ -16,12 +18,17 @@ from app.core.database import DatabaseManager, get_db_manager
 from app.core.errors import AppError
 from app.integrations.judge0.client import build_judge0_auth_headers, is_judge0_configured
 from app.integrations.piston.client import is_piston_configured
+from app.models.mentor import ErrorDiagnosis
+from app.models.notifications import UserNotification
+from app.models.problems import Submission
 from app.repositories.execution_queue import ExecutionQueueRepository
 from app.repositories.identity import UserRecord
 from app.schemas.admin import (
     AdminAuditLogItem,
     AdminDashboardOverview,
+    AdminExecutionFailureStats,
     AdminOperationsHealthResponse,
+    AdminUserActivityOverview,
     OperationalCheckStatus,
 )
 from app.schemas.common import PaginatedResponse
@@ -188,6 +195,106 @@ async def get_admin_operations_health(
         )
     )
 
+    # Aggregate execution failure telemetry & anonymized user activity (zero PII / secrets)
+    exec_stats: AdminExecutionFailureStats | None = None
+    activity_overview: AdminUserActivityOverview | None = None
+    if db_ok:
+        try:
+            now_utc = datetime.now(UTC)
+            since_7d = now_utc - timedelta(days=7)
+            since_24h = now_utc - timedelta(hours=24)
+            async for db_sess in db_manager.session():
+                verdict_rows = (
+                    await db_sess.execute(
+                        select(Submission.verdict, func.count(Submission.id))
+                        .where(Submission.created_at >= since_7d)
+                        .group_by(Submission.verdict)
+                    )
+                ).all()
+                verdict_counts = {str(v): int(c) for v, c in verdict_rows}
+                total_exec = sum(verdict_counts.values())
+                acc_exec = verdict_counts.get("accepted", 0)
+                failed_exec = max(0, total_exec - acc_exec)
+                fail_rate = round((failed_exec / total_exec) * 100.0, 1) if total_exec > 0 else None
+
+                lang_fail_rows = (
+                    await db_sess.execute(
+                        select(Submission.language_slug, func.count(Submission.id))
+                        .where(
+                            Submission.created_at >= since_7d,
+                            Submission.verdict != "accepted",
+                        )
+                        .group_by(Submission.language_slug)
+                    )
+                ).all()
+                failures_by_lang = {str(lg): int(c) for lg, c in lang_fail_rows}
+                exec_stats = AdminExecutionFailureStats(
+                    window_days=7,
+                    total_executions=total_exec,
+                    accepted_executions=acc_exec,
+                    failed_executions=failed_exec,
+                    failure_rate_pct=fail_rate,
+                    verdict_counts=verdict_counts,
+                    failures_by_language=failures_by_lang,
+                )
+
+                active_24h = int(
+                    (
+                        await db_sess.execute(
+                            select(func.count(func.distinct(Submission.student_id))).where(
+                                Submission.created_at >= since_24h
+                            )
+                        )
+                    ).scalar_one()
+                    or 0
+                )
+                active_7d = int(
+                    (
+                        await db_sess.execute(
+                            select(func.count(func.distinct(Submission.student_id))).where(
+                                Submission.created_at >= since_7d
+                            )
+                        )
+                    ).scalar_one()
+                    or 0
+                )
+                subs_24h = int(
+                    (
+                        await db_sess.execute(
+                            select(func.count(Submission.id)).where(
+                                Submission.created_at >= since_24h
+                            )
+                        )
+                    ).scalar_one()
+                    or 0
+                )
+                diags_24h = int(
+                    (
+                        await db_sess.execute(
+                            select(func.count(ErrorDiagnosis.id)).where(
+                                ErrorDiagnosis.created_at >= since_24h
+                            )
+                        )
+                    ).scalar_one()
+                    or 0
+                )
+                notifs_total = int(
+                    (await db_sess.execute(select(func.count(UserNotification.id)))).scalar_one()
+                    or 0
+                )
+                activity_overview = AdminUserActivityOverview(
+                    active_learners_24h=active_24h,
+                    active_learners_7d=active_7d,
+                    submissions_24h=subs_24h,
+                    diagnoses_24h=diags_24h,
+                    notifications_total=notifs_total,
+                )
+                break
+        except Exception:
+            # Never fail health probe if aggregate telemetry query is unavailable in mock tests
+            exec_stats = None
+            activity_overview = None
+
     execution_available = judge0_ok or piston_ok
     overall_ok = db_ok and execution_available
     return AdminOperationsHealthResponse(
@@ -198,6 +305,8 @@ async def get_admin_operations_health(
         llm_provider=settings.llm_provider,
         llm_model=llm_model_label,
         checks=checks,
+        execution_stats=exec_stats,
+        activity_overview=activity_overview,
     )
 
 
