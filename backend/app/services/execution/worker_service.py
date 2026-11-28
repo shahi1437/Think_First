@@ -17,6 +17,8 @@ from app.schemas.execution_queue import (
     WorkerHeartbeatRequest,
     WorkerHeartbeatResponse,
     WorkerJobReleaseRequest,
+    WorkerJobRenewRequest,
+    WorkerJobRenewResponse,
     WorkerJobResultRequest,
     WorkerJobResultResponse,
     WorkerJobTestCasePayload,
@@ -58,12 +60,12 @@ class ExecutionWorkerService:
                 queue_depth=queue_depth,
                 last_heartbeat_at=last_hb,
                 message=(
-                    "Local Judge0 Code Runner is online and ready for Python, JavaScript, "
+                    "Code execution worker is online and ready for Python, JavaScript, "
                     "C, C++, and Java."
                     if online
                     else (
-                        "Code execution is currently unavailable because the local Judge0 runner "
-                        "is offline. Start ThinkFirst Code Runner on the host PC to execute code."
+                        "Code execution is currently unavailable because no execution worker "
+                        "is online. Retry shortly or start ThinkFirst Code Runner on the host PC."
                     )
                 ),
             )
@@ -198,6 +200,21 @@ class ExecutionWorkerService:
             status=job.status,
             submission_id=job.submission_id,
             verdict=None,
+        )
+
+    async def renew_job_lease(
+        self, *, worker_id: str, job_id: UUID, payload: WorkerJobRenewRequest
+    ) -> WorkerJobRenewResponse:
+        renewed, lease_expires_at = await self._repo.renew_job_lease(
+            job_id=job_id,
+            worker_id=worker_id,
+            claim_token=payload.claim_token,
+            lease_seconds=self._settings.execution_job_lease_seconds,
+        )
+        return WorkerJobRenewResponse(
+            job_id=job_id,
+            renewed=renewed,
+            lease_expires_at=lease_expires_at,
         )
 
     async def mark_offline(self, *, worker_id: str, payload: WorkerOfflineRequest) -> None:

@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     judge0_poll_interval_seconds: float = 0.4
     judge0_poll_timeout_seconds: float = 20.0
     judge0_max_retries: int = 2
-    # Outbound local execution worker queue settings (used when judge0_auth_mode == "worker_queue")
+    # Outbound & embedded execution worker queue settings (`judge0_auth_mode == "worker_queue"`)
     execution_worker_token: str | None = None
     execution_worker_heartbeat_ttl_seconds: int = 35
     execution_job_ttl_seconds: int = 90
@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     execution_max_concurrent_jobs_per_user: int = 2
     execution_max_queue_depth: int = 25
     execution_sync_wait_timeout_seconds: float = 35.0
+    execution_embedded_worker_enabled: bool = True
+    execution_embedded_judge0_base_url: str = "https://ce.judge0.com"
+    execution_embedded_worker_concurrency: int = Field(default=1, ge=1, le=2)
+    execution_embedded_worker_poll_seconds: float = Field(default=15.0, ge=1.0, le=30.0)
+    execution_embedded_worker_heartbeat_seconds: float = Field(default=15.0, ge=5.0, le=25.0)
     execution_allowed_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     @field_validator("execution_allowed_emails", mode="before")
@@ -214,6 +219,18 @@ class Settings(BaseSettings):
                     "EXECUTION_WORKER_TOKEN is missing or too short (<24 chars) "
                     "for worker_queue mode"
                 )
+            if self.execution_embedded_worker_enabled:
+                emb_url = self.execution_embedded_judge0_base_url.strip().lower()
+                if (
+                    not emb_url
+                    or not emb_url.startswith("https://")
+                    or "127.0.0.1" in emb_url
+                    or "localhost" in emb_url
+                ):
+                    issues.append(
+                        "EXECUTION_EMBEDDED_JUDGE0_BASE_URL must be a non-loopback HTTPS URL "
+                        "in production when embedded worker is enabled"
+                    )
         elif j0_mode not in {"auto", "auth_token", "rapidapi"}:
             issues.append(
                 "JUDGE0_AUTH_MODE must be one of: auto, auth_token, rapidapi, "

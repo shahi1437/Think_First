@@ -355,6 +355,42 @@ class ExecutionQueueRepository:
         await self._session.refresh(job)
         return job
 
+    async def renew_job_lease(
+        self,
+        *,
+        job_id: UUID,
+        worker_id: str,
+        claim_token: UUID,
+        lease_seconds: int,
+    ) -> tuple[bool, datetime | None]:
+        """Extend an active job lease and refresh the worker heartbeat atomically."""
+        now = datetime.now(UTC)
+        new_lease = now + timedelta(seconds=lease_seconds)
+        job_res = await self._session.execute(
+            update(ExecutionJob)
+            .where(
+                ExecutionJob.id == job_id,
+                ExecutionJob.status == "running",
+                ExecutionJob.claimed_by_worker_id == worker_id,
+                ExecutionJob.claim_token == claim_token,
+                ExecutionJob.expires_at > now,
+            )
+            .values(lease_expires_at=new_lease, updated_at=now)
+            .returning(ExecutionJob.lease_expires_at)
+        )
+        updated_lease = job_res.scalar_one_or_none()
+        if updated_lease is None:
+            await self._session.rollback()
+            return False, None
+
+        await self._session.execute(
+            update(ExecutionWorker)
+            .where(ExecutionWorker.worker_id == worker_id)
+            .values(status="online", last_heartbeat_at=now, updated_at=now)
+        )
+        await self._session.commit()
+        return True, updated_lease
+
     async def complete_job(
         self,
         *,
@@ -364,6 +400,7 @@ class ExecutionQueueRepository:
         outcomes: list[WorkerTestCaseOutcomeInput],
         engine_error: str | None,
         error_code: str | None,
+        transport: str = "outbound_local_worker",
     ) -> tuple[ExecutionJob, Verdict | None]:
         now = datetime.now(UTC)
         job = (
@@ -498,7 +535,7 @@ class ExecutionQueueRepository:
                                 submission_id=sub.id,
                                 test_case_id=tc_id,
                                 is_hidden=tc_hidden,
-                                execution_provider="judge0",
+                                execution_provider=out.execution_provider,
                                 judge0_token=out.token,
                                 judge0_status_id=out.status_id,
                                 verdict=out.verdict,
@@ -511,14 +548,16 @@ class ExecutionQueueRepository:
                         )
 
                 overall_verdict = _aggregate_verdict(verdicts)
+                has_piston = any(o.execution_provider == "piston" for o in outcomes)
+                effective_provider = "piston" if has_piston else "judge0"
                 meta = job.payload_json.get("meta") or {}
                 evidence: dict[str, Any] = {
                     "mode": meta.get("mode", "coding"),
                     "submission_kind": sub.submission_kind,
                     "language_slug": sub.language_slug,
-                    "execution_provider": "judge0",
-                    "execution_transport": "outbound_local_worker",
-                    "fallback_used": False,
+                    "execution_provider": effective_provider,
+                    "execution_transport": transport,
+                    "fallback_used": effective_provider == "piston",
                     "overall_verdict": overall_verdict,
                     "public_passed": public_passed,
                     "public_total": public_total,
@@ -539,7 +578,7 @@ class ExecutionQueueRepository:
                 sub.total_tests = len(outcomes) if outcomes else sub.total_tests
                 sub.runtime_ms = max_runtime_ms
                 sub.memory_kb = max_memory_kb
-                sub.execution_provider = "judge0"
+                sub.execution_provider = effective_provider
                 sub.execution_evidence = evidence
                 sub.updated_at = now
         elif outcomes:

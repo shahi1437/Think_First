@@ -22,6 +22,8 @@ from app.schemas.execution_queue import (
     WorkerHeartbeatRequest,
     WorkerHeartbeatResponse,
     WorkerJobReleaseRequest,
+    WorkerJobRenewRequest,
+    WorkerJobRenewResponse,
     WorkerJobResultRequest,
     WorkerJobResultResponse,
     WorkerOfflineRequest,
@@ -129,6 +131,17 @@ async def worker_release_job(
 ) -> WorkerJobResultResponse:
     """Safely release an in-flight leased job during graceful worker shutdown."""
     return await service.release_job(worker_id=worker_id, job_id=job_id, payload=payload)
+
+
+@execution_worker_router.post("/jobs/{job_id}/renew", response_model=WorkerJobRenewResponse)
+async def worker_renew_job_lease(
+    job_id: UUID,
+    payload: WorkerJobRenewRequest,
+    worker_id: str = Depends(require_execution_worker),
+    service: ExecutionWorkerService = Depends(get_execution_worker_service),
+) -> WorkerJobRenewResponse:
+    """Renew an active job lease and worker heartbeat during multi-test execution."""
+    return await service.renew_job_lease(worker_id=worker_id, job_id=job_id, payload=payload)
 
 
 @execution_worker_router.post("/offline", status_code=status.HTTP_204_NO_CONTENT)

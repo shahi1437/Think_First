@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import os
 import signal
 import socket
@@ -34,7 +35,9 @@ if str(_BACKEND_DIR) not in sys.path:
 from app.core.config import Settings  # noqa: E402
 from app.core.errors import AppError  # noqa: E402
 from app.core.logging import configure_logging, get_logger  # noqa: E402
-from app.integrations.judge0.client import HttpJudge0Client  # noqa: E402
+from app.integrations.execution.router import ResilientExecutionClient  # noqa: E402
+from app.integrations.judge0.client import HttpJudge0Client, Judge0Client  # noqa: E402
+from app.integrations.piston.client import HttpPistonClient, is_piston_configured  # noqa: E402
 
 logger = get_logger("thinkfirst.execution_worker")
 
@@ -86,10 +89,18 @@ class OutboundExecutionWorker:
         max_idle_sleep_seconds: float = 6.0,
         stop_signal_path: Path | None = None,
         display_name: str | None = None,
+        piston_base_url: str | None = None,
+        piston_fallback_enabled: bool = False,
     ) -> None:
         _validate_urls(api_base_url, judge0_base_url)
         if len(worker_token.strip()) < 24:
             raise ValueError("EXECUTION_WORKER_TOKEN must be at least 24 characters.")
+        if piston_fallback_enabled and piston_base_url:
+            p_parsed = urlparse(piston_base_url)
+            if (p_parsed.hostname or "").lower() not in _LOOPBACK_HOSTS:
+                raise ValueError(
+                    "PISTON_BASE_URL must point to localhost / 127.0.0.1 for the local code runner."
+                )
 
         self._api_base = api_base_url.rstrip("/")
         self._worker_id = worker_id.strip()
@@ -105,6 +116,8 @@ class OutboundExecutionWorker:
         self._judge0_version: str | None = None
 
         self._judge0_settings = Settings(
+            _env_file=None,
+            app_env="development",
             judge0_base_url=self._judge0_base,
             judge0_auth_mode="auth_token",
             judge0_auth_token=self._judge0_token,
@@ -112,8 +125,25 @@ class OutboundExecutionWorker:
             judge0_poll_interval_seconds=0.35,
             judge0_poll_timeout_seconds=20.0,
             judge0_max_retries=2,
+            execution_fallback_enabled=bool(piston_fallback_enabled and piston_base_url),
+            piston_enabled=bool(piston_fallback_enabled and piston_base_url),
+            piston_base_url=(piston_base_url or "http://127.0.0.1:2000").rstrip("/"),
         )
-        self._judge0 = HttpJudge0Client(self._judge0_settings)
+        primary_judge0 = HttpJudge0Client(self._judge0_settings)
+        fallback_piston = (
+            HttpPistonClient(self._judge0_settings)
+            if is_piston_configured(self._judge0_settings)
+            else None
+        )
+        self._judge0: Judge0Client = (
+            ResilientExecutionClient(
+                primary=primary_judge0,
+                fallback=fallback_piston,
+                settings=self._judge0_settings,
+            )
+            if fallback_piston is not None
+            else primary_judge0
+        )
 
     def _worker_headers(self) -> dict[str, str]:
         return {
@@ -196,6 +226,35 @@ class OutboundExecutionWorker:
             )
         return True
 
+    async def _lease_keeper(
+        self,
+        client: httpx.AsyncClient,
+        job_id: str,
+        claim_token: str,
+        done_event: asyncio.Event,
+    ) -> None:
+        while not done_event.is_set() and not self._should_stop():
+            try:
+                await asyncio.wait_for(done_event.wait(), timeout=15.0)
+                return
+            except TimeoutError:
+                pass
+            try:
+                resp = await client.post(
+                    f"{self._api_base}/api/v1/internal/execution-worker/jobs/{job_id}/renew",
+                    headers=self._worker_headers(),
+                    json={"claim_token": claim_token},
+                    timeout=10.0,
+                )
+                if resp.status_code == 200 and not resp.json().get("renewed", False):
+                    return
+            except Exception as exc:
+                logger.warning(
+                    "worker_lease_renew_failed",
+                    job_id=job_id,
+                    error_type=type(exc).__name__,
+                )
+
     async def _execute_claimed_job(self, client: httpx.AsyncClient, job: dict[str, Any]) -> None:
         job_id = str(job["job_id"])
         claim_token = str(job["claim_token"])
@@ -216,6 +275,10 @@ class OutboundExecutionWorker:
         outcomes: list[dict[str, Any]] = []
         engine_error: str | None = None
         error_code: str | None = None
+        done_event = asyncio.Event()
+        keeper_task = asyncio.create_task(
+            self._lease_keeper(client, job_id, claim_token, done_event)
+        )
 
         try:
             for tc in test_cases:
@@ -243,7 +306,7 @@ class OutboundExecutionWorker:
                         ),
                         "runtime_ms": res.runtime_ms,
                         "memory_kb": res.memory_kb,
-                        "execution_provider": "judge0",
+                        "execution_provider": res.execution_provider,
                     }
                 )
                 # Fast-fail remaining test cases on compilation error (identical compiler failure)
@@ -267,7 +330,7 @@ class OutboundExecutionWorker:
                                 ),
                                 "runtime_ms": None,
                                 "memory_kb": None,
-                                "execution_provider": "judge0",
+                                "execution_provider": res.execution_provider,
                             }
                         )
                     break
@@ -283,6 +346,11 @@ class OutboundExecutionWorker:
             engine_error = f"Local Judge0 execution error ({type(exc).__name__})."
             error_code = "LOCAL_JUDGE0_ERROR"
             logger.error("worker_judge0_unexpected_error", job_id=job_id, error=type(exc).__name__)
+        finally:
+            done_event.set()
+            keeper_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await keeper_task
 
         result_payload: dict[str, Any] = {
             "claim_token": claim_token,
@@ -436,6 +504,12 @@ def main() -> int:
     poll_wait = int(os.environ.get("WORKER_POLL_WAIT_SECONDS", "8"))
     idle_sleep = float(os.environ.get("WORKER_IDLE_SLEEP_SECONDS", "2"))
     max_idle = float(os.environ.get("WORKER_MAX_IDLE_SLEEP_SECONDS", "6"))
+    piston_url = os.environ.get("PISTON_BASE_URL", "http://127.0.0.1:2000")
+    piston_fallback = os.environ.get("PISTON_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
     worker = OutboundExecutionWorker(
         api_base_url=api_url,
@@ -447,6 +521,8 @@ def main() -> int:
         idle_sleep_seconds=idle_sleep,
         max_idle_sleep_seconds=max_idle,
         stop_signal_path=_default_stop_signal_path(args.env_file),
+        piston_base_url=piston_url,
+        piston_fallback_enabled=piston_fallback,
     )
 
     if args.self_check:
