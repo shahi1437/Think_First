@@ -1,8 +1,15 @@
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user, get_identity_service, require_roles
+from app.core.database import get_db_session
+from app.models.identity import AuditLog
+from app.models.mentor import LearningEvent
 from app.repositories.identity import UserRecord
 from app.schemas.identity import (
+    MlDataConsentResponse,
+    MlDataConsentUpdateRequest,
     OnboardingSubmitRequest,
     PortalVerifyRequest,
     TeacherInvitationAcceptRequest,
@@ -13,6 +20,9 @@ from app.schemas.identity import (
     UserPreferencesUpdate,
 )
 from app.services.identity.service import IdentityService
+
+ML_DATA_CONSENT_EVENT_TYPE = "ml_data_consent_updated"
+ML_DATA_CONSENT_SCOPE = "anonymized_python_debugging_events"
 
 users_router = APIRouter(prefix="/users", tags=["Identity & Onboarding"])
 teacher_identity_router = APIRouter(prefix="/teacher", tags=["Teacher"])
@@ -61,6 +71,80 @@ async def patch_users_me_preferences(
 ) -> UserMeResponse:
     """Update authenticated user's learning preferences."""
     return await service.update_preferences(user=current_user, payload=payload)
+
+
+@users_router.get("/me/ml-consent", response_model=MlDataConsentResponse)
+async def get_users_me_ml_consent(
+    current_user: UserRecord = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> MlDataConsentResponse:
+    """Return the user's current opt-in consent state for anonymized ML debugging datasets."""
+    stmt = (
+        select(LearningEvent)
+        .where(
+            LearningEvent.student_id == current_user.id,
+            LearningEvent.event_type == ML_DATA_CONSENT_EVENT_TYPE,
+        )
+        .order_by(LearningEvent.created_at.desc())
+        .limit(1)
+    )
+    latest = (await session.execute(stmt)).scalar_one_or_none()
+    if latest is None:
+        return MlDataConsentResponse(
+            consent_granted=False,
+            policy_version="v1",
+            scope=ML_DATA_CONSENT_SCOPE,
+            updated_at=None,
+        )
+    meta = latest.metadata_json or {}
+    return MlDataConsentResponse(
+        consent_granted=bool(meta.get("consent_granted", False)),
+        policy_version=str(meta.get("policy_version", "v1")),
+        scope=str(meta.get("scope", ML_DATA_CONSENT_SCOPE)),
+        updated_at=latest.created_at,
+    )
+
+
+@users_router.put("/me/ml-consent", response_model=MlDataConsentResponse)
+async def put_users_me_ml_consent(
+    payload: MlDataConsentUpdateRequest,
+    request: Request,
+    current_user: UserRecord = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> MlDataConsentResponse:
+    """Record explicit opt-in or revocation of anonymized ML debugging data collection."""
+    event = LearningEvent(
+        student_id=current_user.id,
+        event_type=ML_DATA_CONSENT_EVENT_TYPE,
+        metadata_json={
+            "consent_granted": payload.consent_granted,
+            "policy_version": payload.policy_version,
+            "scope": ML_DATA_CONSENT_SCOPE,
+        },
+    )
+    session.add(event)
+    session.add(
+        AuditLog(
+            actor_user_id=current_user.id,
+            action="user.ml_consent_updated",
+            target_type="user_ml_consent",
+            target_id=str(current_user.id),
+            metadata_json={
+                "consent_granted": payload.consent_granted,
+                "policy_version": payload.policy_version,
+                "scope": ML_DATA_CONSENT_SCOPE,
+            },
+            request_id=getattr(request.state, "request_id", None),
+        )
+    )
+    await session.commit()
+    await session.refresh(event)
+    return MlDataConsentResponse(
+        consent_granted=payload.consent_granted,
+        policy_version=payload.policy_version,
+        scope=ML_DATA_CONSENT_SCOPE,
+        updated_at=event.created_at,
+    )
 
 
 @users_router.get(

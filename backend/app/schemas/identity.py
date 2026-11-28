@@ -226,3 +226,21 @@ class TeacherInvitationAcceptResponse(BaseModel):
     invitation_id: UUID
     user: UserMeResponse
     action: Literal["teacher.invitation_accepted"] = "teacher.invitation_accepted"
+
+
+class MlDataConsentUpdateRequest(BaseModel):
+    """Explicit opt-in / revocation request for anonymized ML debugging dataset collection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    consent_granted: bool
+    policy_version: str = Field(default="v1", min_length=1, max_length=32)
+
+
+class MlDataConsentResponse(BaseModel):
+    """Current opt-in consent state for anonymized student debugging event export."""
+
+    consent_granted: bool = False
+    policy_version: str = "v1"
+    scope: str = "anonymized_python_debugging_events"
+    updated_at: datetime | None = None

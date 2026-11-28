@@ -62,6 +62,11 @@ services:
     command: [ "redis-server", "--appendonly", "yes", "--requirepass", "${JUDGE0_REDIS_PASSWORD:-judge0_dev_redis}" ]
     volumes:
       - judge0_redis_data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "REDISCLI_AUTH=\"${JUDGE0_REDIS_PASSWORD:-judge0_dev_redis}\" redis-cli ping | grep -q PONG" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   judge0-db:
     image: postgres:16.2-alpine
@@ -73,6 +78,11 @@ services:
       POSTGRES_DB: judge0
     volumes:
       - judge0_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U judge0 -d judge0" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   judge0-server:
     image: judge0/judge0:1.13.1
@@ -119,8 +129,16 @@ services:
       MAX_NUMBER_OF_RUNS: "1"
       MAX_QUEUE_SIZE: "50"
     depends_on:
-      - judge0-redis
-      - judge0-db
+      judge0-redis:
+        condition: service_healthy
+      judge0-db:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fsS -H \"X-Auth-Token: ${JUDGE0_AUTH_TOKEN:-}\" http://127.0.0.1:2358/about >/dev/null || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   judge0-workers:
     image: judge0/judge0:1.13.1
@@ -166,8 +184,12 @@ services:
       MAX_NUMBER_OF_RUNS: "1"
       MAX_QUEUE_SIZE: "50"
     depends_on:
-      - judge0-redis
-      - judge0-db
+      judge0-redis:
+        condition: service_healthy
+      judge0-db:
+        condition: service_healthy
+      judge0-server:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import ipaddress
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import status
@@ -98,18 +100,33 @@ class PistonClient(Protocol):
     ) -> Judge0ExecutionOutcome: ...
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _is_private_non_loopback_ip(host: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_private and not addr.is_loopback and not addr.is_link_local
+
+
 def is_piston_configured(settings: Settings) -> bool:
     """Return True only when self-hosted Piston fallback is safely enabled and configured."""
     base_url = (settings.piston_base_url or "").strip()
     if not (settings.execution_fallback_enabled and settings.piston_enabled and base_url):
         return False
+    try:
+        parsed = urlparse(base_url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+        return False
     if settings.app_env == "production":
-        lowered = base_url.lower()
-        if (
-            not settings.piston_isolated_host_verified
-            or "127.0.0.1" in lowered
-            or "localhost" in lowered
-        ):
+        host = (parsed.hostname or "").strip().lower()
+        if not settings.piston_isolated_host_verified or host in _LOOPBACK_HOSTS:
+            return False
+        if parsed.scheme != "https" and not _is_private_non_loopback_ip(host):
             return False
     return True
 
